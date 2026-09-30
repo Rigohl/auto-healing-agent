@@ -1,140 +1,201 @@
-# CODEMAP — Guía de implementación (canónica)
+# CODEMAP — Guía de implementación (canónica v2)
 
 **Repo:** `Rigohl/auto-healing-agent`  
-**Rama persistente única:** `main`  
-**Pony:** ignorado (no forma parte del plan activo)  
-**LLM libre:** prohibido en el núcleo de decisión/parche
+**Rama:** solo `main`  
+**Pony:** fuera de alcance activo  
+**Actualizado:** 2026-09-30 · Notion + Context7 cotejados
 
-Este documento **guía el código** y reutiliza:
-- Notion *Rust/WASM Neural Network Core* + *SYSTEM PROMPT Agent Health*
-- Prompt Pad (Always Free)
-- `docs/ARCHITECTURE.md`, `docs/DISCREPANCIES.md` (cuando existan en main)
+## Fuentes de verdad (orden)
+
+1. Notion *SYSTEM PROMPT — Agent Health* (autoridad)
+2. Notion *AUTO-REPAIR LAB* + *Rust/WASM Neural Network Core*
+3. Este CODEMAP (mapa de código en repo)
+4. `docs/ARCHITECTURE.md`
+
+Si hay conflicto de dimensión NN: **Prompt Pad / LAB = 64-dim** gana sobre el snippet temprano 16/12/5 de Notion.
 
 ---
 
-## 1. Principio (no negociable)
+## Pipeline (no negociable)
 
 ```
-Incident → Evidence → FailureSignature
-  → Features[64] → NN (WASM) → RepairAction
-  → Policy gate → Operador determinista → PR
-  → GitHub Actions VERIFY (autoridad)
-  → RepairCase / TrainingExample
+GitHub source
+  → Incident → Evidence → FailureSignature
+  → Parser → AST+CFG+DFG (cuando exista)
+  → Feature Encoder [64]
+  → Rust NN (WASM)
+  → RepairAction { node_id, repair_operator, parameters, confidence, risk }
+  → Governance gate
+  → Deterministic AST Operator → Candidate Patch
+  → PR → Actions (compile/test/regression) = VERIFY authority
+  → Reward → RepairCase → TrainingExample
+  → Offline Burn → Checkpoint → R2/KV → Edge inference
 ```
 
-La red **solo clasifica**. No escribe fuentes.
+NN **no** genera código. CI **no** se sustituye por confidence.
 
 ---
 
-## 2. Mapa path → rol → estado
+## NN V0 (cerrado)
 
-| Path | Rol | Estado en main |
-|------|-----|----------------|
-| `worker.js` | Gateway legacy webhooks → dispatch | **vivo** (legacy) |
-| `agent.ts` | Cerebro LLM HF | **legacy V0** — no ampliar |
-| `.github/workflows/auto-repair.yml` | Orquesta agent.ts | **legacy** |
-| `crates/repair_types` | Incident, OperatorId, FeatureVector, RepairAction | **scaffold** (revisar dim 16 vs 64) |
-| `crates/feature_engine` | Incident → features | **scaffold 16-dim** |
-| `crates/repair_nn_core` | MLP inferencia | **scaffold 16→32→11** |
-| `crates/repair_nn_wasm` | wasm-bindgen | **puede faltar en main** — añadir |
-| `crates/repair_operators` | Operadores deterministas | **puede faltar en main** — añadir |
-| `worker/` | Worker Rust workers-rs | **pendiente** |
-| `model/schema.json` | Contrato features/ops | **presente** |
-| `docs/ARCHITECTURE.md` | Arquitectura | **presente** |
-| `docs/CODEMAP.md` | **Esta guía** | **canónica** |
-| MongoDB | incidents, postmortems, training_examples | **cuenta Atlas** |
+| Capa | Tamaño |
+|------|--------|
+| Input | 64 |
+| Hidden | 32 |
+| Latent | 16 |
+| Operator Head | K (13 clases iniciales 0..12) |
+| Confidence Head | 1 |
+| Risk Head | 1 |
+
+Loss conceptual: λ_location + λ_operator + λ_compile + λ_test + λ_semantic + λ_risk  
+Reward: compile + tests_fixed + regression_free + structural_validity − patch_size − risk
 
 ---
 
-## 3. Orden de trabajo (un solo hilo en main)
+## Mapa path → estado (main)
 
-### Paso A — Contratos (tipos)
-1. Subir `RepairAction` a `{ node_id, repair_operator, parameters, confidence, risk }`.
-2. Añadir `FailureSignature`.
-3. `FeatureVector::DIM = 64` + `SCHEMA_VERSION`.
-
-### Paso B — Encoder + NN
-1. `feature_engine::extract(incident, signature) -> [f32; 64]`.
-2. `repair_nn_core`: 64→32→16 + heads operator/confidence/risk; `from_weights` sin panic (`Result`).
-3. Tests con fixture `syntax_error` / `buildStep` / `npm run vercel-build`.
-
-### Paso C — Operadores + gate
-1. `repair_operators::apply` + `gate` → `blocked_by_policy` | `needs_human` (nunca HF).
-2. Stubs allowlisted primero; AST real después.
-
-### Paso D — WASM + CI
-1. `repair_nn_wasm` (solo adaptador; core sin wasm-bindgen).
-2. Workflows: `ci.yml`, `wasm.yml` (verify = Actions, no confidence).
-
-### Paso E — Worker
-1. `worker/` con workers-rs: health + secret + lectura `MODEL_KV`.
-2. Sustituir gradualmente `worker.js`.
-3. Límites free: sin train, sin build de repo en edge.
-
-### Paso F — Aprendizaje offline
-1. `TrainingExample` al PASS de CI.
-2. Burn fuera de CF → export pesos → `model/current|stable`.
+| Path | Rol | Estado |
+|------|-----|--------|
+| `worker.js` | webhook → dispatch | legacy vivo |
+| `agent.ts` | LLM HF | **legacy — no crecer** |
+| `auto-repair.yml` | orquesta LLM | legacy |
+| `crates/repair_types` | contratos | scaffold **16-dim** → migrar 64 |
+| `crates/feature_engine` | encoder | scaffold 16 |
+| `crates/repair_nn_core` | MLP | scaffold 16→32→11 |
+| `crates/repair_nn_wasm` | adaptador | **faltante en main** |
+| `crates/repair_operators` | ops + gate | **faltante en main** |
+| `worker/` | workers-rs | **faltante** |
+| `model/*` | schema/pesos | schema 16 legacy |
+| `docs/CODEMAP.md` | esta guía | **canónica** |
 
 ---
 
-## 4. Legacy (no borrar aún; no crecer)
+## Context7 — patrones oficiales a copiar
 
-| Archivo | Uso |
-|---------|-----|
-| `agent.ts` | Solo hasta que operadores + NN den CandidatePatch real |
-| `worker.js` | Hasta deploy Worker Rust |
-| `auto-repair.yml` | Hasta workflow NN-first |
+### workers-rs (KV / secret / fetch)
 
-Cualquier feature nueva va al path Rust, no a HF.
+```rust
+use worker::*;
 
----
-
-## 5. Agentes lógicos (sin Pony)
-
-Roles = módulos/fases, no procesos LLM:
-
-Incident → Evidence → FailureSignature → Localization → NeuralPolicy  
-→ Governance → PatchOperator → Verification → Learning → Registry → DevOps
-
-Contratos detallados: ampliar en `docs/AGENTS.md` cuando se cree en main.
-
----
-
-## 6. Git
-
-- **Solo `main` persistente.**
-- Ramas `feat/*`, `fix/*`, `setup/*`: **borrar** tras integrar.
-- PR: ref efímera → merge → borrar ref.
-
-Comandos (local / `gh`):
-
-```bash
-gh api -X DELETE repos/Rigohl/auto-healing-agent/git/refs/heads/feat/rust-nn-core
-gh api -X DELETE repos/Rigohl/auto-healing-agent/git/refs/heads/feat/rust-wasm-nn
-gh api -X DELETE repos/Rigohl/auto-healing-agent/git/refs/heads/fix/safejson-null-payload
-gh api -X DELETE repos/Rigohl/auto-healing-agent/git/refs/heads/setup/secrets
+#[event(fetch)]
+pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    let router = Router::new();
+    router
+        .get("/", |_req, _ctx| Response::ok("AUTO-REPAIR LAB"))
+        .get("/health", |_req, _ctx| Response::ok("ok"))
+        .get("/model", |_req, ctx| {
+            // MODEL_KV binding — pointer only, not full dataset
+            let kv = ctx.kv("MODEL_KV")?;
+            // kv.get("model/current").text().await ...
+            Response::ok("model_ptr")
+        })
+        .run(req, env)
+        .await
+}
 ```
 
+- Bindings: `env.kv("MODEL_KV")`, `env.secret("WEBHOOK_SECRET")`
+- **No** train, **no** repo build, **no** dataset en edge
+- Límites Free: ~10 ms CPU/req, 128 MB, 100k req/día, 50 subrequests, 64 MiB bundle
+
+### wasm-bindgen
+
+```rust
+#[wasm_bindgen]
+pub struct RepairModel { /* net */ }
+
+#[wasm_bindgen]
+impl RepairModel {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> RepairModel { /* zeros */ }
+
+    #[wasm_bindgen(js_name = fromWeights)]
+    pub fn from_weights(weights: &[f32]) -> Result<RepairModel, JsValue> { /* ... */ }
+
+    #[wasm_bindgen(js_name = predictFromFeatures)]
+    pub fn predict_from_features(&self, features: &[f32]) -> Result<JsRepairAction, JsValue> { /* dim==64 */ }
+}
+```
+
+Core (`repair_nn_core`) **sin** `wasm_bindgen`. Solo el adaptador.
+
 ---
 
-## 7. Criterio de hecho (mínimo viable)
+## Cloudflare split
 
-- [ ] `cargo test` en repair_types + feature_engine + repair_nn_core
-- [ ] features 64 + RepairAction completo
-- [ ] gate sin path LLM
-- [ ] wasm build en CI
-- [ ] Worker Rust health 200
-- [ ] Un incidente fixture → RepairAction → CandidatePatch (stub) documentado
-
----
-
-## 8. Fuentes técnicas
-
-- workers-rs: https://github.com/cloudflare/workers-rs
-- wasm-bindgen: https://github.com/wasm-bindgen/wasm-bindgen
-- Burn (train offline): https://github.com/tracel-ai/burn
-- CF limits: https://developers.cloudflare.com/workers/platform/limits/
+| Sí en CF | No en CF |
+|----------|----------|
+| webhook, router, features, inference, gate, APIs ligeras | train, build repo, tests largos, dataset, git full |
+| KV: model/current|stable|previous, flags, thresholds | |
+| R2: wasm, weights, checkpoints | |
+| DO: locks / estado incidente (si hace falta) | |
 
 ---
 
-*Actualizar este archivo en cada merge a main. Es el mapa operativo del código.*
+## 14 agentes (lógicos = módulos, no LLM)
+
+| # | Agente | Output |
+|---|--------|--------|
+| 1 | Incident | Incident |
+| 2 | Evidence | logs/stack |
+| 3 | Repository Analyst | AST/CFG/DFG summary |
+| 4 | Failure Signature | FailureSignature + hist |
+| 5 | Localization | node_id[] |
+| 6 | Neural Repair Policy | RepairAction |
+| 7 | Patch Operator | CandidatePatch |
+| 8 | Verification | PASS/FAIL from CI |
+| 9 | Review | risk/diff notes |
+| 10 | Learning | TrainingExample |
+| 11 | Training | checkpoint (offline) |
+| 12 | Model Registry | CURRENT/STABLE |
+| 13 | Governance | allow/deny |
+| 14 | DevOps | PR coord (no override CI) |
+
+Cada uno: mission, I/O, tools, limits, timeout, evidence, success/block, idempotency, audit.
+
+---
+
+## Orden de código en main (Pasos)
+
+| Paso | Qué | Hecho cuando |
+|------|-----|--------------|
+| **A** | FailureSignature + RepairAction V0 + FeatureVector 64 | tipos compilan |
+| **B** | extract 64 + NN 64→32→16 heads | tests fixture syntax_error |
+| **C** | operators + gate (sin HF) | blocked_by_policy path |
+| **D** | repair_nn_wasm + ci.yml + wasm.yml | CI verde wasm |
+| **E** | worker/ workers-rs + MODEL_KV | /health 200 |
+| **F** | TrainingExample + export weights | schema v2 + script |
+
+AST/CFG/DFG real = incrementos tras C stubs.
+
+---
+
+## Notion cotejado (IDs útiles)
+
+- Rust/WASM Neural Network Core  
+- AUTO-REPAIR LAB — investigación integrada  
+- SYSTEM PROMPT Agent Health  
+- Sistema Autónomo Rust/WASM  
+
+Mem0: no operativo → no fingir. Elicit/Boltz: no usados para arquitectura.
+
+---
+
+## Criterio MVP
+
+- [ ] cargo test types/engine/nn
+- [ ] dim 64 + action completa
+- [ ] gate sin LLM
+- [ ] wasm en CI
+- [ ] Worker health
+- [ ] fixture → RepairAction → CandidatePatch stub
+
+---
+
+## Git
+
+Solo `main`. Borrar ramas huérfanas con `gh api -X DELETE .../git/refs/heads/<name>`.
+
+---
+
+*Actualizar CODEMAP en cada cambio estructural a main.*
