@@ -1,37 +1,67 @@
 # Auto-Healing Agent
 
-Agente autónomo de auto-reparación (serverless, ~$0/mes).
+Núcleo **Rust + WASM + red neuronal pequeña** en Cloudflare (Always Free).  
+La red **no escribe código**: produce `RepairAction`; operadores deterministas aplican el parche; **GitHub Actions** verifica.
 
-## Flujo
-1. Fallo en **Vercel** o label **`auto-repair`** en **Linear**
-2. **Cloudflare Worker** (`worker.js`) → `repository_dispatch`
-3. **GitHub Actions** (`.github/workflows/auto-repair.yml`) ejecuta `agent.ts`
-4. HF + Exa + MongoDB → rama `fix/auto-repair-*` + PR + comentario Linear + post-mortem
+**Rama única:** `main` · **Pony:** fuera de alcance
 
-## Archivos (ya en el repo)
-| Archivo | Rol |
-|---------|-----|
-| `worker.js` | Gateway webhooks |
-| `.github/workflows/auto-repair.yml` | Orquestador |
-| `agent.ts` | Cerebro del agente |
-| `mongodb-setup.sh` | Índices Mongo |
-| `SECRETS.md` | 9 secrets GitHub |
-| `CONFIG.md` | IDs Vercel + Linear |
+---
 
-## Linear (automatizado)
-- Team: **Pyh entretainment**
-- Label: **`auto-repair`** (existe)
-- `LINEAR_API_KEY`: crear en Linear → Personal API keys → secret de GitHub
+## Dónde está el código (no solo Markdown)
 
-## Vercel (IDs listos)
-- `VERCEL_ORG_ID` = `team_9ILQS3IIe8K4jzv23DSrID4U`
-- `VERCEL_PROJECT_ID` ejemplo = `prj_GIuo1hR7R6HKmvSAki93tol4pJrs` (pyr-site-g6jo)
-- `VERCEL_TOKEN`: crear en vercel.com/account/tokens
+En la app de GitHub, entra en estas carpetas:
 
-## Solo tú (no automatizable por API)
-1. Pegar los **9 secrets** en GitHub Actions
-2. Crear Worker en Cloudflare, `wrangler secret put GH_PAT`, desplegar `worker.js`
-3. Webhooks Vercel + Linear → URL del Worker
+```
+crates/
+  repair_types/src/lib.rs      ← tipos (Incident, RepairAction, features 64)
+  feature_engine/src/lib.rs    ← encoder de features
+  repair_nn_core/src/lib.rs    ← red neuronal (inferencia)
+  repair_nn_wasm/src/lib.rs    ← adaptador WASM
+  repair_operators/src/lib.rs  ← operadores + policy gate
+worker/
+  src/lib.rs                   ← Cloudflare Worker (Rust)
+  wrangler.toml
+```
 
-## Prueba rápida (sin Worker)
-Repo → Actions → **Auto-Repair Agent** → Run workflow
+Los `.md` en `docs/` son guías. El motor está en **`crates/**/*.rs`** y **`worker/src/lib.rs`**.
+
+---
+
+## Pipeline
+
+```
+Incident → FailureSignature → features[64] → NN (WASM)
+  → RepairAction { node_id, operator, parameters, confidence, risk }
+  → gate → operador determinista → PR → Actions VERIFY
+```
+
+---
+
+## Build / test
+
+```bash
+cargo test -p feature_engine -p repair_nn_core -p repair_operators
+cargo build -p repair_nn_wasm --target wasm32-unknown-unknown
+```
+
+Worker (cuando KV esté configurado):
+
+```bash
+cd worker && npx wrangler dev
+```
+
+---
+
+## Legacy (no ampliar)
+
+| Archivo | Estado |
+|---------|--------|
+| `agent.ts` | LLM HuggingFace — **legacy** |
+| `worker.js` | Gateway JS — **legacy** hasta deploy de `worker/` |
+| `auto-repair.yml` | Orquesta el LLM — **legacy** |
+
+---
+
+## Docs
+
+Ver [`docs/INDEX.md`](docs/INDEX.md).

@@ -1,35 +1,34 @@
-# CODEMAP v3 — post implementación A–E en main
+# CODEMAP — orden del código
 
-**Rama:** `main` only · **Pony:** out · **LLM núcleo:** prohibido
+## Abrir en el móvil / GitHub
 
-## Pipeline
+1. Carpeta **`crates`** → cada subcarpeta → **`src`** → **`lib.rs`** (código Rust)
+2. Carpeta **`worker`** → **`src`** → **`lib.rs`**
+3. **`docs`** = solo documentación
+
+## Workspace
 
 ```
-Incident → FailureSignature → features[64] → RepairNet
-  → RepairAction → gate → CandidatePatch → PR → Actions VERIFY
+Cargo.toml
+crates/repair_types
+crates/feature_engine
+crates/repair_nn_core
+crates/repair_nn_wasm
+crates/repair_operators
+worker/   (CF, build con wrangler)
 ```
 
-## Crates vivos
+## Flujo de código
 
-| Crate | Rol |
-|-------|-----|
-| repair_types | FailureSignature, RepairAction V0, FeatureVector 64 |
-| feature_engine | extract() |
-| repair_nn_core | 64→32→16 + heads |
-| repair_operators | apply + gate |
-| repair_nn_wasm | wasm-bindgen |
-| worker/ | CF health + MODEL_KV (deploy aparte) |
-
-## Local
-
-```bash
-cargo test -p feature_engine -p repair_nn_core -p repair_operators
-cargo build -p repair_nn_wasm --target wasm32-unknown-unknown
+```
+repair_types::Incident
+  → FailureSignature::from_incident
+  → feature_engine::extract → [f32; 64]
+  → repair_nn_core::RepairNet::predict → RepairAction
+  → repair_operators::gate + apply → CandidatePatch
 ```
 
-## Siguiente
+WASM: `repair_nn_wasm::RepairModel`  
+Edge: `worker` Router `/health` `/model` `/webhook`
 
-1. AST operators reales
-2. Pesos entrenados (Burn offline)
-3. Deploy worker + KV real
-4. Desconectar path HF de producción
+## Sin Pony. Sin generación libre LLM en el núcleo.
