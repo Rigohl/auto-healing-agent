@@ -1,4 +1,4 @@
-name: Auto-Repair Agent
+name: Auto-Repair Agent (legacy LLM)
 
 on:
   repository_dispatch:
@@ -24,22 +24,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
       - name: Install deps
         run: |
           npm init -y
           npm install mongodb undici typescript tsx @types/node --no-fund --no-audit
-
-      - name: Run Auto-Healing Agent
+      - name: Run legacy agent
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -55,4 +50,4 @@ jobs:
           EVENT_SOURCE: ${{ github.event.client_payload.source || github.event.inputs.source || 'manual' }}
           CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
           LINEAR_ISSUE_ID: ${{ github.event.client_payload.linear.issueId || github.event.inputs.linear_issue_id }}
-        run: npx tsx agent.ts
+        run: npx tsx legacy/agent.ts
