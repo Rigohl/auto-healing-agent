@@ -1,0 +1,13 @@
+[package]
+name = "repair_nn_core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Small pure-Rust MLP classifier for repair operator selection (no_std ready)"
+
+[dependencies]
+repair_types = { path = "../repair_types", default-features = false }
+
+[features]
+default = ["std"]
+std = ["repair_types/std"]

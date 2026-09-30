@@ -1,0 +1,13 @@
+[package]
+name = "feature_engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Incident → FeatureVector (16 dims) for the repair NN"
+
+[dependencies]
+repair_types = { path = "../repair_types", default-features = false }
+
+[features]
+default = ["std"]
+std = ["repair_types/std"]
