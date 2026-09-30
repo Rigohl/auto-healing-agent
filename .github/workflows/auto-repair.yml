@@ -1,53 +1,22 @@
-name: Auto-Repair Agent (legacy LLM)
+name: Auto-Repair (DISABLED legacy LLM)
+
+# Path canónico = Rust crates + worker/ + CI verify.
+# legacy/agent.ts NO se ejecuta. Conservado solo como archivo de archivo.
 
 on:
-  repository_dispatch:
-    types: [auto-repair]
   workflow_dispatch:
     inputs:
-      source:
-        description: "Manual source tag"
+      note:
+        description: "This workflow no longer runs the HF agent. Use cargo CI + worker Rust."
         required: false
-        default: "manual"
-      linear_issue_id:
-        description: "Optional Linear issue id"
-        required: false
-
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-  actions: read
+        default: "rust-only"
 
 jobs:
-  repair:
+  notice:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Install deps
+      - name: Rust-only policy
         run: |
-          npm init -y
-          npm install mongodb undici typescript tsx @types/node --no-fund --no-audit
-      - name: Run legacy agent
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_MODEL: ${{ secrets.HF_MODEL }}
-          HF_BASE_URL: ${{ secrets.HF_BASE_URL }}
-          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
-          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          EVENT_SOURCE: ${{ github.event.client_payload.source || github.event.inputs.source || 'manual' }}
-          CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
-          LINEAR_ISSUE_ID: ${{ github.event.client_payload.linear.issueId || github.event.inputs.linear_issue_id }}
-        run: npx tsx legacy/agent.ts
+          echo "LLM free-form codegen path is disabled."
+          echo "Core: crates/repair_* + worker/ (Rust/WASM)."
+          echo "VERIFY authority: .github/workflows/ci.yml and wasm.yml"

@@ -1,36 +1,36 @@
-# Auto-Healing Agent
+# Auto-Healing Agent — Rust / WASM only
 
-Núcleo **Rust + WASM + NN** (Always Free). La red **no escribe código**.
+Núcleo de reparación: **Rust + WebAssembly + NN pequeña** en Cloudflare (Always Free).
 
-Estructura alineada a Notion (*Rust/WASM Neural Network Core*):
+- La red **no escribe código** → `RepairAction` estructurada
+- Operadores deterministas aplican el parche
+- **GitHub Actions** = VERIFY (nunca la confidence del modelo)
+- **Sin TypeScript / sin LLM** en el path de producción
+- **Sin Pony**
+
+## Estructura (Notion + Prompt Pad)
 
 ```
-auto-healing-agent/
-├─ crates/                 ← código Rust (abrir aquí en el móvil)
-│   ├─ repair_types/
-│   ├─ feature_engine/
-│   ├─ repair_nn_core/
-│   ├─ repair_nn_wasm/
-│   └─ repair_operators/
-├─ worker/                 ← Cloudflare Worker Rust
-├─ model/
-├─ docs/
-├─ scripts/
-├─ .github/workflows/
-├─ legacy/                 ← LLM path (no ampliar)
-├─ Cargo.toml
-├─ rust-toolchain.toml
-└─ README.md
+crates/          # código Rust — abrir aquí en móvil
+  repair_types/
+  feature_engine/
+  repair_nn_core/
+  repair_nn_wasm/
+  repair_operators/
+worker/          # Cloudflare Worker (workers-rs)
+model/
+docs/            # incluye PROMPT_PAD.md v2
+scripts/
+legacy/          # archivo muerto (agent.ts no se ejecuta)
 ```
 
-## Código (no es solo Markdown)
-
-En GitHub móvil: **crates** → p.ej. **repair_nn_core** → **src** → **lib.rs**
+## Comandos
 
 ```bash
 cargo test -p feature_engine -p repair_nn_core -p repair_operators
+cargo build -p repair_nn_wasm --target wasm32-unknown-unknown
 ```
 
-## Legacy
+## Prompt operativo
 
-`legacy/agent.ts` + workflow `auto-repair.yml` = ruta HuggingFace antigua.
+Ver [`docs/PROMPT_PAD.md`](docs/PROMPT_PAD.md).

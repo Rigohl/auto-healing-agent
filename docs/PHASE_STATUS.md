@@ -1,13 +1,13 @@
-# Estado de fases (Prompt Pad, sin Pony)
+# Fases (Pony omitida · TS/LLM path off)
 
-| Fase | Estado | Evidencia |
-|------|--------|-----------|
-| 1 Inventario | completado | docs/DISCREPANCIES.md |
-| 2 Representación | parcial | FailureSignature + 64 features; sin AST/CFG/DFG |
-| 3 Repair engine | parcial | NN + operator stubs + gate |
-| 4 Verification | parcial | ci/wasm workflows; legacy auto-repair sigue |
-| 5 Learning | parcial | tipo TrainingExample |
-| 6 Cloudflare | parcial | worker/ skeleton |
-| 7 Agentes | parcial | docs/AGENTS.md |
-| 8 Pony | **cancelada** | fuera de alcance |
-| 9 E2E | no verde | — |
+| Fase | Estado |
+|------|--------|
+| 1 Inventario | completed |
+| 2 Representación | partial (64 features; sin AST) |
+| 3 Repair engine | partial (NN + stubs) |
+| 4 Verification | partial (ci/wasm; legacy HF off) |
+| 5 Learning | partial |
+| 6 Cloudflare | partial (skeleton) |
+| 7 Agentes docs | partial |
+| 8 Pony | **omitted** |
+| 9 E2E | not green |
