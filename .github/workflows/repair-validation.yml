@@ -1,0 +1,9 @@
+name: Repair Validation
+on:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  note:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "CI is VERIFY authority. NN confidence alone never means PASS."

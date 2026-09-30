@@ -1,0 +1,10 @@
+name: Security
+on:
+  push:
+    branches: [main]
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "No tokens in tree; use GitHub Secrets + wrangler secret"

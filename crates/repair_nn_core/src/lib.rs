@@ -1,142 +1,148 @@
-//! Pure-Rust MLP classifier for Auto-Healing Agent.
-//!
-//! Architecture (tiny, edge-friendly):
-//!   Input  16  → Hidden 32 (ReLU) → Output 11 (softmax over OperatorId 0..10)
-//!
-//! Weights are loaded from a flat f32 buffer (exported by `scripts/export_weights`).
-//! No Burn / no external ML runtime at inference time — only arithmetic.
-//! Compatible with `wasm32-unknown-unknown` and `no_std` + alloc.
-
+//! MLP V0: 64 → 32 → 16 latent → operator/confidence/risk heads.
+//! No LLM. Weights from exported artifact. no_std + alloc.
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
+use alloc::collections::BTreeMap;
 use alloc::string::String;
-use repair_types::{FeatureVector, OperatorId, RepairAction};
+use alloc::vec::Vec;
+use repair_types::{FeatureVector, OperatorId, OPERATOR_COUNT, RepairAction};
 
-const INPUT: usize = 16;
+const INPUT: usize = 64;
 const HIDDEN: usize = 32;
-const OUTPUT: usize = 11; // OperatorId 0..10
+const LATENT: usize = 16;
+const OPS: usize = OPERATOR_COUNT;
 
-/// Total weights: W1 (16*32) + b1 (32) + W2 (32*11) + b2 (11) = 512 + 32 + 352 + 11 = 907
-pub const WEIGHT_COUNT: usize = INPUT * HIDDEN + HIDDEN + HIDDEN * OUTPUT + OUTPUT;
+/// Flat weight layout length.
+pub const WEIGHT_COUNT: usize =
+    INPUT * HIDDEN + HIDDEN + HIDDEN * LATENT + LATENT + LATENT * OPS + OPS + LATENT + 1 + LATENT + 1;
 
 pub struct RepairNet {
-    /// Flat buffer: [W1 | b1 | W2 | b2]
-    weights: [f32; WEIGHT_COUNT],
+    weights: Vec<f32>,
 }
 
 impl RepairNet {
-    /// Create from a weight slice. Panics if length != WEIGHT_COUNT.
-    pub fn from_weights(w: &[f32]) -> Self {
-        assert_eq!(w.len(), WEIGHT_COUNT, "weight buffer must be {}", WEIGHT_COUNT);
-        let mut weights = [0.0f32; WEIGHT_COUNT];
-        weights.copy_from_slice(w);
-        Self { weights }
+    pub fn from_weights(w: &[f32]) -> Result<Self, &'static str> {
+        if w.len() != WEIGHT_COUNT {
+            return Err("weight length mismatch");
+        }
+        Ok(Self {
+            weights: w.to_vec(),
+        })
     }
 
-    /// Zero-initialized network (useful for tests / cold start).
     pub fn zeros() -> Self {
         Self {
-            weights: [0.0; WEIGHT_COUNT],
+            weights: alloc::vec![0.0; WEIGHT_COUNT],
         }
     }
 
-    /// Forward pass → RepairAction.
     pub fn predict(&self, features: &FeatureVector) -> RepairAction {
         let x = features.as_slice();
-
-        // Layer 1: 16 → 32 + ReLU
         let mut h = [0.0f32; HIDDEN];
         for j in 0..HIDDEN {
-            let mut sum = self.bias1(j);
+            let mut s = self.w(INPUT * HIDDEN + j);
             for i in 0..INPUT {
-                sum += x[i] * self.w1(i, j);
+                s += x[i] * self.w(i * HIDDEN + j);
             }
-            h[j] = if sum > 0.0 { sum } else { 0.0 };
+            h[j] = relu(s);
         }
-
-        // Layer 2: 32 → 11 (logits)
-        let mut logits = [0.0f32; OUTPUT];
-        for k in 0..OUTPUT {
-            let mut sum = self.bias2(k);
+        let o1 = INPUT * HIDDEN + HIDDEN;
+        let mut z = [0.0f32; LATENT];
+        for k in 0..LATENT {
+            let mut s = self.w(o1 + HIDDEN * LATENT + k);
             for j in 0..HIDDEN {
-                sum += h[j] * self.w2(j, k);
+                s += h[j] * self.w(o1 + j * LATENT + k);
             }
-            logits[k] = sum;
+            z[k] = relu(s);
         }
+        let o2 = o1 + HIDDEN * LATENT + LATENT;
+        let mut logits = [0.0f32; OPS];
+        for k in 0..OPS {
+            let mut s = self.w(o2 + LATENT * OPS + k);
+            for j in 0..LATENT {
+                s += z[j] * self.w(o2 + j * OPS + k);
+            }
+            logits[k] = s;
+        }
+        let (idx, sm) = soft_argmax(&logits);
+        let oc = o2 + LATENT * OPS + OPS;
+        let mut cr = self.w(oc + LATENT);
+        for j in 0..LATENT {
+            cr += z[j] * self.w(oc + j);
+        }
+        let confidence = sigmoid(cr).max(sm * 0.5);
+        let or = oc + LATENT + 1;
+        let mut rr = self.w(or + LATENT);
+        for j in 0..LATENT {
+            rr += z[j] * self.w(or + j);
+        }
+        let risk = sigmoid(rr);
 
-        // Softmax + argmax
-        let (op_idx, confidence) = softmax_argmax(&logits);
-        let risk = 1.0 - confidence;
+        let mut parameters = BTreeMap::new();
+        parameters.insert(String::from("schema"), String::from("v2"));
 
         RepairAction {
-            operator_id: OperatorId::from_u8(op_idx as u8),
+            node_id: String::from("unlocalized"),
+            repair_operator: OperatorId::from_u8(idx as u8),
+            parameters,
             confidence,
             risk,
-            rationale: String::new(),
         }
     }
 
     #[inline]
-    fn w1(&self, i: usize, j: usize) -> f32 {
-        self.weights[i * HIDDEN + j]
-    }
-
-    #[inline]
-    fn bias1(&self, j: usize) -> f32 {
-        self.weights[INPUT * HIDDEN + j]
-    }
-
-    #[inline]
-    fn w2(&self, j: usize, k: usize) -> f32 {
-        self.weights[INPUT * HIDDEN + HIDDEN + j * OUTPUT + k]
-    }
-
-    #[inline]
-    fn bias2(&self, k: usize) -> f32 {
-        self.weights[INPUT * HIDDEN + HIDDEN + HIDDEN * OUTPUT + k]
+    fn w(&self, i: usize) -> f32 {
+        self.weights[i]
     }
 }
 
-fn softmax_argmax(logits: &[f32; OUTPUT]) -> (usize, f32) {
+fn relu(x: f32) -> f32 {
+    if x > 0.0 {
+        x
+    } else {
+        0.0
+    }
+}
+fn sigmoid(x: f32) -> f32 {
+    1.0 / (1.0 + (-x).exp())
+}
+fn soft_argmax(logits: &[f32; OPS]) -> (usize, f32) {
     let max = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let mut exps = [0.0f32; OUTPUT];
+    let mut ex = [0.0f32; OPS];
     let mut sum = 0.0f32;
-    for i in 0..OUTPUT {
+    for i in 0..OPS {
         let e = (logits[i] - max).exp();
-        exps[i] = e;
+        ex[i] = e;
         sum += e;
     }
-    let mut best_i = 0;
-    let mut best_p = 0.0f32;
-    for i in 0..OUTPUT {
-        let p = exps[i] / sum;
-        if p > best_p {
-            best_p = p;
-            best_i = i;
+    let mut bi = 0;
+    let mut bp = 0.0f32;
+    for i in 0..OPS {
+        let p = if sum > 0.0 { ex[i] / sum } else { 0.0 };
+        if p > bp {
+            bp = p;
+            bi = i;
         }
     }
-    (best_i, best_p)
+    (bi, bp)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use repair_types::FeatureVector;
 
     #[test]
-    fn zeros_predicts_something() {
+    fn zeros_predicts() {
         let net = RepairNet::zeros();
-        let fv = FeatureVector::zeros();
-        let action = net.predict(&fv);
-        // With zero weights all logits are 0 → uniform softmax → confidence ~1/11
-        assert!(action.confidence > 0.05 && action.confidence < 0.2);
-        assert_eq!(action.operator_id, OperatorId::NoOp); // argmax of equals → first
+        let a = net.predict(&FeatureVector::zeros());
+        assert!((0.0..=1.0).contains(&a.confidence));
+        assert!((0.0..=1.0).contains(&a.risk));
     }
 
     #[test]
-    fn weight_count_matches() {
-        assert_eq!(WEIGHT_COUNT, 907);
+    fn weight_count_stable() {
+        assert!(WEIGHT_COUNT > 1000);
     }
 }

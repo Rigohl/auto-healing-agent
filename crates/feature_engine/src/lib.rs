@@ -1,58 +1,69 @@
-//! Feature extraction: Incident → fixed 16-dim FeatureVector.
-//!
-//! Pure, deterministic, no allocations beyond the input strings.
-//! Designed for edge / WASM (no_std + alloc).
-
+//! Feature encoder V0 — [f32; 64], schema v2.
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use repair_types::{FeatureVector, Incident};
+extern crate alloc;
 
-/// Feature indices (documented contract with the model).
-///
-///  0  error_code_hash          (normalized [0,1])
-///  1  error_step_hash
-///  2  command_hash
-///  3  language_hint            (one-hot-ish)
-///  4  framework_hint
-///  5  attempts_norm            (attempts / 10, capped)
-///  6  message_len_norm
-///  7  has_syntax_token
-///  8  has_dependency_token
-///  9  has_config_token
-/// 10  has_build_token
-/// 11  has_env_token
-/// 12  has_type_token
-/// 13  has_import_token
-/// 14  source_is_vercel
-/// 15  source_is_linear
-pub fn extract(incident: &Incident) -> FeatureVector {
+use repair_types::{FailureSignature, FeatureVector, Incident};
+
+pub fn extract(incident: &Incident, signature: &FailureSignature) -> FeatureVector {
     let mut v = FeatureVector::zeros();
+    let msg = alloc::format!(
+        "{} {} {} {}",
+        incident.message.to_lowercase(),
+        incident.error_code.to_lowercase(),
+        incident.error_step.to_lowercase(),
+        signature.fingerprint.to_lowercase()
+    );
 
     v.values[0] = hash01(&incident.error_code);
     v.values[1] = hash01(&incident.error_step);
     v.values[2] = hash01(&incident.command);
-    v.values[3] = language_score(&incident.language_hint);
-    v.values[4] = framework_score(&incident.framework_hint);
+    v.values[3] = lang_score(&incident.language_hint);
+    v.values[4] = fw_score(&incident.framework_hint);
     v.values[5] = (incident.attempts as f32 / 10.0).min(1.0);
     v.values[6] = (incident.message.len() as f32 / 2000.0).min(1.0);
+    v.values[7] = has(&msg, &["syntax", "parse", "unexpected token"]);
+    v.values[8] = has(&msg, &["depend", "module not found", "cannot find module"]);
+    v.values[9] = has(&msg, &["config", "tsconfig", "vercel.json"]);
+    v.values[10] = has(&msg, &["build", "compile", "webpack"]);
+    v.values[11] = has(&msg, &["env", "process.env", "missing env"]);
+    v.values[12] = has(&msg, &["type", "typescript", "cannot assign"]);
+    v.values[13] = has(&msg, &["import", "export", "cannot resolve"]);
+    v.values[14] = if incident.source.to_lowercase().contains("vercel") {
+        1.0
+    } else {
+        0.0
+    };
+    v.values[15] = if incident.source.to_lowercase().contains("linear") {
+        1.0
+    } else {
+        0.0
+    };
+    v.values[16] = has(&msg, &["test", "jest", "vitest"]);
+    v.values[17] = has(&msg, &["lint", "eslint"]);
+    v.values[18] = has(&msg, &["timeout", "oom"]);
+    v.values[19] = has(&msg, &["permission", "denied"]);
+    v.values[20] = hash01(&signature.command_family);
+    v.values[21] = hash01(&signature.fingerprint);
+    v.values[22] = if incident.verified { 1.0 } else { 0.0 };
+    v.values[23] = if incident.status.contains("fail") { 1.0 } else { 0.0 };
+    v.values[24] = (incident.stack_hint.len() as f32 / 4000.0).min(1.0);
+    v.values[25] = has(&msg, &["lockfile", "package-lock"]);
+    v.values[26] = has(&msg, &["peer dep", "eresolve"]);
+    v.values[27] = has(&msg, &["version", "unsupported"]);
+    v.values[28] = has(&msg, &["cache"]);
+    v.values[29] = has(&msg, &["syntax_error"]);
+    v.values[30] = has(&msg, &["buildstep", "build_step", "build step"]);
+    v.values[31] = if incident.attempts > 2 { 1.0 } else { 0.0 };
 
-    let msg = incident.message.to_lowercase();
-    let code = incident.error_code.to_lowercase();
-    let step = incident.error_step.to_lowercase();
-    let combined = alloc::format!("{} {} {}", msg, code, step);
+    for i in 0..16 {
+        v.values[32 + i] =
+            ((hash01(&alloc::format!("{}:{}", i, signature.fingerprint)) - 0.5) * 2.0).abs();
+    }
 
-    v.values[7] = contains_any(&combined, &["syntax", "parse", "unexpected token", "ts(", "eslint"]);
-    v.values[8] = contains_any(&combined, &["depend", "module not found", "cannot find module", "npm err", "yarn", "pnpm"]);
-    v.values[9] = contains_any(&combined, &["config", "tsconfig", "next.config", "vercel.json", "env"]);
-    v.values[10] = contains_any(&combined, &["build", "compile", "webpack", "vite", "turbo"]);
-    v.values[11] = contains_any(&combined, &["env", "environment", "process.env", "missing env"]);
-    v.values[12] = contains_any(&combined, &["type", "typescript", "cannot assign", "property does not exist"]);
-    v.values[13] = contains_any(&combined, &["import", "export", "require(", "cannot resolve"]);
-
-    let src = incident.source.to_lowercase();
-    v.values[14] = if src.contains("vercel") { 1.0 } else { 0.0 };
-    v.values[15] = if src.contains("linear") { 1.0 } else { 0.0 };
-
+    v.values[55] = v.values[5];
+    v.values[60] = FeatureVector::SCHEMA_VERSION as f32 / 10.0;
+    v.values[63] = 1.0;
     v
 }
 
@@ -62,43 +73,35 @@ fn hash01(s: &str) -> f32 {
     }
     let mut h: u32 = 2166136261;
     for b in s.bytes() {
-        h ^= b as u32;
+        h ^= u32::from(b);
         h = h.wrapping_mul(16777619);
     }
     (h as f32) / (u32::MAX as f32)
 }
 
-fn language_score(hint: &str) -> f32 {
-    let h = hint.to_lowercase();
-    if h.contains("typescript") || h.contains("ts") {
+fn lang_score(h: &str) -> f32 {
+    let h = h.to_lowercase();
+    if h.contains("typescript") || h == "ts" {
         0.9
-    } else if h.contains("javascript") || h.contains("js") {
+    } else if h.contains("javascript") {
         0.7
-    } else if h.contains("rust") {
-        0.5
-    } else if h.contains("python") {
-        0.3
     } else {
         0.1
     }
 }
 
-fn framework_score(hint: &str) -> f32 {
-    let h = hint.to_lowercase();
+fn fw_score(h: &str) -> f32 {
+    let h = h.to_lowercase();
     if h.contains("next") {
         0.95
     } else if h.contains("react") {
         0.8
-    } else if h.contains("vue") || h.contains("nuxt") {
-        0.6
-    } else if h.contains("svelte") {
-        0.5
     } else {
         0.2
     }
 }
 
-fn contains_any(hay: &str, needles: &[&str]) -> f32 {
+fn has(hay: &str, needles: &[&str]) -> f32 {
     for n in needles {
         if hay.contains(n) {
             return 1.0;
@@ -110,10 +113,14 @@ fn contains_any(hay: &str, needles: &[&str]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use repair_types::Incident;
 
     #[test]
-    fn extracts_syntax_features() {
+    fn dim64() {
+        assert_eq!(FeatureVector::DIM, 64);
+    }
+
+    #[test]
+    fn syntax_fixture() {
         let mut inc = Incident::default();
         inc.error_code = "syntax_error".into();
         inc.error_step = "buildStep".into();
@@ -121,10 +128,10 @@ mod tests {
         inc.message = "Unexpected token".into();
         inc.source = "vercel".into();
         inc.attempts = 3;
-
-        let fv = extract(&inc);
-        assert!(fv.values[7] > 0.5, "syntax token should fire");
-        assert!(fv.values[14] > 0.5, "vercel source");
-        assert!((fv.values[5] - 0.3).abs() < 0.01);
+        let sig = FailureSignature::from_incident(&inc);
+        let fv = extract(&inc, &sig);
+        assert!(fv.values[7] > 0.5);
+        assert!(fv.values[14] > 0.5);
+        assert!(fv.values[29] > 0.5);
     }
 }

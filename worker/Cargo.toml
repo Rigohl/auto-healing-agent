@@ -1,0 +1,16 @@
+[package]
+name = "auto_healing_worker"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+worker = "0.5"
+console_error_panic_hook = "0.1"
+
+[profile.release]
+lto = true
+opt-level = "s"

@@ -1,9 +1,9 @@
 [package]
-name = "feature_engine"
+name = "repair_operators"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Incident + FailureSignature → FeatureVector[64]"
+description = "Deterministic repair operators + policy gate"
 
 [dependencies]
 repair_types = { path = "../repair_types", default-features = false }
