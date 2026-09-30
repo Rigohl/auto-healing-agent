@@ -1,0 +1,13 @@
+[package]
+name = "repair_types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core types for Auto-Healing Agent: Incident, RepairAction, RepairCase"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+
+[features]
+default = ["std"]
+std = ["serde/std"]

@@ -1,0 +1,7 @@
+{
+  "version": "0.1.0-placeholder",
+  "trained_at": null,
+  "accuracy": null,
+  "weights": null,
+  "note": "Placeholder. Run scripts/export_weights after training to populate weights as base64 or raw f32 array."
+}

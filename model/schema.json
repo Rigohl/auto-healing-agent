@@ -1,0 +1,39 @@
+{
+  "version": "0.1.0",
+  "input_dim": 16,
+  "hidden_dim": 32,
+  "output_dim": 11,
+  "weight_count": 907,
+  "features": [
+    "error_code_hash",
+    "error_step_hash",
+    "command_hash",
+    "language_hint",
+    "framework_hint",
+    "attempts_norm",
+    "message_len_norm",
+    "has_syntax_token",
+    "has_dependency_token",
+    "has_config_token",
+    "has_build_token",
+    "has_env_token",
+    "has_type_token",
+    "has_import_token",
+    "source_is_vercel",
+    "source_is_linear"
+  ],
+  "operators": [
+    "NO_OP",
+    "DEPENDENCY_REPAIR",
+    "SYNTAX_FIX",
+    "CONFIG_REPAIR",
+    "BUILD_SCRIPT_FIX",
+    "ENV_VAR_REPAIR",
+    "LOCKFILE_REFRESH",
+    "TYPE_ANNOTATION_FIX",
+    "IMPORT_PATH_FIX",
+    "VERSION_PIN",
+    "CACHE_CLEAR"
+  ],
+  "notes": "Weights are a flat f32[907] buffer: W1(16x32) | b1(32) | W2(32x11) | b2(11). Exported by scripts/export_weights."
+}
