@@ -31,4 +31,5 @@ jobs:
       - name: Verify WASM Build
         run: cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown
       - name: Verify Worker Target
-        run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
+        working-directory: worker
+        run: cargo check --target wasm32-unknown-unknown --release --locked

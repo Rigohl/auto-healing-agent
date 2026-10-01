@@ -26,7 +26,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "worker -> worker/target"
+          workspaces: "worker -> target"
 
       - name: Preflight
         run: |
