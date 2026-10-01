@@ -31,6 +31,14 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 | 25 | Riqueza real de `FeatureVector[64]` | Glosario kilo afirma "64 features incluyen patrones AST, CFG y data flow" | `feature_engine`: 0–31 léxicos/hash, 32–47 derivados de hash, 55 duplica 5, 60 = versión de esquema, 63 = bias. **48–54, 56–59, 61–62 quedan en 0.0** | **Repo gana** | `DIM=64` es correcto y no cambia (PROMPT_PAD regla 2), pero ~20 de las 64 entradas son hoy inertes. La afirmación de features estructurales no se sostiene hasta que exista el extractor AST/CFG. Sin impacto en el conteo, sí en la expectativa de calidad del modelo. |
 
 ## Estado
-- [x] PART1–4 + INDEX + MEM0_STATUS + GOVERNANCE enriquecido
-- [ ] Merge enrichment PR
-- [ ] Borrar todas las ramas residuales (solo main)
+
+Unificación de ramas (2026-10-01):
+- [x] PART1–4 + INDEX + MEM0_STATUS + GOVERNANCE enriquecidos
+- [x] Delta útil de `feat/rust-nn-core` extraído (`PipelinePhase`, `verify_result`, `NO_LLM_POLICY.md`, `E2E_CHECKLIST.md`)
+- [x] Delta útil de `kilo/bionic-owl-ok9` extraído y depurado (`REFERENCES.md`)
+- [x] `WEIGHT_COUNT` corregido a 2863 en las 4 fuentes
+- [x] Las 9 ramas residuales eliminadas; **main es la única rama** (`origin`)
+
+Sin resolver (no bloquean la unificación):
+- [ ] Ítem 25: ~20 slots de `FeatureVector[64]` inertes hasta que exista extractor AST/CFG
+- [ ] Ítems 9, 10, 21: R2/D1/DO, driver Rust de MongoDB y conector Mem0 siguen sin implementar

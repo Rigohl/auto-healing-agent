@@ -3,11 +3,18 @@
 | Fase | Estado |
 |------|--------|
 | 1 Inventario | completed |
-| 2 Representación | partial (64 features; sin AST) |
-| 3 Repair engine | partial (NN + stubs) |
+| 2 Representación | partial (DIM=64, pero ~20 slots inertes; sin AST/CFG — `DISCREPANCIES` 25) |
+| 3 Repair engine | partial (NN + stubs de operador) |
 | 4 Verification | partial (ci/wasm; legacy HF off) |
-| 5 Learning | partial |
-| 6 Cloudflare | partial (skeleton) |
-| 7 Agentes docs | partial |
-| 8 Pony | **omitted** |
-| 9 E2E | not green |
+| 5 Learning | partial (sin pesos reales ni export) |
+| 6 Cloudflare | partial (esqueleto; NN sin cablear) |
+| 7 Agentes docs | completed (`AGENTS.md` + `NO_LLM_POLICY.md`) |
+| 8 Pony | **omitted** — actor runtime nativo fuera del repo (`AGENTS.md`) |
+| 9 E2E | not green — ver `docs/E2E_CHECKLIST.md` |
+
+Notas de governance:
+- `MIN_CONFIDENCE=0.55` / `MAX_RISK=0.45` (`GOVERNANCE.md`, SoT).
+- Ninguna fase se declara completada por `confidence` del modelo: la autoridad
+  de VERIFY es GitHub Actions (`NO_LLM_POLICY.md`).
+- Mem0, R2, D1, DO y el driver Rust de MongoDB siguen **planificados y
+  ausentes del código** (`DISCREPANCIES` 9, 10, 21). No se inventan.
