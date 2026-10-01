@@ -13,6 +13,7 @@
 | [GOVERNANCE.md](GOVERNANCE.md) | Umbrales 0.55 / 0.45 + flags |
 | [NO_LLM_POLICY.md](NO_LLM_POLICY.md) | Por qué no hay LLM ni fallback híbrido |
 | [E2E_CHECKLIST.md](E2E_CHECKLIST.md) | Checklist FASE 9 + qué está verde hoy |
+| [REFERENCES.md](REFERENCES.md) | Enlaces oficiales + glosario del código |
 | [PART1_REPOSITORY.md](PART1_REPOSITORY.md) | Estructura y crates |
 | [PART2_NEURAL_NETWORK.md](PART2_NEURAL_NETWORK.md) | NN como clasificador, 64→32→16 |
 | [PART3_CLOUDFLARE_RUNTIME.md](PART3_CLOUDFLARE_RUNTIME.md) | Worker orquestador, límites Free |
