@@ -30,4 +30,6 @@ La NN solo propone. Governance + CI/VERIFY deciden.
 Notas:
 - Valores hot-reloadables vía KV en el futuro.
 - Cada decisión se registra en RepairCase para auditoría.
+- Por qué no existe fallback a LLM: `docs/NO_LLM_POLICY.md`.
+- Qué está verde hoy en el flujo: `docs/E2E_CHECKLIST.md`.
 - Documentación expandida de gate/metrics se mantuvo deliberadamente corta; ver DISCREPANCIES si hay conflicto con diseños previos (0.80/0.25).

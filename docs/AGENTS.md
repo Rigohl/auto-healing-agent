@@ -22,3 +22,6 @@ Cada uno: misión única, I/O, tools, límites, timeout, evidencia, éxito/bloqu
 Ninguno salta: CI, risk gates, patch limits, protected files, SoT, rollback.
 
 **Pony / actor runtime nativo: fuera de este repo.**
+
+Los agentes son fases, no procesos LLM: ver `docs/NO_LLM_POLICY.md`
+(lista de 8 roles) y `PipelinePhase` en `crates/repair_types/src/lib.rs`.

@@ -25,6 +25,8 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 | 19 | Docs ricos kilo | 00_INDEX, MEM0_STATUS, gate detallado | INDEX + MEM0_STATUS + GOVERNANCE enriquecido | Absorbido lo esencial | Sin bloat |
 | 20 | WEIGHT_COUNT | Docs del repo decían 2617 | **2863** (código) | **Repo código gana** | `crates/repair_nn_core/src/lib.rs:18`: `64*32+32 + 32*16+16 + 16*13+13 + 16+1 + 16+1` = 2863. El 2617 era una cifra heredada de una variante de arquitectura anterior y no correspondía a ningún código. Corregido en ARCHITECTURE.md, PART2, INVENTORY.md y este ítem 1. |
 | 21 | MongoDB "✅ Conectado" | `kilo/bionic-owl-ok9:docs/DOCUMENTATION.md` afirma *"MongoDB Atlas ✅ Conectado (Cluster0)"* | Sin driver Rust en código | **Rechazado** | Constraint: no declarar_SUCCESS ni inventar conectores. MongoDB sigue diferido (ítem 10). El resto de ese doc de 491 líneas se descartó por este motivo. |
+| 22 | Nº de agentes lógicos | `AGENTS.md` = 14 · `HYBRID_POLICY.md` = 8 | Código: `PipelinePhase` tiene 15 variantes | **Grano de diseño, no de código** | Sin contradicción funcional: los agentes son fases del pipeline y el código sólo codifica fases. `NO_LLM_POLICY.md` conserva la lista de 8 y señala `AGENTS.md` como desglose fino de 14. No bloquea. |
+| 23 | Pony / actor runtime | `feat/rust-nn-core:docs/PONY.md` (FASE 8) | `docs/AGENTS.md` ya dice *"Pony / actor runtime nativo: fuera de este repo"* | **Descartado** | El propio AGENTS.md lo excluye. PONY.md no se absorbe; su decisión ("not started by design order") ya está registrada allí. |
 
 ## Estado
 - [x] PART1–4 + INDEX + MEM0_STATUS + GOVERNANCE enriquecido
