@@ -274,8 +274,10 @@ mod tests {
 
     #[test]
     fn apply_dependency_repair_targets_package_json_without_major_bumps() {
-        let mut inc = Incident::default();
-        inc.project = String::from("demo");
+        let inc = Incident {
+            project: String::from("demo"),
+            ..Default::default()
+        };
         let p = apply(&action(OperatorId::DependencyRepair, 0.9, 0.1), &inc);
         assert!(!p.advisory);
         assert_eq!(p.files.len(), 1);

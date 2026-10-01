@@ -18,7 +18,7 @@ GitHub webhook
 
 ## Rol del Worker
 
-**Sí**: webhook HMAC, normalización, features, inferencia WASM, gate, crear PR, persistir RepairCase.
+**Sí**: webhook HMAC, normalización, features, inferencia NN, gate.
 
 **No**: entrenamiento, builds largos, tests de integración, dataset, git completo, generación libre de código.
 
@@ -26,22 +26,29 @@ GitHub webhook
 `Rust → wasm32-unknown-unknown → módulo autocontenido → Worker`
 (No Emscripten experimental.)
 
+La NN se **enlaza como crate Rust** (`repair_nn_core`, `no_std` + alloc) dentro del
+propio módulo WASM del Worker. Por eso `wrangler.toml` **no** usa
+`[wasm_modules]`: `repair_nn_wasm` existe para consumidores JS/navegador, no
+para el Worker.
+
 ## Límites Free relevantes
 CPU 10 ms/req · Mem 128 MB · Bundle 64 MiB · 100k req/día · KV 100k reads / 1k writes · R2 10 GB.
 
 ## wrangler.toml (esqueleto)
 
 ```toml
-name = "auto-healing-agent"
-compatibility_date = "2025-01-01"
-
-[wasm_modules]
-REPAIR_NN = "./pkg/repair_nn_wasm_bg.wasm"
+name = "auto-healing-agent-worker"
+compatibility_date = "2024-09-23"
 
 [[kv_namespaces]]
 binding = "MODEL_KV"
-id = "<kv-namespace-id>"
+id = "<id real del namespace>"
 ```
+
+> En el repo, `worker/wrangler.toml` conserva `REPLACE_WITH_KV_NAMESPACE_ID`.
+> Hay que rellenarlo antes de cualquier `wrangler deploy`; mientras tanto
+> `MODEL_KV` queda sin enlazar y `/model` devuelve `kv: unbound`, y el webhook
+> corre con red de ceros (`weights: zeros:no_weights`).
 
 ## Fases relacionadas
 FASE 3 (wasm adapter), FASE 6 (deploy worker), hardening wasm-opt.

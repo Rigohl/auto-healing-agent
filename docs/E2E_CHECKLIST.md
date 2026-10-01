@@ -24,15 +24,16 @@ Marcado lo que existe hoy en `main`:
 | Paso | Estado |
 |------|--------|
 | Types + `FailureSignature` + `FeatureVector[64]` | ✅ `crates/repair_types`, `crates/feature_engine` |
-| NN WASM → RepairAction | ✅ `crates/repair_nn_core`, `crates/repair_nn_wasm` (build en CI) |
+| NN → RepairAction | ✅ `crates/repair_nn_core`, `crates/repair_nn_wasm` (build en CI) |
 | Governance gate | ✅ `repair_operators::gate` (0.55 / 0.45) |
-| Deterministic operator → CandidatePatch | ⚠️ stubs; AST real = FASE posterior |
-| Worker (webhook / health / model ptr) | ⚠️ esqueleto; NN wiring pendiente |
-| Webhook → Incident (extremo a extremo) | ❌ no cableado |
-| PR efímera + Actions VERIFY | ❌ no cableado |
+| Deterministic operator → CandidatePatch | ⚠️ `apply()` con un brazo explícito por cada uno de los 13 operadores; genera `CandidatePatch` (files + steps), **no un diff**. AST real = fase posterior |
+| Worker: webhook → Incident → features → NN → gate | ✅ `worker/src/lib.rs` corre los 5 pasos y devuelve el `PipelineReport` |
+| Worker: verificación de secret | ✅ **fail closed**: sin `WEBHOOK_SECRET` responde 503, no acepta tráfico |
+| Pesos reales | ❌ `model/*.json` con `weights: null`; el Worker cae a red de ceros y lo declara en la respuesta |
+| PR efímera + Actions VERIFY | ❌ no implementado; la respuesta incluye `"pr": null` y lo dice |
 | RepairCase + TrainingExample on PASS | ❌ sin persistencia |
-| Offline train / export / promote R2-KV | ❌ diferido (peso real pendiente) |
-| Edge carga pesos STABLE | ❌ `model/` son placeholders (`weights: null`) |
+| Offline train / export / promote R2-KV | ❌ diferido (λ sin fijar, ver `PART2_NEURAL_NETWORK.md`) |
+| Edge carga pesos STABLE | ⚠️ lee `MODEL_KV:model/current` si existe; `wrangler.toml` sin ids reales ⇒ KV sin enlazar |
 
 **Full E2E no está verde.** No se declara PASS por confidence del modelo:
 la autoridad es GitHub Actions (`docs/NO_LLM_POLICY.md`).

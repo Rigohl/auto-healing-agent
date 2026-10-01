@@ -31,5 +31,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      # Not -D warnings: informational for now, see docs/DISCREPANCIES.md 28
-      - run: cargo clippy -p repair_types -p feature_engine -p repair_nn_core -p repair_operators --all-targets
+      # Warnings are errors: the crate set is small enough to keep clean.
+      # rustfmt is still not enforced (DISCREPANCIES.md 34).
+      - run: cargo clippy -p repair_types -p feature_engine -p repair_nn_core -p repair_operators --all-targets -- -D warnings

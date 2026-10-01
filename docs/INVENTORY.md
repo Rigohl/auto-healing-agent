@@ -66,8 +66,8 @@ docs/
 | Workflow | Resultado |
 |----------|-----------|
 | CI / test | ✅ `cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators` — 27 tests |
-| CI / worker | ✅ `cargo check --manifest-path worker/Cargo.toml --all-targets` |
-| CI / clippy | ✅ informativo (sin `-D warnings`) |
+| CI / worker | ✅ `cargo check --manifest-path worker/Cargo.toml --all-targets` (worker enlaza los 4 crates) |
+| CI / clippy | ✅ `-D warnings` |
 | WASM | ✅ `cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown` |
 | Security | ✅ |
 
@@ -79,14 +79,14 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 | # | Gap |
 |---|------|
 | 25 | ~20 de las 64 entradas de `FeatureVector` están inertes (0.0). Sin extractor AST/CFG. |
-| 27 | `wasm.yml` no dispara con cambios en `feature_engine/` ni `repair_operators/`. |
-| 34 | Sin `cargo fmt --check` en CI: `rust-toolchain.toml` declara rustfmt pero nadie lo usa. |
-| — | El webhook del worker descarta el body: no normaliza `Incident`, no llama a la NN, no gatea, no abre PR. `apply()` no genera diff real. `wrangler.toml` sin `[wasm_modules]` y con `REPLACE_WITH_KV_NAMESPACE_ID`. |
+| — | El webhook ya corre `Incident → features → NN → gate` y falla cerrado sin secret. Falta: abrir PR efímera, persistir `RepairCase`, y `apply()` sigue sin generar diff real. |
 | 9, 10 | Sin bindings R2/D1/DO, sin driver Rust de MongoDB, sin conector Mem0. Diseñado, no implementado. |
 | 5, 6, 22 | Sin pesos reales: no hay `scripts/train` ni `scripts/export_weights`; training y promoción de checkpoint siguen diferidos. |
-| — | `repair_operators::apply` sigue siendo stub; AST real = fase posterior. |
+| — | `apply()` tiene un brazo por operador y devuelve `CandidatePatch` (files + steps), pero no genera diff ni escribe ficheros. |
 | — | E2E completo no verde (ver `docs/E2E_CHECKLIST.md`). |
 | — | Sin `Cargo.lock` (ítem 7): las versiones resuelven en cada build de CI. |
+| 34 | Parcial: clippy con `-D warnings` activo; falta `cargo fmt --check` (necesita toolchain local). |
+| — | `wrangler.toml` conserva `REPLACE_WITH_KV_NAMESPACE_ID` ⇒ KV sin enlazar hasta que se rellene. |
 | — | Objetivo de entrenamiento sin λ fijados: la fórmula loss/reward está documentada en PART2 pero no implementada, y nada calcula `reward` en el repo. |
 
 ## Decisiones clave
