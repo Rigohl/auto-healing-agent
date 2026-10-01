@@ -46,7 +46,11 @@ pub fn extract(incident: &Incident, signature: &FailureSignature) -> FeatureVect
     v.values[20] = hash01(&signature.command_family);
     v.values[21] = hash01(&signature.fingerprint);
     v.values[22] = if incident.verified { 1.0 } else { 0.0 };
-    v.values[23] = if incident.status.contains("fail") { 1.0 } else { 0.0 };
+    v.values[23] = if incident.status.contains("fail") {
+        1.0
+    } else {
+        0.0
+    };
     v.values[24] = (incident.stack_hint.len() as f32 / 4000.0).min(1.0);
     v.values[25] = has(&msg, &["lockfile", "package-lock"]);
     v.values[26] = has(&msg, &["peer dep", "eresolve"]);

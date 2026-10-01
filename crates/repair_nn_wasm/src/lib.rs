@@ -64,3 +64,9 @@ impl RepairModel {
         FeatureVector::DIM
     }
 }
+
+impl Default for RepairModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}

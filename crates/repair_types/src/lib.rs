@@ -3,6 +3,14 @@
 
 extern crate alloc;
 
+pub mod contract;
+
+pub use contract::{
+    compute_idempotency_key, get_error_policy, CandidatePatch, ContractError, ContractErrorCode,
+    GitHubEventType, MinimumPermissions, OutboundPRRequest, RepairEvent, VerifiedResult,
+    CONTRACT_VERSION, IDEMPOTENCY_TTL_SECONDS,
+};
+
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -106,7 +114,7 @@ impl Default for Incident {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct FailureSignature {
     pub error_code: String,
     pub error_step: String,
@@ -311,7 +319,6 @@ mod tests {
 
     #[test]
     fn pipeline_phase_covers_incident_to_audit_span() {
-        // Terminal reporting phases required by the SYSTEM PROMPT output contract.
         assert_ne!(PipelinePhase::Verify, PipelinePhase::Ci);
         assert_ne!(PipelinePhase::PatchValidation, PipelinePhase::Verify);
         assert_ne!(PipelinePhase::PushAuthorization, PipelinePhase::Verify);
