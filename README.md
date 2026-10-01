@@ -27,9 +27,13 @@ legacy/          # archivo muerto (agent.ts no se ejecuta)
 ## Comandos
 
 ```bash
-cargo test -p feature_engine -p repair_nn_core -p repair_operators
+cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators
+cargo check --manifest-path worker/Cargo.toml   # worker/ va fuera del workspace
 cargo build -p repair_nn_wasm --target wasm32-unknown-unknown
 ```
+
+`model/current.json` y `model/stable.json` son **placeholders** (`weights: null`).
+Todavía no existe entrenamiento ni export de pesos: ver `docs/E2E_CHECKLIST.md`.
 
 ## Prompt operativo
 

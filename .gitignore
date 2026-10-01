@@ -1,0 +1,25 @@
+# Rust / Cargo
+/target/
+**/target/
+Cargo.lock.orig
+
+# Cloudflare workers-rs build output (worker-build)
+/worker/build/
+/worker/.wrangler/
+
+# wasm-bindgen / wasm-pack output
+/pkg/
+*.wasm
+
+# Secrets and local env. Real values only via GitHub Secrets or `wrangler secret`.
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# NOTE: legacy/ is intentionally tracked. It is an archive, not dead build output.

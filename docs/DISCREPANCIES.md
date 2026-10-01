@@ -32,6 +32,13 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 | 26 | Build WASM roto | `wasm.yml` fallaba desde antes de la unificación | **Corregido** en `acddb02` | Repo gana (ya arreglado) | `repair_nn_core` es `no_std` pero llamaba `f32::exp()` (método de `std`) en `sigmoid()` y `soft_argmax()`. Compilaba bajo el feature `std` (por eso `cargo test` salía verde y lo ocultaba) y fallaba en `wasm32-unknown-unknown` con `error[E0599]: no method named exp`. Fallaba también en `5511f61` y `a886669`, o sea que es anterior a esta unificación. Arreglado con `libm::expf`. |
 
 | 27 | Cobertura de `wasm.yml` | Rutas del disparador: `repair_nn_wasm/**`, `repair_nn_core/**`, `repair_types/**` | Faltan `feature_engine/**` y `repair_operators/**` | **Pendiente** | Un cambio en `feature_engine` o `repair_operators` no dispara el build WASM aunque ambos entren en la cadena edge→WASM. No bloquea hoy; anotado para WHEN. |
+| 28 | `worker/` sin verificar | Ningún workflow lo compilaba | Ahora `ci.yml` job `worker` | **Corregido** | `worker/` está fuera del workspace Cargo (paquete CF aparte), así que `cargo test`/`cargo build` del workspace nunca lo compilaban: `worker/src/lib.rs` y la dep `worker = "0.5"` podían romperse con CI en verde. Añadido `cargo check --manifest-path worker/Cargo.toml --all-targets`. |
+| 29 | `repair_operators` sin tests | Crate del gate 0.55/0.45 con **0 tests** | 15 tests inline | **Corregido** | El gate es el path más crítico del sistema y era el único crate sin cobertura. Cubierto: inclusión exacta en ambos umbrales, bloqueo 0.5499 y 0.4501, NoOp/Unknown con confidence 1.0, monotonicidad, `verify_result == None`, razón de denegación, allowlist de los 13 operadores y coherencia gate↔apply. |
+| 30 | Test de `WEIGHT_COUNT` débil | `assert!(WEIGHT_COUNT > 1000)` | `assert_eq!(WEIGHT_COUNT, 2863)` + test de aritmética por capas | **Corregido** | Una aserción que acepta 2617 y 2863 por igual es la razón de que el error de documentación del ítem 20 pasara desapercibido. Añadido también `from_weights` rechaza longitud incorrecta. |
+| 31 | `regression.yml` sin `repair_types` | Corría 3 crates, CI corría 4 | Alineado con `ci.yml` | **Corregido** | La regresión semanal no ejecutaba los tests de umbral del gate. |
+| 32 | Script de secrets reintroducía HF | `set-github-secrets.sh` subía `HF_TOKEN`, `HF_MODEL` (default `Qwen/Qwen2.5-Coder-7B-Instruct`), `HF_BASE_URL` (default router HF) y `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID` embebidos | Eliminados | **Corregido** | El script es la ruta viva de aprovisionamiento (no está en `legacy/`) y creaba por defecto el stack HuggingFace que el repo declara retirado (ítems 3 y 13), además de subir org/project ids reales sin que el operador los exportara. Añadido `WEBHOOK_SECRET`. `put_secret` ya descartaba valores vacíos correctamente: no había bug de borrado. |
+| 33 | Ausentes `.gitignore` y `LICENSE` | No existían | Ambos añadidos | **Corregido** | Sin `.gitignore`, `target/`, `worker/build/`, `pkg/` y `.env` podían commitearse. Todos los `Cargo.toml` declaraban `license = "MIT"` sin que existiera el archivo (ítem 7). |
+| 34 | Sin `cargo fmt --check` en CI | `rust-toolchain.toml` declara `rustfmt` y `clippy`; ningún workflow los usa | clippy añadido (informativo, sin `-D warnings`); fmt pendiente | **Parcial** | No se puede aplicar `rustfmt` en este entorno, así que activar `--check` dejaría CI en rojo sin forma de corregirlo aquí. Requiere una pasada con toolchain local. |
 
 
 ## Estado
@@ -44,5 +51,15 @@ Unificación de ramas (2026-10-01):
 - [x] Las 9 ramas residuales eliminadas; **main es la única rama** (`origin`)
 
 Sin resolver (no bloquean la unificación):
+- [x] Ítem 28: `worker/` ya se compila en CI
+- [x] Ítem 29: `repair_operators` con 15 tests del gate
+- [x] Ítems 30, 31: aserción de pesos y `regression.yml` alineados
+- [x] Ítems 32, 33: script de secrets sin HF y sin defaults embebidos; `.gitignore` + `LICENSE`
+
+Sin resolver:
 - [ ] Ítem 25: ~20 slots de `FeatureVector[64]` inertes hasta que exista extractor AST/CFG
+- [ ] Ítem 27: `wasm.yml` no dispara con cambios en `feature_engine/` ni `repair_operators/`
+- [ ] Ítem 34: falta `cargo fmt --check` en CI (requiere toolchain local)
 - [ ] Ítems 9, 10, 21: R2/D1/DO, driver Rust de MongoDB y conector Mem0 siguen sin implementar
+- [ ] Sin `Cargo.lock` (ítem 7): las versiones resuelven en cada build de CI
+- [ ] Pipeline no cableado: el webhook descarta el body; `apply()` no genera diff; `wrangler.toml` sin `[wasm_modules]` y con `REPLACE_WITH_KV_NAMESPACE_ID`

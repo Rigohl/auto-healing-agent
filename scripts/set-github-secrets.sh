@@ -5,8 +5,8 @@
 # Uso:
 #   export GH_TOKEN='ghp_...'   # PAT con scope repo o fine-grained: Secrets write
 #   export MONGODB_URI='...'
-#   export HF_TOKEN='...'
-#   # ... resto de env
+#   export VERCEL_ORG_ID='...'
+#   # ... resto de env. Sin defaults: lo que no exportes no se sube.
 #   bash scripts/set-github-secrets.sh
 
 set -euo pipefail
@@ -62,15 +62,20 @@ put_secret() {
 }
 
 echo ">> Subiendo secrets (solo los que tengas en env)"
+# El núcleo es Rust/WASM sin LLM. No se aprovisiona HF_TOKEN / HF_MODEL /
+# HF_BASE_URL: la ruta HuggingFace está archivada en legacy/ y no se ejecuta
+# (ver docs/NO_LLM_POLICY.md y DISCREPANCIES.md ítems 3 y 13).
+# MongoDB sigue sin driver en código (ítem 10): el secret se puede preparar,
+# pero su presencia no implica integración.
 put_secret MONGODB_URI "${MONGODB_URI:-}"
-put_secret HF_TOKEN "${HF_TOKEN:-}"
-put_secret HF_MODEL "${HF_MODEL:-Qwen/Qwen2.5-Coder-7B-Instruct}"
-put_secret HF_BASE_URL "${HF_BASE_URL:-https://router.huggingface.co/v1}"
 put_secret EXA_API_KEY "${EXA_API_KEY:-}"
 put_secret LINEAR_API_KEY "${LINEAR_API_KEY:-}"
 put_secret VERCEL_TOKEN "${VERCEL_TOKEN:-}"
-put_secret VERCEL_ORG_ID "${VERCEL_ORG_ID:-team_9ILQS3IIe8K4jzv23DSrID4U}"
-put_secret VERCEL_PROJECT_ID "${VERCEL_PROJECT_ID:-prj_GIuo1hR7R6HKmvSAki93tol4pJrs}"
+# Sin valores por defecto: un org/project id embebido se subiría aunque nadie
+# lo exportara. Se conserva solo lo que el operador define explícitamente.
+put_secret VERCEL_ORG_ID "${VERCEL_ORG_ID:-}"
+put_secret VERCEL_PROJECT_ID "${VERCEL_PROJECT_ID:-}"
 put_secret GH_PAT "${GH_PAT:-}"
+put_secret WEBHOOK_SECRET "${WEBHOOK_SECRET:-}"
 
 echo ">> Listo. Revisa: https://github.com/$OWNER/$REPO/settings/secrets/actions"

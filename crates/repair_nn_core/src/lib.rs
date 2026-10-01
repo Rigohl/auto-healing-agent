@@ -143,6 +143,41 @@ mod tests {
 
     #[test]
     fn weight_count_stable() {
-        assert!(WEIGHT_COUNT > 1000);
+        // Exact, not a lower bound: a weak `> 1000` assertion is what let the
+        // docs drift to 2617 while the code said 2863 (see docs/DISCREPANCIES.md 20).
+        assert_eq!(WEIGHT_COUNT, 2863);
+    }
+
+    #[test]
+    fn weight_count_matches_layer_arithmetic() {
+        // 64*32+32 (W1,b1) + 32*16+16 (W2,b2) + 16*13+13 (op head)
+        // + 16+1 (confidence head) + 16+1 (risk head)
+        let expected = INPUT * HIDDEN + HIDDEN
+            + HIDDEN * LATENT + LATENT
+            + LATENT * OPS + OPS
+            + LATENT + 1
+            + LATENT + 1;
+        assert_eq!(WEIGHT_COUNT, expected);
+        assert_eq!(OPS, 13, "OperatorId 0..=12 plus Unknown-adjacent count");
+    }
+
+    #[test]
+    fn from_weights_rejects_wrong_length() {
+        let short = alloc::vec![0.0f32; WEIGHT_COUNT - 1];
+        assert!(RepairNet::from_weights(&short).is_err());
+        let exact = alloc::vec![0.0f32; WEIGHT_COUNT];
+        assert!(RepairNet::from_weights(&exact).is_ok());
+    }
+
+    #[test]
+    fn sigmoid_and_softmax_are_bounded_without_std() {
+        // libm::expf path: outputs must stay in [0,1] for extreme logits.
+        let mut fv = FeatureVector::zeros();
+        for i in 0..FeatureVector::DIM {
+            fv.values[i] = 100.0;
+        }
+        let a = RepairNet::zeros().predict(&fv);
+        assert!((0.0..=1.0).contains(&a.confidence), "{}", a.confidence);
+        assert!((0.0..=1.0).contains(&a.risk), "{}", a.risk);
     }
 }

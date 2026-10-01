@@ -13,3 +13,23 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - run: cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators
+
+  # worker/ is deliberately outside the Cargo workspace (separate Cloudflare
+  # package built by worker-build), so no workspace command compiles it.
+  # Without this job worker/src/lib.rs could break with CI green.
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo check --manifest-path worker/Cargo.toml --all-targets
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      # Not -D warnings: informational for now, see docs/DISCREPANCIES.md 28
+      - run: cargo clippy -p repair_types -p feature_engine -p repair_nn_core -p repair_operators --all-targets

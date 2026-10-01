@@ -3,5 +3,5 @@
   "trained_at": null,
   "accuracy": null,
   "weights": null,
-  "note": "Placeholder. Run scripts/export_weights after training to populate weights as base64 or raw f32 array."
+  "note": "Placeholder. weights=null: no hay entrenamiento ni export en el repo todavia. Ver docs/E2E_CHECKLIST.md y docs/DISCREPANCIES.md items 5, 6, 22."
 }
