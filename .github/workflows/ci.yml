@@ -22,7 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
       - run: cargo check --manifest-path worker/Cargo.toml --all-targets
+      # The deployable artifact is a wasm32 module. Checking it for the host
+      # target does not prove it builds for Cloudflare, which is what
+      # worker-build does at deploy time.
+      - run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
 
   clippy:
     runs-on: ubuntu-latest

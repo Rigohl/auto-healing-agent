@@ -86,7 +86,7 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 | — | E2E completo no verde (ver `docs/E2E_CHECKLIST.md`). |
 | — | Sin `Cargo.lock` (ítem 7): las versiones resuelven en cada build de CI. |
 | 34 | Parcial: clippy con `-D warnings` activo; falta `cargo fmt --check` (necesita toolchain local). |
-| — | `wrangler.toml` conserva `REPLACE_WITH_KV_NAMESPACE_ID` ⇒ KV sin enlazar hasta que se rellene. |
+| 41 | **Deploy bloqueado**: sin `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` y sin toolchain Rust en el entorno. `wrangler.toml` conserva `REPLACE_WITH_KV_NAMESPACE_ID`. **Nada desplegado.** Vía lista en `.github/workflows/deploy.yml` (manual + environment `production` + preflight + smoke test). |
 | — | Objetivo de entrenamiento sin λ fijados: la fórmula loss/reward está documentada en PART2 pero no implementada, y nada calcula `reward` en el repo. |
 
 ## Decisiones clave

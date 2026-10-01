@@ -45,6 +45,7 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 | 38 | Webhook sin pipeline | `let _body = req.text()` descartaba el body y devolvía respuesta fija | 5 pasos reales hasta el gate | **Corregido** | `Incident` → `FailureSignature` → `extract` → `RepairNet::predict` → `gate`, respondiendo con el `PipelineReport`. Sin `unwrap()` en el path. PR sigue ausente y la respuesta lo declara (`"pr": null`). |
 | 39 | Webhook fail-open | Si faltaba `WEBHOOK_SECRET` se saltaba la comprobación | 503 si no está configurado | **Corregido** | En un path que pronto abrirá PRs, aceptar tráfico sin secret es fail-open. |
 | 40 | Pesos malformados | Sin validación | Archivo entero rechazado | **Corregido** | `load_weights` exige exactamente `WEIGHT_COUNT` f32 finitos separados por espacio. Un token no numérico invalida todo el archivo en vez de ignorarse, porque ignorarlo dejaría la red con pesos desplazados. Sin pesos válidos cae a ceros y lo declara. |
+| 41 | Deploy a Cloudflare | — | **No ejecutable desde el entorno actual** | **Bloqueado, no fallido** | Faltan tres cosas verificables: (a) no hay `CLOUDFLARE_API_TOKEN` ni `CLOUDFLARE_ACCOUNT_ID` — las variables `CLOUDFLARE_*` presentes son la infraestructura del sandbox, **no** credenciales de la cuenta; (b) no hay toolchain Rust (`cargo`/`rustc` ausentes), y `wrangler deploy` invoca `cargo install worker-build && worker-build --release`; (c) `worker/wrangler.toml` conserva `REPLACE_WITH_KV_NAMESPACE_ID`. **No se ha desplegado nada y no se declara despliegue exitoso.** Se deja la vía preparada y verificable: `deploy.yml` (solo `workflow_dispatch`, environment `production`, preflight que aborta si faltan secrets o hay `REPLACE_WITH_*`, y smoke test que verifica /health, el fail-closed sin secret y el pipeline con secret) y un job de CI que compila el worker para `wasm32-unknown-unknown`, que es el artefacto real de deploy. |
 
 
 ## Estado
@@ -68,6 +69,7 @@ Sin resolver:
 - [ ] Ítem 25: ~20 slots de `FeatureVector[64]` inertes hasta que exista extractor AST/CFG
 - [x] Ítem 27: `wasm.yml` cubre `feature_engine/`, `repair_operators/` y `worker/`
 - [x] Ítems 37-40: allowlist exhaustivo, pipeline del webhook, fail-closed, validación de pesos
+- [ ] Ítem 41: deploy a Cloudflare bloqueado (sin credenciales ni toolchain). Vía preparada en `deploy.yml`; **nada desplegado**
 - [x] Ítem 34 (parcial): clippy con `-D warnings`; sigue faltando `cargo fmt --check`
 - [ ] Ítems 9, 10, 21: R2/D1/DO, driver Rust de MongoDB y conector Mem0 siguen sin implementar
 - [ ] Sin `Cargo.lock` (ítem 7): las versiones resuelven en cada build de CI

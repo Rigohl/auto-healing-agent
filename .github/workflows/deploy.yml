@@ -1,0 +1,87 @@
+name: Deploy Worker
+
+# GOVERNANCE.md: AUTO_DEPLOY=false, PRODUCTION_WRITE=false.
+# Por eso este workflow NO corre en push. Solo `workflow_dispatch`, y siempre
+# a través del environment `production`, que debe tener los required reviewers
+# configurados en Settings > Environments.
+on:
+  workflow_dispatch:
+    inputs:
+      note:
+        description: "Motivo del deploy"
+        required: true
+        default: "manual"
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # El build lo hace wrangler vía worker/wrangler.toml:
+      #   command = "cargo install -q worker-build && worker-build --release"
+      # worker-build necesita el target wasm32-unknown-unknown.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Preflight
+        run: |
+          set -euo pipefail
+          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::falta el secret $v"
+              exit 1
+            fi
+          done
+          # Un id de KV placeholder no despliega: fallaría tarde y confuso.
+          if grep -q "REPLACE_WITH" worker/wrangler.toml; then
+            echo "::error::worker/wrangler.toml tiene REPLACE_WITH_*; rellena los ids reales"
+            exit 1
+          fi
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: worker
+        run: npx wrangler deploy
+
+      - name: Smoke test
+        env:
+          WORKER_URL: ${{ vars.WORKER_URL }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WORKER_URL:-}" ]; then
+            echo "::notice::sin variable WORKER_URL, se omite el smoke test"
+            exit 0
+          fi
+          # 1. /health sin secret: debe responder 200.
+          curl -fsS --max-time 20 "$WORKER_URL/health"
+          echo
+          # 2. /webhook SIN secret: debe rechazar (fail-closed, item 39).
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+            -X POST "$WORKER_URL/webhook" -H 'content-type: application/json' \
+            -d '{"error_code":"syntax_error"}')
+          if [ "$code" = "200" ]; then
+            echo "::error::el webhook aceptó tráfico sin WEBHOOK_SECRET (fail-open)"
+            exit 1
+          fi
+          echo "webhook sin secret -> $code (correcto)"
+          # 3. /webhook CON secret: recorre el pipeline hasta el gate.
+          out=$(curl -fsS --max-time 20 -X POST "$WORKER_URL/webhook" \
+            -H 'content-type: application/json' -H "x-webhook-secret: $WEBHOOK_SECRET" \
+            -d '{"id":"smoke","source":"smoke","error_code":"syntax_error","error_step":"buildStep","command":"npm run vercel-build","message":"Unexpected token","project":"demo","attempts":1}')
+          echo "$out"
+          case "$out" in
+            *'"operator_id"'*) echo "::notice::pipeline ejecutado: features -> NN -> gate" ;;
+            *) echo "::error::la respuesta no parece del pipeline"; exit 1 ;;
+          esac
