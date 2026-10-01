@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Build del Worker Rust/WASM. Lo usan wrangler ([build] en wrangler.toml),
-# Cloudflare Workers Builds (Build command: bash build.sh) y GitHub Actions.
-#
-# La imagen de Workers Builds no lista Rust entre sus herramientas: si falta
-# `cargo`, se instala rustup en modo minimal. El toolchain exacto lo fija
-# ../rust-toolchain.toml (1.88.0 + wasm32-unknown-unknown).
+# Cloudflare Workers Builds (Build command: bash worker/build.sh o bash build.sh) y GitHub Actions.
+
 set -euo pipefail
+
+# Garantiza que worker-build se ejecute siempre dentro del directorio worker/
+cd "$(dirname "$0")"
 
 export PATH="$HOME/.cargo/bin:$PATH"
 
