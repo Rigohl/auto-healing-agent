@@ -12,11 +12,15 @@
 //!
 //! Los valores configurables NO viven aqui: llegan en cada llamada desde las
 //! vars del Worker (separacion config/estado).
+//!
+//! Regla del API SQLite de DO: una query no se considera completa hasta que
+//! su cursor se agota; un cursor abandonado puede CANCELAR la query. Todo
+//! write pasa por exec_write, que consume el cursor siempre.
 
 use serde::Deserialize;
 use worker::*;
 
-use crate::worker::{
+use crate::runtime::{
     anti_loop::{self, AntiLoopConfig, LoopSignals},
     now_ms,
     quota::{self, QuotaConfig, QuotaUsage, QuotaVerdict},
@@ -88,15 +92,24 @@ pub struct IncidentState {
     sql: SqlStorage,
 }
 
+/// Ejecuta una query sin filas esperadas (DDL/DML) y AGOTA el cursor: el
+/// API SQLite de DO puede cancelar una query cuyo cursor no se consume, y
+/// un INSERT "olvidado" no se garantiza que se complete.
+fn exec_write(sql: &SqlStorage, query: &str, bindings: Vec<SqlStorageValue>) -> Result<()> {
+    let cursor = sql.exec(query, bindings)?;
+    let _rows = cursor.to_array::<serde_json::Value>()?;
+    Ok(())
+}
+
 impl DurableObject for IncidentState {
     fn new(state: State, _env: Env) -> Self {
         let sql = state.storage().sql();
-        // Igual que el ejemplo oficial de workers-rs: el esquema es idempotente
-        // (IF NOT EXISTS) y se prepara en el constructor.
+        // Igual que el ejemplo oficial de workers-rs: el esquema es
+        // idempotente (IF NOT EXISTS) y se prepara en el constructor.
         for stmt in SCHEMA.split(';') {
             let stmt = stmt.trim();
             if !stmt.is_empty() {
-                sql.exec(stmt, None).expect("incident_state schema");
+                exec_write(&sql, stmt, Vec::new()).expect("incident_state schema");
             }
         }
         Self { sql }
@@ -195,7 +208,8 @@ impl IncidentState {
         correlation_id: &str,
         now: i64,
     ) -> Result<()> {
-        self.sql.exec(
+        exec_write(
+            &self.sql,
             "INSERT INTO transitions (incident_id, from_state, to_state, correlation_id, created_at) VALUES (?, ?, ?, ?, ?)",
             vec![
                 SqlStorageValue::from(incident_id),
@@ -204,20 +218,19 @@ impl IncidentState {
                 SqlStorageValue::from(correlation_id),
                 SqlStorageValue::from(now),
             ],
-        )?;
-        Ok(())
+        )
     }
 
     fn store_idempotency(&self, key: &str, response: &str, now: i64) -> Result<()> {
-        self.sql.exec(
+        exec_write(
+            &self.sql,
             "INSERT OR REPLACE INTO idempotency (key, response, created_at) VALUES (?, ?, ?)",
             vec![
                 SqlStorageValue::from(key),
                 SqlStorageValue::from(response),
                 SqlStorageValue::from(now),
             ],
-        )?;
-        Ok(())
+        )
     }
 
     fn blocked_response(
@@ -226,16 +239,16 @@ impl IncidentState {
         reason: &str,
         incident_id: &str,
         correlation_id: &str,
-    ) -> Result<Response> {
+    ) -> String {
         // La respuesta bloqueada TAMBIEN se guarda en idempotency: reintentar
         // la misma entrega devuelve la misma decision (no revivir un bloqueo).
-        Ok(serde_json::json!({
+        serde_json::json!({
             "status": status,
             "reason": reason,
             "incident_id": incident_id,
             "correlation_id": correlation_id,
         })
-        .to_string())
+        .to_string()
     }
 
     /// POST /ingest: dedup + idempotencia + quota + anti-loop + alta.
@@ -291,7 +304,7 @@ impl IncidentState {
             window_seconds: q.window_seconds.parse().unwrap_or(anti_defaults.window_seconds),
         };
         if let anti_loop::LoopVerdict::Blocked(reason) = anti_loop::evaluate(&anti_cfg, &loop_signals) {
-            let resp = self.blocked_response("blocked_anti_loop", reason, &q.incident_id, &q.correlation_id)?;
+            let resp = self.blocked_response("blocked_anti_loop", reason, &q.incident_id, &q.correlation_id);
             self.store_idempotency(&q.idem_key, &resp, now)?;
             return Response::ok(resp);
         }
@@ -334,13 +347,14 @@ impl IncidentState {
             daily_budget: q.daily_budget.parse().unwrap_or(defaults.daily_budget),
         };
         if let QuotaVerdict::Blocked(reason) = quota_cfg.evaluate(&usage) {
-            let resp = self.blocked_response("blocked_quota", reason, &q.incident_id, &q.correlation_id)?;
+            let resp = self.blocked_response("blocked_quota", reason, &q.incident_id, &q.correlation_id);
             self.store_idempotency(&q.idem_key, &resp, now)?;
             return Response::ok(resp);
         }
 
         // 4. Alta (upsert) + auditoria.
-        self.sql.exec(
+        exec_write(
+            &self.sql,
             "INSERT INTO incidents (id, repository, signature, state, attempts, correlation_id, created_at, updated_at)
              VALUES (?, ?, ?, ?, 0, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET state = excluded.state, correlation_id = excluded.correlation_id, updated_at = excluded.updated_at",
@@ -354,7 +368,8 @@ impl IncidentState {
                 SqlStorageValue::from(now),
             ],
         )?;
-        self.sql.exec(
+        exec_write(
+            &self.sql,
             "INSERT INTO signature_events (signature, created_at) VALUES (?, ?)",
             vec![
                 SqlStorageValue::from(q.signature.as_str()),
@@ -396,7 +411,8 @@ impl IncidentState {
             .unwrap_or(defaults.max_attempts_per_incident) as i64;
         if attempts > max_attempts {
             // Hard stop: registrar el bloqueo y responder denegado.
-            self.sql.exec(
+            exec_write(
+                &self.sql,
                 "UPDATE incidents SET state = ?, updated_at = ? WHERE correlation_id = ?",
                 vec![
                     SqlStorageValue::from(STATE_BLOCKED),
@@ -433,7 +449,8 @@ impl IncidentState {
             ..LoopSignals::default()
         };
         if let anti_loop::LoopVerdict::Blocked(reason) = anti_loop::evaluate(&anti_cfg, &signals) {
-            self.sql.exec(
+            exec_write(
+                &self.sql,
                 "UPDATE incidents SET state = ?, last_reason = ?, updated_at = ? WHERE correlation_id = ?",
                 vec![
                     SqlStorageValue::from(STATE_BLOCKED),
@@ -454,7 +471,8 @@ impl IncidentState {
             );
         }
 
-        self.sql.exec(
+        exec_write(
+            &self.sql,
             "UPDATE incidents SET attempts = ?, state = ?, updated_at = ? WHERE correlation_id = ?",
             vec![
                 SqlStorageValue::from(attempts),
@@ -479,7 +497,8 @@ impl IncidentState {
         let q: ResultQuery = req.query()?;
         let now = now_ms();
         let final_state = if q.decision == "allow" { STATE_DONE } else { STATE_BLOCKED };
-        self.sql.exec(
+        exec_write(
+            &self.sql,
             "UPDATE incidents SET state = ?, last_fingerprint = ?, last_reason = ?, updated_at = ? WHERE correlation_id = ?",
             vec![
                 SqlStorageValue::from(final_state),
@@ -489,7 +508,8 @@ impl IncidentState {
                 SqlStorageValue::from(q.correlation_id.as_str()),
             ],
         )?;
-        self.sql.exec(
+        exec_write(
+            &self.sql,
             "INSERT INTO verification (incident_id, status, evidence_ref, fingerprint, created_at)
              VALUES (?, ?, ?, ?, ?)
              ON CONFLICT(incident_id) DO UPDATE SET status = excluded.status, evidence_ref = excluded.evidence_ref, fingerprint = excluded.fingerprint, created_at = excluded.created_at",
@@ -502,7 +522,8 @@ impl IncidentState {
             ],
         )?;
         if !q.fingerprint.is_empty() {
-            self.sql.exec(
+            exec_write(
+                &self.sql,
                 "INSERT INTO fingerprints (fingerprint, created_at) VALUES (?, ?)",
                 vec![
                     SqlStorageValue::from(q.fingerprint.as_str()),
@@ -525,7 +546,8 @@ impl IncidentState {
                 .map(|r| r.repository)
                 .unwrap_or_default();
             if !repo.is_empty() {
-                self.sql.exec(
+                exec_write(
+                    &self.sql,
                     "INSERT INTO repair_events (repository, day, created_at) VALUES (?, ?, ?)",
                     vec![
                         SqlStorageValue::from(repo.as_str()),
@@ -543,7 +565,8 @@ impl IncidentState {
     fn poison(&self, req: &Request) -> Result<Response> {
         let q: PoisonQuery = req.query()?;
         let now = now_ms();
-        self.sql.exec(
+        exec_write(
+            &self.sql,
             "UPDATE incidents SET state = ?, last_reason = ?, updated_at = ? WHERE correlation_id = ?",
             vec![
                 SqlStorageValue::from(STATE_DEAD_LETTER),
@@ -552,7 +575,8 @@ impl IncidentState {
                 SqlStorageValue::from(q.correlation_id.as_str()),
             ],
         )?;
-        self.sql.exec(
+        exec_write(
+            &self.sql,
             "INSERT INTO verification (incident_id, status, evidence_ref, created_at)
              VALUES (?, 'poison', ?, ?)
              ON CONFLICT(incident_id) DO UPDATE SET status = 'poison', evidence_ref = excluded.evidence_ref, created_at = excluded.created_at",

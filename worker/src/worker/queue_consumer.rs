@@ -12,7 +12,7 @@ use feature_engine::extract;
 use repair_operators::gate;
 use repair_types::{FailureSignature, Incident};
 
-use crate::worker::{
+use crate::runtime::{
     anti_loop::AntiLoopConfig,
     model,
     quota::QuotaConfig,
@@ -193,7 +193,7 @@ async fn process(
         anti_cfg.max_same_signature,
         anti_cfg.window_seconds
     );
-    let text = crate::worker::call_do(env.clone(), task.repo.clone(), qs).await?;
+    let text = crate::runtime::call_do(env.clone(), task.repo.clone(), qs).await?;
     let verdict: serde_json::Value = serde_json::from_str(&text)?;
     if !verdict.get("allowed").and_then(|a| a.as_bool()).unwrap_or(false) {
         // Bloqueado por quota/anti-loop/hard-stop (ya registrado en el DO).
@@ -210,7 +210,7 @@ async fn process(
         Err(_) => {
             // current y stable ausentes o malformados: BLOCKED. Nunca zeros.
             let rqs = blocked_result_qs(&task, "blocked_model", "no_model_current_stable");
-            crate::worker::call_do(env, task.repo.clone(), rqs).await?;
+            crate::runtime::call_do(env, task.repo.clone(), rqs).await?;
             return Ok(());
         }
     };
@@ -233,7 +233,7 @@ async fn process(
         verify_status,
         "github_actions"
     );
-    crate::worker::call_do(env, task.repo, rqs).await?;
+    crate::runtime::call_do(env, task.repo, rqs).await?;
     Ok(())
 }
 
@@ -255,5 +255,5 @@ async fn record_poison(env: Env, task: QueueTask) -> Result<()> {
         urlencode(&task.incident_id),
         urlencode(DLQ_PROD)
     );
-    crate::worker::call_do(env, task.repo, qs).await.map(|_| ())
+    crate::runtime::call_do(env, task.repo, qs).await.map(|_| ())
 }
