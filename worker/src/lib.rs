@@ -16,14 +16,19 @@
 //! No hay ruta LLM ni generacion libre de codigo (docs/NO_LLM_POLICY.md).
 //! Sin unwrap() en el path de request.
 
-mod worker;
+// El modulo interno NO puede llamarse `worker`: colisiona con el crate
+// externo `worker` y hace ambigua cada ruta `use worker::...` (error
+// E0659). El job `worker` de CI detecto exactamente eso en c5fadd48.
+// El modulo se llama `runtime` y se mapea al mismo directorio src/worker/.
+#[path = "worker/mod.rs"]
+mod runtime;
 
 use feature_engine::extract;
 use repair_operators::gate;
 use repair_types::FailureSignature;
 use worker::*;
 
-use crate::worker::{
+use crate::runtime::{
     model,
     queue_consumer::{self, QueueTask, WebhookPayload},
     quota::QuotaConfig,
@@ -86,7 +91,7 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     let repo = payload.repo();
     let signature = payload.signature_str();
     let delivery_id = if payload.id.is_empty() { incident_id.clone() } else { payload.id.clone() };
-    let now = crate::worker::now_ms();
+    let now = crate::runtime::now_ms();
     let correlation_id = format!(
         "{}-{:x}",
         incident_id,
@@ -118,7 +123,7 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         anti_cfg.max_same_signature,
         anti_cfg.window_seconds
     );
-    let do_text = match crate::worker::call_do(env.clone(), repo.clone(), qs).await {
+    let do_text = match crate::runtime::call_do(env.clone(), repo.clone(), qs).await {
         Ok(t) => t,
         Err(_) => return Response::error("state_store_unavailable", 503),
     };
@@ -175,7 +180,7 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
             urlencode(&correlation_id),
             urlencode(&incident_id)
         );
-        let _ = crate::worker::call_do(env, repo, rqs).await;
+        let _ = crate::runtime::call_do(env, repo, rqs).await;
         return Response::error("queue_unavailable", 503);
     }
 

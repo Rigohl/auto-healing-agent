@@ -1,14 +1,27 @@
 //! Modulos del orquestador PART3 (runtime Cloudflare).
 //!
+//! El modulo se llama `runtime` y NO `worker`: ese nombre colisiona con
+//! el crate externo `worker` y hace ambigua cada ruta `use worker::...`
+//! (E0659, detectado por el job `worker` de CI en c5fadd48). El modulo se
+//! mapea al directorio src/worker/ con #[path]; cada submodule lleva su
+//! propio #[path] explicito para que la resolucion no dependa del nombre
+//! del modulo.
+//!
 //! Regla de autoridad: Cloudflare ORCHESTRATES, PERSISTS, DEDUPLICATES,
 //! QUEUES, LIMITS y OBSERVES. GitHub Actions es la autoridad de VERIFY;
 //! este runtime nunca declara CI PASS, aprueba ni fusiona PRs.
 
+#[path = "anti_loop.rs"]
 pub mod anti_loop;
+#[path = "incident_state.rs"]
 pub mod incident_state;
+#[path = "model.rs"]
 pub mod model;
+#[path = "queue_consumer.rs"]
 pub mod queue_consumer;
+#[path = "quota.rs"]
 pub mod quota;
+#[path = "security.rs"]
 pub mod security;
 
 /// Umbrales del gate: fuente de verdad docs/GOVERNANCE.md (0.55 / 0.45).
