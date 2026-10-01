@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Script de validación de la lógica de Preflight (.github/workflows/deploy.yml)
 # Verifica que:
-# 1. worker/wrangler.toml actual PASA preflight (comentarios con REPLACE_WITH son ignorados).
-# 2. worker/wrangler.toml con placeholder ACTIVO FALLA preflight.
+# 1. worker/wrangler.toml y wrangler.toml actuales PASAN preflight (comentarios con REPLACE_WITH son ignorados).
+# 2. Archivos con placeholder ACTIVO FALLAN preflight.
 # 3. Comentarios inline con REPLACE_WITH no causan falsos positivos.
 
 set -euo pipefail
@@ -18,11 +18,11 @@ run_preflight() {
 
 echo "=== Testing Preflight Validation ==="
 
-# Test 1: Archivo real worker/wrangler.toml
-if run_preflight "worker/wrangler.toml"; then
-  echo "PASS: Test 1 - worker/wrangler.toml actual pasa el preflight correctamente."
+# Test 1: Archivos reales worker/wrangler.toml y wrangler.toml
+if run_preflight "worker/wrangler.toml" && run_preflight "wrangler.toml"; then
+  echo "PASS: Test 1 - wrangler.toml actual pasa el preflight correctamente."
 else
-  echo "FAIL: Test 1 - worker/wrangler.toml actual fallo el preflight unexpectedly."
+  echo "FAIL: Test 1 - wrangler.toml actual fallo el preflight unexpectedly."
   exit 1
 fi
 

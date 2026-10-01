@@ -1,34 +1,10 @@
-# Deploy del Worker (workers-rs). Lo ejecuta `wrangler deploy` desde este
-# directorio; ver .github/workflows/deploy.yml.
-#
-# REQUISITOS (ninguno se puede inventar, deben existir en la cuenta):
-#   1. Secrets de GitHub: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
-#   2. Secret del Worker: WEBHOOK_SECRET (el webhook falla cerrado sin él → 503).
-#   3. El id de MODEL_KV de abajo es el del namespace real de la cuenta.
-#      Con REPLACE_WITH_* el deploy falla; deploy.yml lo comprueba antes de publicar.
-#   4. Variable de repositorio WORKER_URL para el smoke test (opcional).
-#   5. Si el deploy lo hace Workers Builds (integración GitHub del dashboard),
-#      el "Root directory" del build debe ser `worker`, y el nombre del Worker
-#      en el dashboard debe coincidir con `name` de abajo.
-#   6. Workers Builds NO honra el [build] de este archivo (docs de Cloudflare)
-#      y su imagen no lista Rust: en el dashboard (Settings > Build) poner
-#        Build command:  bash build.sh
-#        Deploy command: npx wrangler deploy
-#
-# La NN NO se declara en [wasm_modules]: repair_nn_core se enlaza como crate
-# Rust dentro del propio módulo WASM del Worker. repair_nn_wasm queda como
-# adaptador para consumidores JS/navegador.
-
 name = "auto-healing-agent"
-main = "build/worker/shim.mjs"
+main = "worker/build/worker/shim.mjs"
 compatibility_date = "2024-09-23"
 
 [build]
-command = "bash ./build.sh"
+command = "bash build.sh"
 
 [[kv_namespaces]]
 binding = "MODEL_KV"
 id = "73014a1b32b7446397461a8d438c8ab2"
-
-# Sin [durable_objects] ni [[r2_buckets]]: no hay bindings en el código.
-# Ver docs/DISCREPANCIES.md ítems 9 y 10.
