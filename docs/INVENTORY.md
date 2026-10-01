@@ -4,6 +4,9 @@ Estado real de `main` tras absorber el delta útil de las 9 ramas y borrarlas.
 
 ## Ramas
 
+Verificado 2026-10-01: **1 rama local, 1 rama en `origin`, 0 PRs abiertos, 0 tags.**
+Detalle y reglas: `docs/BRANCH_POLICY.md`.
+
 - **main** — única rama persistente.
 - ~~setup/secrets~~, ~~feat/rust-wasm-nn~~, ~~fix/safejson-null-payload~~ —
   ancestros lineales de `main`. `git diff origin/main...origin/<rama>` vacío.
