@@ -1,0 +1,48 @@
+{
+  "system": "auto-healing-agent",
+  "audit_timestamp": "2026-10-01T00:00:00Z",
+  "auditor": "Jules (Security & Verification Lead)",
+  "verified_architectural_decisions": [
+    {
+      "id": "DEC-001",
+      "decision": "Rust & WASM only in runtime path",
+      "status": "VERIFIED",
+      "evidence": "crates/repair_* and worker/ lib.rs implementation"
+    },
+    {
+      "id": "DEC-002",
+      "decision": "No LLM codegen path in production",
+      "status": "VERIFIED",
+      "evidence": ".github/workflows/auto-repair.yml disabled status"
+    },
+    {
+      "id": "DEC-003",
+      "decision": "Constant-time comparison for WEBHOOK_SECRET",
+      "status": "VERIFIED",
+      "evidence": "worker/src/lib.rs constant_time_eq implementation"
+    },
+    {
+      "id": "DEC-004",
+      "decision": "Single active branch policy (main)",
+      "status": "VERIFIED",
+      "evidence": "git branch -a and docs/BRANCH_POLICY.md"
+    }
+  ],
+  "invariants": [
+    {
+      "id": "INV-001",
+      "description": "No implicit agent authority to merge or deploy",
+      "enforced_by": "docs/GOVERNANCE.md & .github/workflows/deploy.yml"
+    },
+    {
+      "id": "INV-002",
+      "description": "WEIGHT_COUNT strictly equals 2863",
+      "enforced_by": "crates/repair_nn_core/src/lib.rs & tests"
+    },
+    {
+      "id": "INV-003",
+      "description": "Fail-closed on missing WEBHOOK_SECRET (HTTP 503)",
+      "enforced_by": "worker/src/lib.rs handle_webhook"
+    }
+  ]
+}

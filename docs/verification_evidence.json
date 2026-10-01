@@ -1,0 +1,250 @@
+{
+  "summary": {
+    "total_claims": 34,
+    "pass": 33,
+    "fail": 0,
+    "unknown": 1,
+    "coverage_percentage": 97.06,
+    "status": "PASS"
+  },
+  "claims": [
+    {
+      "id": "FILE_EXIST_README.md",
+      "description": "File README.md exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_Cargo.toml",
+      "description": "File Cargo.toml exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_rust-toolchain.toml",
+      "description": "File rust-toolchain.toml exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_.gitignore",
+      "description": "File .gitignore exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_LICENSE",
+      "description": "File LICENSE exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_worker/wrangler.toml",
+      "description": "File worker/wrangler.toml exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_worker/Cargo.toml",
+      "description": "File worker/Cargo.toml exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_worker/src/lib.rs",
+      "description": "File worker/src/lib.rs exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_crates/repair_types/src/lib.rs",
+      "description": "File crates/repair_types/src/lib.rs exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_crates/feature_engine/src/lib.rs",
+      "description": "File crates/feature_engine/src/lib.rs exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_crates/repair_nn_core/src/lib.rs",
+      "description": "File crates/repair_nn_core/src/lib.rs exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_crates/repair_operators/src/lib.rs",
+      "description": "File crates/repair_operators/src/lib.rs exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_crates/repair_nn_wasm/src/lib.rs",
+      "description": "File crates/repair_nn_wasm/src/lib.rs exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_model/current.json",
+      "description": "File model/current.json exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_model/stable.json",
+      "description": "File model/stable.json exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_model/schema.json",
+      "description": "File model/schema.json exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_docs/ARCHITECTURE.md",
+      "description": "File docs/ARCHITECTURE.md exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_docs/GOVERNANCE.md",
+      "description": "File docs/GOVERNANCE.md exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_docs/DISCREPANCIES.md",
+      "description": "File docs/DISCREPANCIES.md exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_docs/BRANCH_POLICY.md",
+      "description": "File docs/BRANCH_POLICY.md exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_docs/E2E_CHECKLIST.md",
+      "description": "File docs/E2E_CHECKLIST.md exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_.github/workflows/ci.yml",
+      "description": "File .github/workflows/ci.yml exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_.github/workflows/deploy.yml",
+      "description": "File .github/workflows/deploy.yml exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_.github/workflows/wasm.yml",
+      "description": "File .github/workflows/wasm.yml exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_.github/workflows/security.yml",
+      "description": "File .github/workflows/security.yml exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "FILE_EXIST_.github/workflows/auto-repair.yml",
+      "description": "File .github/workflows/auto-repair.yml exists on disk",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "PLACEHOLDER_WRANGLER",
+      "description": "worker/wrangler.toml placeholder detection",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "SCRIPT_SECRETS_CLEAN",
+      "description": "scripts/set-github-secrets.sh free of hardcoded HuggingFace tokens",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "NO_LLM_WORKFLOW",
+      "description": "auto-repair.yml explicitly disables LLM codegen",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "CONSTANT_TIME_AUTH",
+      "description": "Webhook secret uses constant-time string comparison",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "WEIGHT_COUNT_RUST",
+      "description": "repair_nn_core WEIGHT_COUNT is declared and tested as 2863",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "GOVERNANCE_THRESHOLDS_SYNC",
+      "description": "Governance thresholds match between GOVERNANCE.md and worker code (0.55/0.45)",
+      "status": "PASS",
+      "details": "",
+      "critical": true
+    },
+    {
+      "id": "SMOKE_TEST_WORKER_URL",
+      "description": "Runtime WORKER_URL available for smoke test",
+      "status": "UNKNOWN",
+      "details": "WORKER_URL not configured; smoke test SKIPPED in offline environment",
+      "critical": false
+    },
+    {
+      "id": "BRANCH_DRIFT_CHECK",
+      "description": "Remote branches count aligned with single active policy",
+      "status": "PASS",
+      "details": "Branches: ['remotes/origin/fix/workers-builds-rust-toolchain', 'remotes/origin/fix/wrangler-cloudflare-binding', 'remotes/origin/main']",
+      "critical": true
+    }
+  ]
+}

@@ -23,6 +23,18 @@ use worker::*;
 const MIN_CONFIDENCE: f32 = 0.55;
 const MAX_RISK: f32 = 0.45;
 
+/// Constant-time string comparison to prevent timing attacks on WEBHOOK_SECRET.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut res = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        res |= x ^ y;
+    }
+    res == 0
+}
+
 /// Cuerpo entrante del webhook. Todo opcional y con `#[serde(default)]` para
 /// que un payload parcial nunca rompa el isolate.
 #[derive(Debug, Default, Deserialize)]
@@ -110,7 +122,8 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     match env.secret("WEBHOOK_SECRET") {
         Ok(secret) => {
             let header = req.headers().get("x-webhook-secret")?.unwrap_or_default();
-            if header != secret.to_string() {
+            let secret_str = secret.to_string();
+            if !constant_time_eq(header.as_bytes(), secret_str.as_bytes()) {
                 return Response::error("unauthorized", 401);
             }
         }
