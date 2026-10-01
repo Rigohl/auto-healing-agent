@@ -27,7 +27,7 @@ El operador determinista aplica el cambio real.
 | Operator Head | 13 (OperatorId 0–12) |
 | Confidence Head | 1 |
 | Risk Head | 1 |
-| WEIGHT_COUNT | 2617 |
+| WEIGHT_COUNT | 2863 |
 
 ## Stack
 - **Inferencia**: repair_nn_core (no_std + alloc) → repair_nn_wasm.

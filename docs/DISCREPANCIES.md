@@ -4,7 +4,7 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 
 | # | Elemento | Notion / otras ramas | Repo (`main`) | Decisión | Justificación |
 |---|----------|----------------------|--------------|---------|-------------|
-| 1 | Dims FeatureVector | 16 / 907 pesos | **64 / 2617** | Repo gana | PROMPT_PAD regla 2 |
+| 1 | Dims FeatureVector | 16 / 907 pesos | **64 / 2863** | Repo gana | PROMPT_PAD regla 2 |
 | 2 | Node / package.json | Implícito | No existe | Rust-only | legacy archivado |
 | 3 | Path LLM / híbrido | HYBRID_POLICY | No existe | Descartado | Rust-only |
 | 4 | tests/ dir | Propuesto | Inline | Mantener inline | |
@@ -23,6 +23,8 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 | 17 | PART1–4 | PDF / ramas | docs/PART*.md | Añadidos concisos |
 | 18 | Gate thresholds | kilo: 0.80 / 0.25 | **0.55 / 0.45** | **Repo gana (0.55/0.45)** | GOVERNANCE.md es SoT. El diseño kilo es propuesta futura/más estricta; no se cambia sin decisión explícita. |
 | 19 | Docs ricos kilo | 00_INDEX, MEM0_STATUS, gate detallado | INDEX + MEM0_STATUS + GOVERNANCE enriquecido | Absorbido lo esencial | Sin bloat |
+| 20 | WEIGHT_COUNT | Docs del repo decían 2617 | **2863** (código) | **Repo código gana** | `crates/repair_nn_core/src/lib.rs:18`: `64*32+32 + 32*16+16 + 16*13+13 + 16+1 + 16+1` = 2863. El 2617 era una cifra heredada de una variante de arquitectura anterior y no correspondía a ningún código. Corregido en ARCHITECTURE.md, PART2, INVENTORY.md y este ítem 1. |
+| 21 | MongoDB "✅ Conectado" | `kilo/bionic-owl-ok9:docs/DOCUMENTATION.md` afirma *"MongoDB Atlas ✅ Conectado (Cluster0)"* | Sin driver Rust en código | **Rechazado** | Constraint: no declarar_SUCCESS ni inventar conectores. MongoDB sigue diferido (ítem 10). El resto de ese doc de 491 líneas se descartó por este motivo. |
 
 ## Estado
 - [x] PART1–4 + INDEX + MEM0_STATUS + GOVERNANCE enriquecido

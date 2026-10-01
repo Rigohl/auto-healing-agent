@@ -31,7 +31,7 @@ docs/
 - worker/ skeleton
 - model/ placeholders
 - legacy/ archivado
-- FeatureVector DIM=64, WEIGHT_COUNT=2617, gate 0.55/0.45
+- FeatureVector DIM=64, WEIGHT_COUNT=2863, gate 0.55/0.45
 
 ## Decisiones clave
 
