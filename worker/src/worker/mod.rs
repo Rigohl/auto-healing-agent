@@ -45,7 +45,9 @@ pub async fn call_do(env: worker::Env, repo: String, path_and_query: String) -> 
         .durable_object(DO_BINDING)?
         .id_from_name(&repo)?
         .get_stub()?;
-    let resp = stub
+    // Response::text() requiere &mut self (workers-rs 0.8): consumir el
+    // cuerpo muta el Response. Sin `mut` esto no compila (E0596).
+    let mut resp = stub
         .fetch_with_str(&format!("https://incident-state{}", path_and_query))
         .await?;
     resp.text().await

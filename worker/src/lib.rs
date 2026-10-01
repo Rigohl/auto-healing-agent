@@ -44,7 +44,7 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .get("/", |_, _| Response::ok("AUTO-REPAIR LAB"))
         .get("/health", |_, _| Response::ok("ok"))
         .get_async("/model", |_, ctx| async move {
-            model::report(ctx.env).await
+            model::report(&ctx.env).await
         })
         .post_async("/webhook", handle_webhook)
         .run(req, env)
