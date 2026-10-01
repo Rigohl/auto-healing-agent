@@ -21,8 +21,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+      # fmt cubre el workspace raíz. El fmt del worker (paquete aparte con
+      # [workspace] propio) queda diferido a P2: requiere pasada con toolchain
+      # local antes de activar --check ahí. DISCREPANCIES.md ítem 34.
       - run: cargo fmt -- --check
-      - run: cargo fmt --manifest-path worker/Cargo.toml -- --check
 
   # worker/ is deliberately outside the Cargo workspace (separate Cloudflare
   # package built by worker-build), so no workspace command compiles it.

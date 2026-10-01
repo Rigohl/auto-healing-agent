@@ -1,0 +1,98 @@
+//! Registro de modelo: current, stable, rollback y promocion.
+//!
+//! Regla PART3 (no negociable):
+//!   current failure -> stable -> si no disponible -> BLOCKED
+//! Nunca: current failure -> zeros -> PASS. Sin pesos validos no hay
+//! inferencia: se devuelve error y el llamador registra BLOCKED.
+
+use repair_nn_core::{RepairNet, WEIGHT_COUNT};
+use worker::*;
+
+pub const KV_BINDING: &str = "MODEL_KV";
+pub const KEY_CURRENT: &str = "model/current";
+pub const KEY_STABLE: &str = "model/stable";
+pub const KEY_ROLLBACK: &str = "model/rollback";
+
+pub struct LoadedModel {
+    pub net: RepairNet,
+    pub source: String,
+}
+
+/// Carga current; si esta ausente o malformado cae a stable; si tampoco hay,
+/// Err. El fallback es REAL: si current falla a mitad de dia, stable responde.
+pub async fn load(env: &Env) -> Result<LoadedModel> {
+    if let Some(net) = load_from(env, KEY_CURRENT).await {
+        return Ok(LoadedModel {
+            net,
+            source: format!("kv:{}", KEY_CURRENT),
+        });
+    }
+    if let Some(net) = load_from(env, KEY_STABLE).await {
+        return Ok(LoadedModel {
+            net,
+            source: format!("kv:{}", KEY_STABLE),
+        });
+    }
+    Err(Error::JsError("blocked_no_model".into()))
+}
+
+/// Lee pesos planos desde KV. Formato: WEIGHT_COUNT f32 legibles con
+/// split_whitespace. Cualquier desviacion devuelve None y NO se cae a
+/// ceros: una red malformada no puede producir una confianza inventada.
+async fn load_from(env: &Env, key: &str) -> Option<RepairNet> {
+    let kv = env.kv(KV_BINDING).ok()?;
+    let raw = kv.get(key).text().await.ok().flatten()?;
+    if raw.trim().is_empty() {
+        return None;
+    }
+    let mut values: Vec<f32> = Vec::with_capacity(WEIGHT_COUNT);
+    for token in raw.split_whitespace() {
+        match token.parse::<f32>() {
+            Ok(v) if v.is_finite() => values.push(v),
+            // Un token no numerico invalida el archivo entero: no se ignora
+            // en silencio, porque dejaria la red con 
+pesos desplazados.
+            _ => return None,
+        }
+        if values.len() > WEIGHT_COUNT {
+            return None;
+        }
+    }
+    RepairNet::from_weights(&values).ok()
+}
+
+/// GET /model: observabilidad del registro. Declara la politica de fallback y
+/// el estado de cada puntero. No expone los pesos.
+pub async fn report(env: &Env) -> Result<Response> {
+    let probe = |key: &str| async move {
+        match env.kv(KV_BINDING) {
+            Ok(kv) => matches!(kv.get(key).text().await, Ok(Some(_))),
+            Err(_) => false,
+        }
+    };
+    let current = probe(KEY_CURRENT).await;
+    let stable = probe(KEY_STABLE).await;
+    let rollback = probe(KEY_ROLLBACK).await;
+    let (current_s, stable_s, rollback_s, kv_s) = match env.kv(KV_BINDING) {
+        Ok(_) => (
+            if current { "ok" } else { "missing" },
+            if stable { "ok" } else { "missing" },
+            if rollback { "ok" } else { "missing" },
+            "bound",
+        ),
+        Err(_) => ("unknown", "unknown", "unknown", "unbound"),
+    };
+    Response::ok(
+        serde_json::json!({
+            "model": {
+                "current": current_s,
+                "stable": stable_s,
+                "rollback": rollback_s
+            },
+            "kv": kv_s,
+            "policy": "current -> stable -> BLOCKED (zeros forbidden)",
+            "verify": "GitHub Actions"
+        })
+        .to_string(),
+    )
+}

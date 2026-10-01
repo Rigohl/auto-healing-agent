@@ -1,83 +1,41 @@
-//! Cloudflare Worker (workers-rs). Orquestador: NO es el motor de cómputo.
+//! Cloudflare Worker (workers-rs). Orquestador: NO es el motor de computo.
 //!
-//! Pipeline edge (Incident → features → NN → gate), sin PR todavía:
-//!   POST /webhook → Incident → feature_engine::extract → RepairNet::predict
-//!                → repair_operators::gate → respuesta con PipelineReport
+//! PART3 runtime async:
+//!   POST /webhook -> secret fail-closed -> Durable Object (dedup +
+//!   idempotencia + quota + anti-loop) -> Queue -> 202 con correlation_id.
+//!   El consumidor de la cola ejecuta el pipeline (features -> NN -> gate)
+//!   y registra decision y verificacion en el Durable Object.
 //!
-//! La NN se enlaza como crate Rust (`repair_nn_core`, no_std + alloc) dentro del
-//! propio módulo WASM del Worker. Por eso `wrangler.toml` no necesita
-//! `[wasm_modules]`: `repair_nn_wasm` existe para consumidores JS/navegador.
+//! La NN se enlaza como crate Rust (repair_nn_core, no_std + alloc) dentro
+//! del propio modulo WASM del Worker. Por eso wrangler.toml no necesita
+//! [wasm_modules].
 //!
-//! Autoridad de VERIFY = GitHub Actions, nunca la confidence del modelo.
-//! No hay ruta LLM ni generación libre de código (docs/NO_LLM_POLICY.md).
-//! Sin `unwrap()` en el path de request.
+//! Regla de autoridad: Cloudflare ORCHESTRATES, PERSISTS, DEDUPLICATES,
+//! QUEUES, LIMITS, OBSERVES. GitHub Actions es la autoridad de VERIFY;
+//! este Worker nunca declara CI PASS, aprueba ni fusiona PRs.
+//! No hay ruta LLM ni generacion libre de codigo (docs/NO_LLM_POLICY.md).
+//! Sin unwrap() en el path de request.
+
+// El modulo interno NO puede llamarse `worker`: colisiona con el crate
+// externo `worker` y hace ambigua cada ruta `use worker::...` (error
+// E0659). El job `worker` de CI detecto exactamente eso en c5fadd48.
+// El modulo se llama `runtime` y se mapea al mismo directorio src/worker/.
+#[path = "worker/mod.rs"]
+mod runtime;
 
 use feature_engine::extract;
-use repair_nn_core::{RepairNet, WEIGHT_COUNT};
 use repair_operators::gate;
-use repair_types::{FailureSignature, Incident, RepairAction};
-use serde::Deserialize;
+use repair_types::FailureSignature;
 use worker::*;
 
-/// Umbrales: fuente de verdad docs/GOVERNANCE.md (0.55 / 0.45).
-const MIN_CONFIDENCE: f32 = 0.55;
-const MAX_RISK: f32 = 0.45;
-
-/// Cuerpo entrante del webhook. Todo opcional y con `#[serde(default)]` para
-/// que un payload parcial nunca rompa el isolate.
-#[derive(Debug, Default, Deserialize)]
-struct WebhookPayload {
-    #[serde(default)]
-    id: String,
-    #[serde(default)]
-    source: String,
-    #[serde(default)]
-    error_code: String,
-    #[serde(default)]
-    error_step: String,
-    #[serde(default)]
-    command: String,
-    #[serde(default)]
-    message: String,
-    #[serde(default)]
-    project: String,
-    #[serde(default)]
-    attempts: u32,
-    #[serde(default)]
-    stack_hint: String,
-    #[serde(default)]
-    language_hint: String,
-    #[serde(default)]
-    framework_hint: String,
-}
-
-impl WebhookPayload {
-    fn into_incident(self) -> Incident {
-        Incident {
-            id: if self.id.is_empty() {
-                String::from("unidentified")
-            } else {
-                self.id
-            },
-            source: if self.source.is_empty() {
-                String::from("webhook")
-            } else {
-                self.source
-            },
-            error_code: self.error_code,
-            error_step: self.error_step,
-            command: self.command,
-            message: self.message,
-            project: self.project,
-            attempts: self.attempts,
-            stack_hint: self.stack_hint,
-            language_hint: self.language_hint,
-            framework_hint: self.framework_hint,
-            verified: false,
-            status: String::from("open"),
-        }
-    }
-}
+use crate::runtime::{
+    model,
+    queue_consumer::{self, QueueTask, WebhookPayload},
+    quota::QuotaConfig,
+    anti_loop::AntiLoopConfig,
+    security::{fnv1a64, urlencode, verify_webhook_secret},
+    MIN_CONFIDENCE, MAX_RISK,
+};
 
 #[event(fetch)]
 async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
@@ -86,37 +44,34 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .get("/", |_, _| Response::ok("AUTO-REPAIR LAB"))
         .get("/health", |_, _| Response::ok("ok"))
         .get_async("/model", |_, ctx| async move {
-            match ctx.kv("MODEL_KV") {
-                Ok(kv) => {
-                    let ptr = kv.get("model/current").text().await.ok().flatten();
-                    match ptr {
-                        Some(p) => Response::ok(format!(r#"{{"model_ptr":"{}"}}"#, p)),
-                        None => Response::ok(r#"{"model_ptr":null}"#),
-                    }
-                }
-                Err(_) => Response::ok(r#"{"model_ptr":null,"kv":"unbound"}"#),
-            }
+            model::report(ctx.env).await
         })
         .post_async("/webhook", handle_webhook)
         .run(req, env)
-        .await
+   
+     .await
 }
 
+/// Consumidor de cola (produccion, staging y DLQ): retry con backoff,
+/// hard-stop y DLQ. Ver worker/queue_consumer.rs.
+#[event(queue)]
+pub async fn queue_main(batch: MessageBatch<QueueTask>, env: Env, _ctx: Context) -> Result<()> {
+    queue_consumer::consume(batch, env).await
+}
+
+#[worker::send]
 async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let env = ctx.env;
 
-    // 1. Autorización. Sin secret configurado el endpoint queda cerrado:
-    //    nunca "fail open" en un path que puede abrir PRs.
-    match env.secret("WEBHOOK_SECRET") {
-        Ok(secret) => {
-            let header = req.headers().get("x-webhook-secret")?.unwrap_or_default();
-            if header != secret.to_string() {
-                return Response::error("unauthorized", 401);
-            }
-        }
-        Err(_) => {
-            return Response::error("webhook_secret_not_configured", 503);
-        }
+    // 1. Autorizacion fail-closed. Sin secret configurado el endpoint queda
+    //    cerrado (503); con secret, comparacion en tiempo constante.
+    let secret = match env.secret("WEBHOOK_SECRET") {
+        Ok(s) => s.to_string(),
+        Err(_) => return Response::error("webhook_secret_not_configured", 503),
+    };
+    let header = req.headers().get("x-webhook-secret")?;
+    if !verify_webhook_secret(header.as_deref(), &secret) {
+        return Response::error("unauthorized", 401);
     }
 
     // 2. Body. Un payload corrupto no debe tumbar el isolate.
@@ -132,68 +87,117 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Err(_) => return Response::error("invalid_json", 400),
     };
 
-    // 3. Pipeline: Incident → features → NN → gate.
-    let incident = payload.into_incident();
-    let signature = FailureSignature::from_incident(&incident);
-    let features = extract(&incident, &signature);
+    // 3. Correlacion estructurada + clave de idempotencia (delivery id).
+    let incident_id = payload.incident_id();
+    let repo = payload.repo();
+    let signature = payload.signature_str();
+    let delivery_id = if payload.id.is_empty() { incident_id.clone() } else { payload.id.clone() };
+    let now = crate::runtime::now_ms();
+    let correlation_id = format!(
+        "{}-{:x}",
+        incident_id,
+        fnv1a64(format!("{}|{}|{}", incident_id, signature, now).as_bytes())
+    );
+    let idem_key = format!(
+        "{:x}",
+        fnv1a64(format!("{}|{}", delivery_id, signature).as_bytes())
+    );
 
-    // 4. Pesos. model/*.json sigue en weights:null, así que por defecto se usa
-    //    una red de ceros y la respuesta lo declara. No se finge inferencia real.
-    let (net, weights_source) = match load_weights(&env).await {
-        Some(n) => (n, "kv:model/current"),
-        None => (RepairNet::zeros(), "zeros:no_weights"),
+    // 4. Dura
+ble Object: dedup, idempotencia, quota y anti-loop ANTES de
+    //    encolar. Si el DO no responde: fail-closed 503, sin efectos.
+    let quota_cfg = QuotaConfig::from_env(&env);
+    let anti_cfg = AntiLoopConfig::from_env(&env);
+    let qs = format!(
+        "/ingest?repo={}&incident_id={}&signature={}&delivery_id={}&idem_key={}&correlation_id={}&max_attempts_per_incident={}&max_repairs_per_repo={}&max_open_repairs={}&cooldown_seconds={}&daily_budget={}&max_same_incident={}&max_same_signature={}&window_seconds={}",
+        urlencode(&repo),
+        urlencode(&incident_id),
+        urlencode(&signature),
+        urlencode(&delivery_id),
+        urlencode(&idem_key),
+        urlencode(&correlation_id),
+        quota_cfg.max_attempts_per_incident,
+        quota_cfg.max_repairs_per_repo,
+        quota_cfg.max_open_repairs,
+        quota_cfg.cooldown_seconds,
+        quota_cfg.daily_budget,
+        anti_cfg.max_same_incident,
+        anti_cfg.max_same_signature,
+        anti_cfg.window_seconds
+    );
+    let do_text = match crate::runtime::call_do(env.clone(), repo.clone(), qs).await {
+        Ok(t) => t,
+        Err(_) => return Response::error("state_store_unavailable", 503),
+    };
+    let verdict: serde_json::Value = match serde_json::from_str(&do_text) {
+        Ok(v) => v,
+        Err(_) => return Response::error("state_store_invalid_response", 503),
+    };
+    let status = verdict.get("status").and_then(|s| s.as_str()).unwrap_or("error");
+    if status != "queued" {
+        // duplicate | blocked_quota | blocked_anti_loop: misma decision para
+        // la misma entrega; el sender NO debe reintentar (200).
+        return Response::ok(do_text);
+    }
+
+    // 5. Preview determinista del gate. Compatibilidad con el smoke test de
+    //    deploy.yml (exige operator_id en la respuesta). La decision
+    //    autoritativa es la del consumidor asincrono; VERIFY = Actions.
+    let incident = payload.to_incident();
+    let fsig = FailureSignature::from_incident(&inciden
+t);
+    let features = extract(&incident, &fsig);
+    let preview = match model::load(&env).await {
+        Ok(loaded) => {
+            let action = loaded.net.predict(&features);
+            let gate_ok = gate(&action, MIN_CONFIDENCE, MAX_RISK).is_ok();
+            serde_json::json!({
+                "operator_id": action.repair_operator as u8,
+                "operator": action.repair_operator.as_str(),
+                "confidence": action.confidence,
+                "risk": action.risk,
+                "gate": if gate_ok { "allow" } else { "blocked_by_policy" },
+                "weights": loaded.source,
+            })
+        }
+        // Sin modelo (current ni stable): BLOCKED. Nunca zeros -> PASS.
+        Err(_) => serde_json::json!({ "gate": "blocked_no_model" }),
     };
 
-    let action: RepairAction = net.predict(&features);
-
-    // 5. Gate. Este es el punto de decisión; el gate nunca se puede saltar.
-    let decision = match gate(&action, MIN_CONFIDENCE, MAX_RISK) {
-        Ok(()) => format!(
-            r#"{{"status":"success","phase":"policy","operator_id":{},"operator":"{}","confidence":{:.3},"risk":{:.3},"weights":"{}","pr":null,"note":"gate allowed; PR creation not implemented"}}"#,
-            action.repair_operator as u8,
-            action.repair_operator.as_str(),
-            action.confidence,
-            action.risk,
-            weights_source
-        ),
-        // `report` no se interpola en el JSON: su reason lleva texto libre y
-        // aquí se reconstruye desde `action`, que son los mismos valores.
-        Err(_report) => format!(
-            r#"{{"status":"blocked_by_policy","phase":"policy","operator_id":{},"operator":"{}","confidence":{:.3},"risk":{:.3},"weights":"{}","reason":"c={:.3} r={:.3} op={}"}}"#,
-            action.repair_operator as u8,
-            action.repair_operator.as_str(),
-            action.confidence,
-            action.risk,
-            weights_source,
-            action.confidence,
-            action.risk,
-            action.repair_operator.as_str()
-        ),
+    // 6. Encolar el trabajo asincrono.
+    let task = QueueTask {
+        correlation_id: correlation_id.clone(),
+        incident_id: incident_id.clone(),
+        repo: repo.clone(),
+        signature: signature.clone(),
+        payload,
+        attempts: 0,
+        enqueued_at: now,
     };
-
-    Response::ok(decision)
-}
-
-/// Lee pesos planos desde KV. Formato esperado: 2863 f32 legibles por `split_whitespace`
-/// (`WEIGHT_COUNT`). Cualquier desviación devuelve `None` y se cae a ceros:
-/// una red malformada no puede producir una acción con confianza inventada.
-async fn load_weights(env: &Env) -> Option<RepairNet> {
-    let kv = env.kv("MODEL_KV").ok()?;
-    let raw = kv.get("model/current").text().await.ok().flatten()?;
-    if raw.trim().is_empty() {
-        return None;
+    let queue = env.queue(queue_consumer::QUEUE_BINDING)?;
+    if let Err(e) = queue.send(task).await {
+        console_error!("queue send failed: {}", e);
+        // Fail-closed: dejar el incidente bloqueado en el DO antes del 503.
+        let rqs = format!(
+            "/result?correlation_id={}&incident_id={}&decision=blocked&fingerprint=&verify_status=blocked&evidence_ref=&reason=queue_send_failed",
+            urlencode(&correlation_id),
+            urlencode(&incident_id)
+        );
+        let _ = crate::runtime::call_do(env, repo, rqs).await;
+        return Response::error("queue_unavailable", 503);
     }
-    let mut values: Vec<f32> = Vec::with_capacity(WEIGHT_COUNT);
-    for token in raw.split_whitespace() {
-        match token.parse::<f32>() {
-            Ok(v) if v.is_finite() => values.push(v),
-            // Un token no numérico invalida el archivo entero: no se ignora en
-            // silencio, porque dejaría la red con pesos desplazados.
-            _ => return None,
-        }
-        if values.len() > WEIGHT_COUNT {
-            return None;
-        }
-    }
-    RepairNet::from_weights(&values).ok()
+
+    Response::ok(
+        serde_json::json!({
+            "status": "accepted",
+            "correlation_id": correlation_id,
+            "incident_id": incident_id,
+            "queued": true,
+            "preview": preview,
+            "pr": null,
+            "note": "async repair queued; VER
+IFY authority = GitHub Actions"
+        })
+        .to_string(),
+    )
 }
