@@ -3,21 +3,24 @@
 #
 # REQUISITOS (ninguno se puede inventar, deben existir en la cuenta):
 #   1. Secrets de GitHub: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
-#   2. Secret del Worker: WEBHOOK_SECRET (el webhook falla cerrado sin él → 503).
-#   3. El id de MODEL_KV de abajo es el del namespace real de la cuenta.
-#      Con REPLACE_WITH_* el deploy falla; deploy.yml lo comprueba antes de publicar.
-#   4. Variable de repositorio WORKER_URL para el smoke test (opcional).
-#   5. Si el deploy lo hace Workers Builds (integración GitHub del dashboard),
-#      el "Root directory" del build debe ser `worker`, y el nombre del Worker
-#      en el dashboard debe coincidir con `name` de abajo.
-#   6. Workers Builds NO honra el [build] de este archivo (docs de Cloudflare)
-#      y su imagen no lista Rust: en el dashboard (Settings > Build) poner
+#   2. Secret del Worker: WEBHOOK_SECRET (el webhook falla cerrado sin el -> 503).
+#   3. El id de MODEL_KV es el del namespace real de la cuenta.
+#   4. Las colas de abajo deben existir antes del deploy:
+#        npx wrangler queues create auto-healing-repairs
+#        npx wrangler queues create auto-healing-repairs-dlq
+#        npx wrangler queues create auto-healing-repairs-staging
+#        npx wrangler queues create auto-healing-repairs-dlq-staging
+#   5. Workers Builds NO honra el [build] de este archivo (docs de Cloudflare)
+#      y su imagen no lista Rust: en el dashboard (Settings > Build) usar
 #        Build command:  bash build.sh
 #        Deploy command: npx wrangler deploy
 #
+# Produccion = entorno por defecto: deploy.yml ejecuta `npx wrangler deploy`
+# sin --env, y el nombre del Worker del dashboard debe coincidir con `name`.
+# Staging es el entorno nombrado [env.staging] (`npx wrangler deploy --env staging`).
+#
 # La NN NO se declara en [wasm_modules]: repair_nn_core se enlaza como crate
-# Rust dentro del propio módulo WASM del Worker. repair_nn_wasm queda como
-# adaptador para consumidores JS/navegador.
+# Rust dentro del propio modulo WASM del Worker.
 
 name = "auto-healing-agent"
 main = "build/worker/shim.mjs"
@@ -26,9 +29,83 @@ compatibility_date = "2024-09-23"
 [build]
 command = "bash ./build.sh"
 
+# Workers Logs: invocaciones y errores consultables con `wrangler tail`.
+[observability]
+enabled = true
+
+# Quotas y anti-loop: configuracion separada del estado (el estado vive en el
+# Durable Object). Cambiar valores NO requiere tocar el esquema SQL.
+[vars]
+QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
+QUOTA_MAX_REPAIRS_PER_REPO = "10"
+QUOTA_MAX_OPEN_REPAIRS = "3"
+QUOTA_COOLDOWN_SECONDS = "3600"
+QUOTA_DAILY_BUDGET = "50"
+ANTI_LOOP_MAX_SAME_INCIDENT = "3"
+ANTI_LOOP_MAX_SAME_SIGNATURE = "5"
+ANTI_LOOP_MAX_SAME_FINGERPRINT = "2"
+ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION = "3"
+ANTI_LOOP_WINDOW_SECONDS = "900"
+
 [[kv_namespaces]]
 binding = "MODEL_KV"
 id = "73014a1b32b7446397461a8d438c8ab2"
 
-# Sin [durable_objects] ni [[r2_buckets]]: no hay bindings en el código.
-# Ver docs/DISCREPANCIES.md ítems 9 y 10.
+# Estado transaccional por repositorio (SQLite). Disponible en Workers Free.
+[durable_objects]
+bindings = [
+  { name = "INCIDENT_STATE", class_name = "IncidentState" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["IncidentState"]
+
+# Trabajo asincrono: el webhook solo valida + deduplica + encola (202).
+[[queues.producers]]
+binding = "REPAIR_QUEUE"
+queue = "auto-healing-repairs"
+
+# Consumidor principal: max_retries=3 y DLQ nativa. Nunca retry infinito:
+# el consumidor ademas corta por su propio contador de attempts (hard stop).
+[[queues.consumers]]
+queue = "auto-healing-repairs"
+max_batch_size = 5
+max_batch_timeout = 10
+max_retries = 3
+max_concurrency = 1
+dead_letter_queue = "auto-healing-repairs-dlq"
+
+# Consumidor del DLQ: registra el veneno en el Durable Object y lo observa.
+[[queues.consumers]]
+queue = "auto-healing-repairs-dlq"
+max_batch_size = 10
+max_batch_timeout = 10
+max_retries = 1
+max_concurrency = 1
+
+# ------------------------- staging -------------------------
+# Despliega un Worker aparte (auto-healing-agent-staging) con sus propias
+# colas y su propio namespace de Durable Objects (estado de staging aislado
+# del de produccion). Comparte MODEL_KV (pesos de modelo, solo lectura).
+[env.staging]
+name = "auto-healing-agent-staging"
+
+[[env.staging.queues.producers]]
+binding = "REPAIR_QUEUE"
+queue = "auto-healing-repairs-staging"
+
+[[env.staging.queues.consumers]]
+queue = "auto-healing-repairs-staging"
+max_batch_size = 5
+max_batch_timeout = 10
+max_retries = 3
+max_concurrency = 1
+dead_letter_queue = "auto-healing-repairs-dlq-staging"
+
+[[env.staging.queues.consumers]]
+queue = "auto-healing-repairs-dlq-staging"
+max_batch_size = 10
+max_batch_timeout = 10
+max_retries = 1
+max_concurrency = 1
