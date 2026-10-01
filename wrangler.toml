@@ -1,0 +1,14 @@
+# Deploy del Worker (workers-rs) desde la raíz del repositorio.
+# Necesario para Cloudflare Workers Builds cuando el Root Directory no está
+# configurado como `worker/` en el Dashboard de Cloudflare.
+
+name = "auto-healing-agent"
+main = "worker/build/worker/shim.mjs"
+compatibility_date = "2024-09-23"
+
+[build]
+command = "bash ./build.sh"
+
+[[kv_namespaces]]
+binding = "MODEL_KV"
+id = "73014a1b32b7446397461a8d438c8ab2"
