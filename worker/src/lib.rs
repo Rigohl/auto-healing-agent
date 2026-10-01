@@ -156,7 +156,9 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
             action.risk,
             weights_source
         ),
-        Err(report) => format!(
+        // `report` no se interpola en el JSON: su reason lleva texto libre y
+        // aquí se reconstruye desde `action`, que son los mismos valores.
+        Err(_report) => format!(
             r#"{{"status":"blocked_by_policy","phase":"policy","operator_id":{},"operator":"{}","confidence":{:.3},"risk":{:.3},"weights":"{}","reason":"c={:.3} r={:.3} op={}"}}"#,
             action.repair_operator as u8,
             action.repair_operator.as_str(),
