@@ -7,6 +7,7 @@ description = "Small pure-Rust MLP classifier for repair operator selection (no_
 
 [dependencies]
 repair_types = { path = "../repair_types", default-features = false }
+libm = { workspace = true }
 
 [features]
 default = ["std"]

@@ -19,3 +19,5 @@ repository = "https://github.com/Rigohl/auto-healing-agent"
 [workspace.dependencies]
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
+# no_std math for repair_nn_core: f32::exp() is a std method, unavailable on wasm32-unknown-unknown
+libm = "0.2"

@@ -106,14 +106,14 @@ fn relu(x: f32) -> f32 {
     }
 }
 fn sigmoid(x: f32) -> f32 {
-    1.0 / (1.0 + (-x).exp())
+    1.0 / (1.0 + libm::expf(-x))
 }
 fn soft_argmax(logits: &[f32; OPS]) -> (usize, f32) {
     let max = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     let mut ex = [0.0f32; OPS];
     let mut sum = 0.0f32;
     for i in 0..OPS {
-        let e = (logits[i] - max).exp();
+        let e = libm::expf(logits[i] - max);
         ex[i] = e;
         sum += e;
     }
