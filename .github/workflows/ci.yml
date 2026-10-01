@@ -65,4 +65,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: "worker -> worker/target"
-      - run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release --locked
+      - run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release --offline
