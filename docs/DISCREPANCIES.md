@@ -39,6 +39,7 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 | 32 | Script de secrets reintroducía HF | `set-github-secrets.sh` subía `HF_TOKEN`, `HF_MODEL` (default `Qwen/Qwen2.5-Coder-7B-Instruct`), `HF_BASE_URL` (default router HF) y `VERCEL_ORG_ID`/`VERCEL_PROJECT_ID` embebidos | Eliminados | **Corregido** | El script es la ruta viva de aprovisionamiento (no está en `legacy/`) y creaba por defecto el stack HuggingFace que el repo declara retirado (ítems 3 y 13), además de subir org/project ids reales sin que el operador los exportara. Añadido `WEBHOOK_SECRET`. `put_secret` ya descartaba valores vacíos correctamente: no había bug de borrado. |
 | 33 | Ausentes `.gitignore` y `LICENSE` | No existían | Ambos añadidos | **Corregido** | Sin `.gitignore`, `target/`, `worker/build/`, `pkg/` y `.env` podían commitearse. Todos los `Cargo.toml` declaraban `license = "MIT"` sin que existiera el archivo (ítem 7). |
 | 34 | Sin `cargo fmt --check` en CI | `rust-toolchain.toml` declara `rustfmt` y `clippy`; ningún workflow los usa | clippy añadido (informativo, sin `-D warnings`); fmt pendiente | **Parcial** | No se puede aplicar `rustfmt` en este entorno, así que activar `--check` dejaría CI en rojo sin forma de corregirlo aquí. Requiere una pasada con toolchain local. |
+| 35 | `worker/` no compilable | `worker/Cargo.toml` sin tabla `[workspace]` | Añadida | **Corregido** en `f8d9f79` | Cargo lo rechazaba en standalone: *"current package believes it is in a workspace when it is not"*. No era solo un problema de CI: `worker-build` es lo que invoca `wrangler.toml` para desplegar, así que **el build de Cloudflare estaba roto** y el worker no se había podido construir nunca desde ese manifest. Descubierto al añadir el job `worker` del ítem 28. |
 
 
 ## Estado
@@ -55,6 +56,7 @@ Sin resolver (no bloquean la unificación):
 - [x] Ítem 29: `repair_operators` con 15 tests del gate
 - [x] Ítems 30, 31: aserción de pesos y `regression.yml` alineados
 - [x] Ítems 32, 33: script de secrets sin HF y sin defaults embebidos; `.gitignore` + `LICENSE`
+- [x] Ítem 35: `worker/` compilable (build de Cloudflare estaba roto)
 
 Sin resolver:
 - [ ] Ítem 25: ~20 slots de `FeatureVector[64]` inertes hasta que exista extractor AST/CFG
