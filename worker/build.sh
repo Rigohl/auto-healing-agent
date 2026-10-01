@@ -7,6 +7,10 @@
 # ../rust-toolchain.toml (stable + wasm32-unknown-unknown).
 set -euo pipefail
 
+# SCRIPT_DIR ensures we operate inside the worker directory regardless of root working dir
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 export PATH="$HOME/.cargo/bin:$PATH"
 
 if ! command -v cargo >/dev/null 2>&1; then
