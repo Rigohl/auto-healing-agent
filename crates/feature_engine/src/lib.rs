@@ -121,13 +121,15 @@ mod tests {
 
     #[test]
     fn syntax_fixture() {
-        let mut inc = Incident::default();
-        inc.error_code = "syntax_error".into();
-        inc.error_step = "buildStep".into();
-        inc.command = "npm run vercel-build".into();
-        inc.message = "Unexpected token".into();
-        inc.source = "vercel".into();
-        inc.attempts = 3;
+        let inc = Incident {
+            error_code: "syntax_error".into(),
+            error_step: "buildStep".into(),
+            command: "npm run vercel-build".into(),
+            message: "Unexpected token".into(),
+            source: "vercel".into(),
+            attempts: 3,
+            ..Default::default()
+        };
         let sig = FailureSignature::from_incident(&inc);
         let fv = extract(&inc, &sig);
         assert!(fv.values[7] > 0.5);

@@ -1,7 +1,15 @@
 name: WASM
 on:
   push:
-    paths: ["crates/repair_nn_wasm/**", "crates/repair_nn_core/**", "crates/repair_types/**"]
+    paths:
+      - "crates/repair_nn_wasm/**"
+      - "crates/repair_nn_core/**"
+      - "crates/repair_types/**"
+      # Ambos entran en la cadena edge -> WASM; antes un cambio aquí no
+      # disparaba el build (DISCREPANCIES.md 27).
+      - "crates/feature_engine/**"
+      - "crates/repair_operators/**"
+      - "worker/**"
   workflow_dispatch:
 jobs:
   build:

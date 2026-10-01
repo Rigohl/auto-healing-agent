@@ -16,6 +16,14 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 worker = "0.5"
 console_error_panic_hook = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Pipeline edge. Todos son no_std + alloc, así que compilan dentro del propio
+# módulo WASM del Worker: por eso no hace falta [wasm_modules] en wrangler.toml.
+repair_types = { path = "../crates/repair_types", default-features = false }
+feature_engine = { path = "../crates/feature_engine", default-features = false }
+repair_nn_core = { path = "../crates/repair_nn_core", default-features = false }
+repair_operators = { path = "../crates/repair_operators", default-features = false }
 
 [profile.release]
 lto = true

@@ -41,42 +41,42 @@ impl RepairNet {
     pub fn predict(&self, features: &FeatureVector) -> RepairAction {
         let x = features.as_slice();
         let mut h = [0.0f32; HIDDEN];
-        for j in 0..HIDDEN {
+        for (j, hj) in h.iter_mut().enumerate() {
             let mut s = self.w(INPUT * HIDDEN + j);
-            for i in 0..INPUT {
-                s += x[i] * self.w(i * HIDDEN + j);
+            for (i, xi) in x.iter().enumerate() {
+                s += xi * self.w(i * HIDDEN + j);
             }
-            h[j] = relu(s);
+            *hj = relu(s);
         }
         let o1 = INPUT * HIDDEN + HIDDEN;
         let mut z = [0.0f32; LATENT];
-        for k in 0..LATENT {
+        for (k, zk) in z.iter_mut().enumerate() {
             let mut s = self.w(o1 + HIDDEN * LATENT + k);
-            for j in 0..HIDDEN {
-                s += h[j] * self.w(o1 + j * LATENT + k);
+            for (j, hj) in h.iter().enumerate() {
+                s += hj * self.w(o1 + j * LATENT + k);
             }
-            z[k] = relu(s);
+            *zk = relu(s);
         }
         let o2 = o1 + HIDDEN * LATENT + LATENT;
         let mut logits = [0.0f32; OPS];
-        for k in 0..OPS {
+        for (k, logit) in logits.iter_mut().enumerate() {
             let mut s = self.w(o2 + LATENT * OPS + k);
-            for j in 0..LATENT {
-                s += z[j] * self.w(o2 + j * OPS + k);
+            for (j, zj) in z.iter().enumerate() {
+                s += zj * self.w(o2 + j * OPS + k);
             }
-            logits[k] = s;
+            *logit = s;
         }
         let (idx, sm) = soft_argmax(&logits);
         let oc = o2 + LATENT * OPS + OPS;
         let mut cr = self.w(oc + LATENT);
-        for j in 0..LATENT {
-            cr += z[j] * self.w(oc + j);
+        for (j, zj) in z.iter().enumerate() {
+            cr += zj * self.w(oc + j);
         }
         let confidence = sigmoid(cr).max(sm * 0.5);
         let or = oc + LATENT + 1;
         let mut rr = self.w(or + LATENT);
-        for j in 0..LATENT {
-            rr += z[j] * self.w(or + j);
+        for (j, zj) in z.iter().enumerate() {
+            rr += zj * self.w(or + j);
         }
         let risk = sigmoid(rr);
 
@@ -109,18 +109,18 @@ fn sigmoid(x: f32) -> f32 {
     1.0 / (1.0 + libm::expf(-x))
 }
 fn soft_argmax(logits: &[f32; OPS]) -> (usize, f32) {
-    let max = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
     let mut ex = [0.0f32; OPS];
     let mut sum = 0.0f32;
-    for i in 0..OPS {
+    for (i, slot) in ex.iter_mut().enumerate() {
         let e = libm::expf(logits[i] - max);
-        ex[i] = e;
+        *slot = e;
         sum += e;
     }
     let mut bi = 0;
     let mut bp = 0.0f32;
-    for i in 0..OPS {
-        let p = if sum > 0.0 { ex[i] / sum } else { 0.0 };
+    for (i, e) in ex.iter().enumerate() {
+        let p = if sum > 0.0 { *e / sum } else { 0.0 };
         if p > bp {
             bp = p;
             bi = i;

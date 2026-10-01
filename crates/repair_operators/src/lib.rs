@@ -7,7 +7,6 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use repair_types::{
     AgentStatus, Incident, OperatorId, PipelinePhase, PipelineReport, PolicyDecision, RepairAction,
-    OPERATOR_COUNT,
 };
 
 #[derive(Debug, Clone)]
@@ -19,50 +18,111 @@ pub struct CandidatePatch {
     pub advisory: bool,
 }
 
+/// Deterministic operators.
+///
+/// One explicit arm per `OperatorId`: adding a variant to the enum breaks the
+/// build here instead of silently falling into a catch-all. That is the
+/// allowlist — there is no free-form codegen path and no default branch.
 pub fn apply(action: &RepairAction, incident: &Incident) -> CandidatePatch {
     match action.repair_operator {
-        OperatorId::NoOp | OperatorId::Unknown => CandidatePatch {
-            operator: action.repair_operator,
-            summary: String::from("needs_human_or_noop"),
-            files: Vec::new(),
-            steps: alloc::vec![String::from("escalate")],
-            advisory: true,
-        },
+        OperatorId::NoOp => escalate(action.repair_operator, "no actionable repair"),
+        OperatorId::Unknown => escalate(action.repair_operator, "unknown operator"),
+
         OperatorId::DependencyRepair => CandidatePatch {
             operator: OperatorId::DependencyRepair,
-            summary: alloc::format!("deps {}", incident.project),
+            summary: alloc::format!("deps project={}", incident.project),
             files: alloc::vec![String::from("package.json")],
-            steps: alloc::vec![String::from("align missing deps; no major bumps")],
+            steps: alloc::vec![String::from("align missing deps from error; no major bumps")],
             advisory: false,
         },
         OperatorId::SyntaxFix => CandidatePatch {
             operator: OperatorId::SyntaxFix,
             summary: alloc::format!("syntax node={}", action.node_id),
             files: Vec::new(),
-            steps: alloc::vec![String::from("bounded token repair or needs_human")],
+            steps: alloc::vec![String::from(
+                "localize parse error; bounded token repair or needs_human",
+            )],
             advisory: false,
         },
         OperatorId::ConfigRepair => CandidatePatch {
             operator: OperatorId::ConfigRepair,
-            summary: String::from("config"),
+            summary: String::from("config repair"),
             files: alloc::vec![String::from("tsconfig.json"), String::from("vercel.json")],
-            steps: alloc::vec![String::from("documented safe defaults only")],
+            steps: alloc::vec![String::from("safe documented defaults only")],
             advisory: false,
         },
-        OperatorId::EnvVarRepair | OperatorId::CacheClear => CandidatePatch {
-            operator: action.repair_operator,
-            summary: String::from("advisory"),
-            files: Vec::new(),
-            steps: alloc::vec![String::from("document only; no secret writes")],
-            advisory: true,
-        },
-        other => CandidatePatch {
-            operator: other,
-            summary: String::from(other.as_str()),
-            files: Vec::new(),
-            steps: alloc::vec![String::from("allowlisted transform only")],
+        OperatorId::BuildScriptFix => CandidatePatch {
+            operator: OperatorId::BuildScriptFix,
+            summary: alloc::format!("build script {}", incident.command),
+            files: alloc::vec![String::from("package.json")],
+            steps: alloc::vec![String::from("fix misnamed scripts only")],
             advisory: false,
         },
+        OperatorId::LockfileRefresh => CandidatePatch {
+            operator: OperatorId::LockfileRefresh,
+            summary: String::from("lockfile refresh"),
+            files: alloc::vec![String::from("package-lock.json")],
+            steps: alloc::vec![String::from("regenerate within existing ranges")],
+            advisory: false,
+        },
+        OperatorId::VersionPin => CandidatePatch {
+            operator: OperatorId::VersionPin,
+            summary: String::from("version pin"),
+            files: alloc::vec![String::from("package.json")],
+            steps: alloc::vec![String::from("pin to a known-good resolved version")],
+            advisory: false,
+        },
+        OperatorId::ImportPathFix => CandidatePatch {
+            operator: OperatorId::ImportPathFix,
+            summary: String::from("import path"),
+            files: Vec::new(),
+            steps: alloc::vec![String::from("rewrite import specifier to an existing path")],
+            advisory: false,
+        },
+        OperatorId::TypeAnnotationFix => CandidatePatch {
+            operator: OperatorId::TypeAnnotationFix,
+            summary: String::from("type annotation"),
+            files: Vec::new(),
+            steps: alloc::vec![String::from("add or widen a type annotation only")],
+            advisory: false,
+        },
+        OperatorId::TestRepair => CandidatePatch {
+            operator: OperatorId::TestRepair,
+            summary: String::from("test repair"),
+            files: Vec::new(),
+            steps: alloc::vec![String::from("fix test fixture or assertion, never the intent")],
+            advisory: false,
+        },
+        OperatorId::SourceRepair => CandidatePatch {
+            operator: OperatorId::SourceRepair,
+            summary: String::from("source repair"),
+            files: Vec::new(),
+            steps: alloc::vec![String::from(
+                "bounded deterministic edit inside one allowlisted node",
+            )],
+            advisory: false,
+        },
+
+        // Advisory by policy: these never write. NO_LLM_POLICY.md defaults table
+        // lists secret/env operators as advisory/block, and cache clear has no
+        // repo-side artifact to touch.
+        OperatorId::EnvVarRepair => {
+            escalate(OperatorId::EnvVarRepair, "env advisory — never invent secrets")
+        }
+        OperatorId::CacheClear => {
+            escalate(OperatorId::CacheClear, "cache advisory — no repo-side change")
+        }
+    }
+}
+
+/// No file may be touched and the step escalates instead of patching.
+fn escalate(op: OperatorId, msg: &str) -> CandidatePatch {
+    CandidatePatch {
+        operator: op,
+        summary: String::from(msg),
+        files: Vec::new(),
+        steps: alloc::vec![String::from("escalate_or_document")],
+        advisory: true,
     }
 }
 
@@ -94,6 +154,7 @@ pub fn gate(action: &RepairAction, min_c: f32, max_r: f32) -> Result<(), Pipelin
 mod tests {
     use super::*;
     use alloc::collections::BTreeMap;
+    use repair_types::OPERATOR_COUNT;
 
     const MIN_C: f32 = 0.55;
     const MAX_R: f32 = 0.45;
@@ -230,7 +291,14 @@ mod tests {
     fn apply_never_invents_secret_values() {
         let inc = Incident::default();
         let p = apply(&action(OperatorId::EnvVarRepair, 0.9, 0.1), &inc);
-        assert!(p.steps[0].contains("no secret writes"), "step = {}", p.steps[0]);
+        assert!(p.advisory);
+        assert!(p.files.is_empty());
+        assert!(
+            p.summary.contains("never invent secrets"),
+            "summary = {}",
+            p.summary
+        );
+        assert_eq!(p.steps[0], "escalate_or_document");
     }
 
     #[test]
