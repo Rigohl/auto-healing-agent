@@ -211,12 +211,19 @@ pub enum AgentStatus {
 pub enum PipelinePhase {
     Detect,
     Evidence,
+    FailureSignature,
     Diagnose,
     NeuralPropose,
     Policy,
     Repair,
+    PatchValidation,
+    Ci,
     Verify,
+    PushAuthorization,
     Audit,
+    Postmortem,
+    Blocked,
+    NeedsHuman,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,6 +239,7 @@ pub struct PipelineReport {
     pub phase: PipelinePhase,
     pub operator_id: Option<u8>,
     pub policy_decision: PolicyDecision,
+    pub verify_result: Option<VerificationResult>,
     pub message: String,
 }
 
@@ -250,5 +258,78 @@ impl FeatureVector {
 
     pub fn as_slice(&self) -> &[f32; 64] {
         &self.values
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn operator_ids_are_dense_zero_to_twelve() {
+        for v in 0..OPERATOR_COUNT as u8 {
+            assert_ne!(OperatorId::from_u8(v), OperatorId::Unknown);
+        }
+        assert_eq!(OperatorId::from_u8(13), OperatorId::Unknown);
+        assert_eq!(OperatorId::from_u8(255), OperatorId::Unknown);
+    }
+
+    #[test]
+    fn feature_vector_dim_is_64() {
+        assert_eq!(FeatureVector::DIM, 64);
+        assert_eq!(FeatureVector::zeros().as_slice().len(), 64);
+    }
+
+    #[test]
+    fn gate_threshold_is_confidence_and_risk() {
+        let mut a = RepairAction {
+            node_id: String::from("n1"),
+            repair_operator: OperatorId::DependencyRepair,
+            parameters: BTreeMap::new(),
+            confidence: 0.54,
+            risk: 0.10,
+        };
+        // 0.54 < MIN_CONFIDENCE 0.55 -> not actionable
+        assert!(!a.is_actionable(0.55, 0.45));
+        a.confidence = 0.55;
+        assert!(a.is_actionable(0.55, 0.45));
+        a.risk = 0.46;
+        assert!(!a.is_actionable(0.55, 0.45));
+    }
+
+    #[test]
+    fn noop_is_never_actionable_even_with_high_confidence() {
+        let a = RepairAction {
+            node_id: String::from("n1"),
+            repair_operator: OperatorId::NoOp,
+            parameters: BTreeMap::new(),
+            confidence: 1.0,
+            risk: 0.0,
+        };
+        assert!(!a.is_actionable(0.0, 1.0));
+    }
+
+    #[test]
+    fn pipeline_phase_covers_incident_to_audit_span() {
+        // Terminal reporting phases required by the SYSTEM PROMPT output contract.
+        assert_ne!(PipelinePhase::Verify, PipelinePhase::Ci);
+        assert_ne!(PipelinePhase::PatchValidation, PipelinePhase::Verify);
+        assert_ne!(PipelinePhase::PushAuthorization, PipelinePhase::Verify);
+        assert_ne!(PipelinePhase::Postmortem, PipelinePhase::Audit);
+        assert_ne!(PipelinePhase::NeedsHuman, PipelinePhase::Blocked);
+        assert_ne!(PipelinePhase::FailureSignature, PipelinePhase::Evidence);
+    }
+
+    #[test]
+    fn pipeline_report_carries_optional_verify_result() {
+        let r = PipelineReport {
+            status: AgentStatus::Success,
+            phase: PipelinePhase::Verify,
+            operator_id: Some(1),
+            policy_decision: PolicyDecision::Allow,
+            verify_result: Some(VerificationResult::Pass),
+            message: String::from("ok"),
+        };
+        assert_eq!(r.verify_result, Some(VerificationResult::Pass));
     }
 }

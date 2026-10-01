@@ -83,6 +83,7 @@ pub fn gate(action: &RepairAction, min_c: f32, max_r: f32) -> Result<(), Pipelin
             action.confidence,
             action.risk
         )),
+        verify_result: None,
         message: String::from("policy gate — no LLM codegen path"),
     })
 }
