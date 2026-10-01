@@ -80,9 +80,10 @@ pub fn gate(action: &RepairAction, min_c: f32, max_r: f32) -> Result<(), Pipelin
         phase: PipelinePhase::Policy,
         operator_id: Some(action.repair_operator as u8),
         policy_decision: PolicyDecision::DenyWithReason(alloc::format!(
-            "c={:.3} r={:.3}",
+            "c={:.3} r={:.3} op={}",
             action.confidence,
-            action.risk
+            action.risk,
+            action.repair_operator.as_str()
         )),
         verify_result: None,
         message: String::from("policy gate — no LLM codegen path"),
@@ -162,15 +163,17 @@ mod tests {
 
     #[test]
     fn gate_is_monotonic_in_confidence() {
-        let mut prev = true;
-        for c in [0.0f32, 0.3, 0.5, 0.55, 0.7, 1.0] {
-            let allowed = gate(&action(OperatorId::DependencyRepair, c, 0.0), MIN_C, MAX_R).is_ok();
-            if c < MIN_C {
-                assert!(!allowed, "confidence {c} must block");
+        // Once the gate allows an action, raising confidence must never block it.
+        let mut prev = false;
+        for c in [0.0f32, 0.3, 0.5, 0.5499, 0.55, 0.7, 1.0] {
+            let allowed =
+                gate(&action(OperatorId::DependencyRepair, c, 0.0), MIN_C, MAX_R).is_ok();
+            if prev {
+                assert!(allowed, "gate blocked after allowing at confidence {c}");
             }
-            assert!(!allowed || prev, "gate must not unblock as confidence rises");
             prev = allowed;
         }
+        assert!(prev, "confidence 1.0 must be allowed");
     }
 
     // --- apply: allowlisted operators only -----------------------------------
@@ -231,16 +234,33 @@ mod tests {
     }
 
     #[test]
-    fn gate_then_apply_agree_on_actionability() {
-        // Whatever the gate allows must produce a non-advisory candidate patch.
+    fn gate_allows_env_operator_that_apply_keeps_advisory() {
+        // Documented intent, not a contradiction: env/secret and cache operators
+        // clear governance but must never mutate anything. The gate authorises
+        // the decision to be considered; apply() still refuses to write.
+        let inc = Incident::default();
+        for op in [OperatorId::EnvVarRepair, OperatorId::CacheClear] {
+            let a = action(op, 0.9, 0.1);
+            assert!(gate(&a, MIN_C, MAX_R).is_ok(), "{op:?} should clear the gate");
+            let p = apply(&a, &inc);
+            assert!(p.advisory, "{op:?} must remain advisory after the gate");
+            assert!(p.files.is_empty(), "{op:?} must not touch files");
+        }
+    }
+
+    #[test]
+    fn every_advisory_operator_is_blocked_or_side_effect_free() {
+        // Safety property over the whole allowlist: whenever apply() reports
+        // advisory, it must not list any file to modify.
         let inc = Incident::default();
         for raw in 0u8..OPERATOR_COUNT as u8 {
             let op = OperatorId::from_u8(raw);
-            let a = action(op, 0.9, 0.1);
-            if gate(&a, MIN_C, MAX_R).is_ok() {
+            let p = apply(&action(op, 0.9, 0.1), &inc);
+            if p.advisory {
                 assert!(
-                    !apply(&a, &inc).advisory,
-                    "{op:?} allowed by gate but advisory in apply"
+                    p.files.is_empty(),
+                    "{op:?} is advisory but lists files: {:?}",
+                    p.files
                 );
             }
         }
