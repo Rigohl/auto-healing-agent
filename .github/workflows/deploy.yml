@@ -26,9 +26,9 @@ jobs:
       - uses: actions/checkout@v4
 
       # El build lo hace wrangler vía worker/wrangler.toml:
-      #   command = "cargo install -q worker-build && worker-build --release"
+      #   command = "bash ./build.sh"
       # worker-build necesita el target wasm32-unknown-unknown.
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
           targets: wasm32-unknown-unknown
 
@@ -42,8 +42,9 @@ jobs:
             fi
           done
           # Un id de KV placeholder no despliega: fallaría tarde y confuso.
-          if grep -q "REPLACE_WITH" worker/wrangler.toml; then
-            echo "::error::worker/wrangler.toml tiene REPLACE_WITH_*; rellena los ids reales"
+          # Filtra comentarios para evitar falsos positivos con REPLACE_WITH en comentarios.
+          if sed -e 's/#.*//' worker/wrangler.toml | grep -q "REPLACE_WITH"; then
+            echo "::error::worker/wrangler.toml tiene REPLACE_WITH_* en configuración activa; rellena los ids reales"
             exit 1
           fi
 
@@ -52,7 +53,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: worker
-        run: npx wrangler deploy
+        run: npx wrangler@3.112.0 deploy
 
       - name: Smoke test
         env:
@@ -61,8 +62,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${WORKER_URL:-}" ]; then
-            echo "::notice::sin variable WORKER_URL, se omite el smoke test"
-            exit 0
+            echo "::error::falta la variable WORKER_URL para ejecutar el smoke test"
+            exit 1
           fi
           # 1. /health sin secret: debe responder 200.
           curl -fsS --max-time 20 "$WORKER_URL/health"

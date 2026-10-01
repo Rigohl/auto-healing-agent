@@ -9,34 +9,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
           targets: wasm32-unknown-unknown
-      - run: cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators
+      - run: cargo test --locked -p repair_types -p feature_engine -p repair_nn_core -p repair_operators
 
-  # worker/ is deliberately outside the Cargo workspace (separate Cloudflare
-  # package built by worker-build), so no workspace command compiles it.
-  # Without this job worker/src/lib.rs could break with CI green.
+  # worker/ is part of the workspace, checked for host and wasm32 targets
   worker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
           targets: wasm32-unknown-unknown
-      - run: cargo check --manifest-path worker/Cargo.toml --all-targets
-      # The deployable artifact is a wasm32 module. Checking it for the host
-      # target does not prove it builds for Cloudflare, which is what
-      # worker-build does at deploy time.
-      - run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
+      - run: cargo check --locked --manifest-path worker/Cargo.toml --all-targets
+      - run: cargo check --locked --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
 
   clippy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.88.0
         with:
           components: clippy
-      # Warnings are errors: the crate set is small enough to keep clean.
-      # rustfmt is still not enforced (DISCREPANCIES.md 34).
-      - run: cargo clippy -p repair_types -p feature_engine -p repair_nn_core -p repair_operators --all-targets -- -D warnings
+      - run: cargo clippy --locked -p repair_types -p feature_engine -p repair_nn_core -p repair_operators --all-targets -- -D warnings
