@@ -87,6 +87,7 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 | — | `repair_operators::apply` sigue siendo stub; AST real = fase posterior. |
 | — | E2E completo no verde (ver `docs/E2E_CHECKLIST.md`). |
 | — | Sin `Cargo.lock` (ítem 7): las versiones resuelven en cada build de CI. |
+| — | Objetivo de entrenamiento sin λ fijados: la fórmula loss/reward está documentada en PART2 pero no implementada, y nada calcula `reward` en el repo. |
 
 ## Decisiones clave
 

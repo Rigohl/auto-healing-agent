@@ -47,6 +47,33 @@ pub fn infer(features: &[f32; 64], weights: &Weights) -> Prediction;
 // Prediction { operator_id, confidence, risk }
 ```
 
+## Objetivo de entrenamiento (conceptual, offline)
+
+Recuperado del documento de diseño en PDF de PART1–4. **No implementado**:
+no hay trainer en el repo y `model/*.json` sigue con `weights: null`
+(`DISCREPANCIES` 5, 6, 22). Se documenta para que FASE 5 no redefina el criterio.
+
+Loss ponderada por término:
+
+```
+L = λ_location·L_location   + λ_operator·L_operator
+  + λ_compile·L_compile    + λ_test·L_test
+  + λ_semantic·L_semantic  + λ_risk·L_risk
+```
+
+Reward por `RepairCase` verificada:
+
+```
+reward = compile_success + tests_fixed + regression_free
+       + structural_validity − patch_size − risk
+```
+
+Los λ no están fijados: es la decisión abierta de FASE 5.
+
+> Nota: `RepairCase.reward` y `TrainingExample.reward` existen como `f32` en
+> `crates/repair_types/src/lib.rs` pero **nada en el repo las calcula**. Esta
+> fórmula es el único sitio donde se define el criterio.
+
 ## Fases relacionadas
 FASE 2 (features 64), FASE 3 (NN + operators), FASE 5 (learning offline).
 
