@@ -1,42 +1,68 @@
 name: CI
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: wasm32-unknown-unknown
-      - run: cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators
-
-  # worker/ is deliberately outside the Cargo workspace (separate Cloudflare
-  # package built by worker-build), so no workspace command compiles it.
-  # Without this job worker/src/lib.rs could break with CI green.
-  worker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - run: cargo check --manifest-path worker/Cargo.toml --all-targets
-      # The deployable artifact is a wasm32 module. Checking it for the host
-      # target does not prove it builds for Cloudflare, which is what
-      # worker-build does at deploy time.
-      - run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --all
+      - run: cargo test --all
 
   clippy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.85.0
         with:
           components: clippy
-      # Warnings are errors: the crate set is small enough to keep clean.
-      # rustfmt is still not enforced (DISCREPANCIES.md 34).
-      - run: cargo clippy -p repair_types -p feature_engine -p repair_nn_core -p repair_operators --all-targets -- -D warnings
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all --all-targets -- -D warnings
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown
+
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "worker -> worker/target"
+      - run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release

@@ -1,22 +1,39 @@
 name: WASM
+
 on:
   push:
     paths:
       - "crates/repair_nn_wasm/**"
       - "crates/repair_nn_core/**"
       - "crates/repair_types/**"
-      # Ambos entran en la cadena edge -> WASM; antes un cambio aquí no
-      # disparaba el build (DISCREPANCIES.md 27).
+      - "crates/feature_engine/**"
+      - "crates/repair_operators/**"
+      - "worker/**"
+  pull_request:
+    paths:
+      - "crates/repair_nn_wasm/**"
+      - "crates/repair_nn_core/**"
+      - "crates/repair_types/**"
       - "crates/feature_engine/**"
       - "crates/repair_operators/**"
       - "worker/**"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wasm-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
       - run: cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown
+      - run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release

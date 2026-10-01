@@ -48,6 +48,13 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 | 41 | Deploy a Cloudflare | — | **No ejecutable desde el entorno actual** | **Bloqueado, no fallido** | Faltan tres cosas verificables: (a) no hay `CLOUDFLARE_API_TOKEN` ni `CLOUDFLARE_ACCOUNT_ID` — las variables `CLOUDFLARE_*` presentes son la infraestructura del sandbox, **no** credenciales de la cuenta; (b) no hay toolchain Rust (`cargo`/`rustc` ausentes), y `wrangler deploy` invoca `cargo install worker-build && worker-build --release`; (c) `worker/wrangler.toml` conserva `REPLACE_WITH_KV_NAMESPACE_ID`. **No se ha desplegado nada y no se declara despliegue exitoso.** Se deja la vía preparada y verificable: `deploy.yml` (solo `workflow_dispatch`, environment `production`, preflight que aborta si faltan secrets o hay `REPLACE_WITH_*`, y smoke test que verifica /health, el fail-closed sin secret y el pipeline con secret) y un job de CI que compila el worker para `wasm32-unknown-unknown`, que es el artefacto real de deploy. |
 
 
+| 42 | Inconsistencia de canal en `rust-toolchain.toml` | `rust-toolchain.toml` declaraba `channel = "stable"`, causando fallo en instalaciones en Linux overlayfs | Se fijó `channel = "1.85.0"` | **Corregido** | Garantiza reproducibilidad determinista en CI y entornos locales. |
+| 43 | Clippy `new_without_default` en `repair_nn_wasm` | `RepairModel::new()` no tenía implementación de `Default` | Implementado `Default` para `RepairModel` | **Corregido** | Permite pasar `cargo clippy --all-targets -- -D warnings` de forma limpia. |
+| 44 | Gates con validaciones ficticias | `repair-validation.yml` contenía `echo` ficticios | Reemplazado con `cargo fmt`, `test`, `clippy`, build WASM y `worker` check | **Corregido** | La validación de CI pasa a ser real y autoritativa. |
+| 45 | Workflows sin permisos explícitos ni caché | Varios workflows omitían `permissions` y caché de Cargo | Agregado `permissions: contents: read` y `Swatinem/rust-cache@v2` | **Corregido** | Seguridad de supply chain y tiempo de CI optimizado. |
+| 46 | Security scan pasivo | `security.yml` no ejecutaba herramientas activas de seguridad | Integrado `cargo-audit` y `gitleaks` | **Corregido** | Evaluación continua de vulnerabilidades y fugas de secrets. |
+| 47 | Incompatibilidad de ICU en `worker/Cargo.lock` | `worker/Cargo.lock` contenía paquetes ICU que requerían Rust 1.88+ | Bloqueado y verificado `worker/Cargo.lock` compatible con Rust 1.85.0 | **Corregido** | Permite compilación reproducible offline del worker WASM. |
+
 ## Estado
 
 Unificación de ramas (2026-10-01):

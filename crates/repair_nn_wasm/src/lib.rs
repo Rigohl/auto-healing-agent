@@ -23,6 +23,12 @@ pub struct RepairModel {
     net: RepairNet,
 }
 
+impl Default for RepairModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl RepairModel {
     #[wasm_bindgen(constructor)]

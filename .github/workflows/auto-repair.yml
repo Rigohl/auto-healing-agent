@@ -1,22 +1,22 @@
-name: Auto-Repair (DISABLED legacy LLM)
-
-# Path canónico = Rust crates + worker/ + CI verify.
-# legacy/agent.ts NO se ejecuta. Conservado solo como archivo de archivo.
+name: Auto-Repair (Disabled Legacy)
 
 on:
   workflow_dispatch:
     inputs:
       note:
-        description: "This workflow no longer runs the HF agent. Use cargo CI + worker Rust."
+        description: "This workflow no longer runs free-form LLM code generation. Deterministic repair operators apply."
         required: false
         default: "rust-only"
+
+permissions:
+  contents: read
 
 jobs:
   notice:
     runs-on: ubuntu-latest
     steps:
-      - name: Rust-only policy
+      - name: Enforcement Notice
         run: |
           echo "LLM free-form codegen path is disabled."
           echo "Core: crates/repair_* + worker/ (Rust/WASM)."
-          echo "VERIFY authority: .github/workflows/ci.yml and wasm.yml"
+          echo "VERIFY authority: .github/workflows/ci.yml and repair-validation.yml"
