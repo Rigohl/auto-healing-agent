@@ -61,15 +61,28 @@ docs/
 - `FeatureVector::DIM = 64`, `WEIGHT_COUNT = 2863`, gate `0.55 / 0.45`,
   `OperatorId` 0–12 (`OPERATOR_COUNT = 13`).
 
+## Verificación (CI en `acddb02`, todas en verde)
+
+| Workflow | Resultado |
+|----------|-----------|
+| CI | ✅ `cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators` |
+| WASM | ✅ `cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown` |
+| Security | ✅ |
+
+El build WASM estaba roto desde antes de la unificación (`f32::exp()` en un
+crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26.
+
 ## Gaps vivos tras la unificación
 
 | # | Gap |
 |---|------|
 | 25 | ~20 de las 64 entradas de `FeatureVector` están inertes (0.0). Sin extractor AST/CFG. |
+| 27 | `wasm.yml` no dispara con cambios en `feature_engine/` ni `repair_operators/`. |
 | 9, 10 | Sin bindings R2/D1/DO, sin driver Rust de MongoDB, sin conector Mem0. Diseñado, no implementado. |
 | 5, 6, 22 | Sin pesos reales: no hay `scripts/train` ni `scripts/export_weights`; training y promoción de checkpoint siguen diferidos. |
 | — | `repair_operators::apply` sigue siendo stub; AST real = fase posterior. |
 | — | E2E completo no verde (ver `docs/E2E_CHECKLIST.md`). |
+| — | Sin `Cargo.lock` (ítem 7): las versiones resuelven en cada build de CI. |
 
 ## Decisiones clave
 
