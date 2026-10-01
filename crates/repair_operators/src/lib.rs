@@ -32,7 +32,9 @@ pub fn apply(action: &RepairAction, incident: &Incident) -> CandidatePatch {
             operator: OperatorId::DependencyRepair,
             summary: alloc::format!("deps project={}", incident.project),
             files: alloc::vec![String::from("package.json")],
-            steps: alloc::vec![String::from("align missing deps from error; no major bumps")],
+            steps: alloc::vec![String::from(
+                "align missing deps from error; no major bumps"
+            )],
             advisory: false,
         },
         OperatorId::SyntaxFix => CandidatePatch {
@@ -90,7 +92,9 @@ pub fn apply(action: &RepairAction, incident: &Incident) -> CandidatePatch {
             operator: OperatorId::TestRepair,
             summary: String::from("test repair"),
             files: Vec::new(),
-            steps: alloc::vec![String::from("fix test fixture or assertion, never the intent")],
+            steps: alloc::vec![String::from(
+                "fix test fixture or assertion, never the intent"
+            )],
             advisory: false,
         },
         OperatorId::SourceRepair => CandidatePatch {
@@ -106,12 +110,14 @@ pub fn apply(action: &RepairAction, incident: &Incident) -> CandidatePatch {
         // Advisory by policy: these never write. NO_LLM_POLICY.md defaults table
         // lists secret/env operators as advisory/block, and cache clear has no
         // repo-side artifact to touch.
-        OperatorId::EnvVarRepair => {
-            escalate(OperatorId::EnvVarRepair, "env advisory — never invent secrets")
-        }
-        OperatorId::CacheClear => {
-            escalate(OperatorId::CacheClear, "cache advisory — no repo-side change")
-        }
+        OperatorId::EnvVarRepair => escalate(
+            OperatorId::EnvVarRepair,
+            "env advisory — never invent secrets",
+        ),
+        OperatorId::CacheClear => escalate(
+            OperatorId::CacheClear,
+            "cache advisory — no repo-side change",
+        ),
     }
 }
 
@@ -130,7 +136,10 @@ pub fn gate(action: &RepairAction, min_c: f32, max_r: f32) -> Result<(), Pipelin
     if action.is_actionable(min_c, max_r) {
         return Ok(());
     }
-    let status = if matches!(action.repair_operator, OperatorId::NoOp | OperatorId::Unknown) {
+    let status = if matches!(
+        action.repair_operator,
+        OperatorId::NoOp | OperatorId::Unknown
+    ) {
         AgentStatus::NeedsHuman
     } else {
         AgentStatus::BlockedByPolicy
@@ -206,7 +215,10 @@ mod tests {
         let err = gate(&a, MIN_C, MAX_R).expect_err("low confidence must block");
         assert_eq!(err.status, AgentStatus::BlockedByPolicy);
         assert_eq!(err.operator_id, Some(OperatorId::SyntaxFix as u8));
-        assert!(matches!(err.policy_decision, PolicyDecision::DenyWithReason(_)));
+        assert!(matches!(
+            err.policy_decision,
+            PolicyDecision::DenyWithReason(_)
+        ));
         assert_eq!(err.verify_result, None, "gate runs before VERIFY");
     }
 
@@ -227,8 +239,7 @@ mod tests {
         // Once the gate allows an action, raising confidence must never block it.
         let mut prev = false;
         for c in [0.0f32, 0.3, 0.5, 0.5499, 0.55, 0.7, 1.0] {
-            let allowed =
-                gate(&action(OperatorId::DependencyRepair, c, 0.0), MIN_C, MAX_R).is_ok();
+            let allowed = gate(&action(OperatorId::DependencyRepair, c, 0.0), MIN_C, MAX_R).is_ok();
             if prev {
                 assert!(allowed, "gate blocked after allowing at confidence {c}");
             }
@@ -311,7 +322,10 @@ mod tests {
         let inc = Incident::default();
         for op in [OperatorId::EnvVarRepair, OperatorId::CacheClear] {
             let a = action(op, 0.9, 0.1);
-            assert!(gate(&a, MIN_C, MAX_R).is_ok(), "{op:?} should clear the gate");
+            assert!(
+                gate(&a, MIN_C, MAX_R).is_ok(),
+                "{op:?} should clear the gate"
+            );
             let p = apply(&a, &inc);
             assert!(p.advisory, "{op:?} must remain advisory after the gate");
             assert!(p.files.is_empty(), "{op:?} must not touch files");

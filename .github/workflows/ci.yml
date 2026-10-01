@@ -12,7 +12,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - run: cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators
+      - run: cargo test --workspace
+
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt -- --check
+      - run: cargo fmt --manifest-path worker/Cargo.toml -- --check
 
   # worker/ is deliberately outside the Cargo workspace (separate Cloudflare
   # package built by worker-build), so no workspace command compiles it.
@@ -38,5 +48,4 @@ jobs:
         with:
           components: clippy
       # Warnings are errors: the crate set is small enough to keep clean.
-      # rustfmt is still not enforced (DISCREPANCIES.md 34).
-      - run: cargo clippy -p repair_types -p feature_engine -p repair_nn_core -p repair_operators --all-targets -- -D warnings
+      - run: cargo clippy --workspace --all-targets -- -D warnings

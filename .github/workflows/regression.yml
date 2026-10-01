@@ -9,4 +9,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators
+      - run: cargo test --workspace

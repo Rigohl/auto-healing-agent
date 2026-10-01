@@ -7,7 +7,7 @@ extern crate alloc;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
-use repair_types::{FeatureVector, OperatorId, OPERATOR_COUNT, RepairAction};
+use repair_types::{FeatureVector, OperatorId, RepairAction, OPERATOR_COUNT};
 
 const INPUT: usize = 64;
 const HIDDEN: usize = 32;
@@ -15,8 +15,16 @@ const LATENT: usize = 16;
 const OPS: usize = OPERATOR_COUNT;
 
 /// Flat weight layout length.
-pub const WEIGHT_COUNT: usize =
-    INPUT * HIDDEN + HIDDEN + HIDDEN * LATENT + LATENT + LATENT * OPS + OPS + LATENT + 1 + LATENT + 1;
+pub const WEIGHT_COUNT: usize = INPUT * HIDDEN
+    + HIDDEN
+    + HIDDEN * LATENT
+    + LATENT
+    + LATENT * OPS
+    + OPS
+    + LATENT
+    + 1
+    + LATENT
+    + 1;
 
 pub struct RepairNet {
     weights: Vec<f32>,
@@ -152,11 +160,16 @@ mod tests {
     fn weight_count_matches_layer_arithmetic() {
         // 64*32+32 (W1,b1) + 32*16+16 (W2,b2) + 16*13+13 (op head)
         // + 16+1 (confidence head) + 16+1 (risk head)
-        let expected = INPUT * HIDDEN + HIDDEN
-            + HIDDEN * LATENT + LATENT
-            + LATENT * OPS + OPS
-            + LATENT + 1
-            + LATENT + 1;
+        let expected = INPUT * HIDDEN
+            + HIDDEN
+            + HIDDEN * LATENT
+            + LATENT
+            + LATENT * OPS
+            + OPS
+            + LATENT
+            + 1
+            + LATENT
+            + 1;
         assert_eq!(WEIGHT_COUNT, expected);
         assert_eq!(OPS, 13, "OperatorId 0..=12 plus Unknown-adjacent count");
     }
