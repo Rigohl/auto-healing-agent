@@ -2,5 +2,4 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "${ROOT_DIR}/worker"
-bash ./build.sh
+bash "${ROOT_DIR}/worker/build.sh"

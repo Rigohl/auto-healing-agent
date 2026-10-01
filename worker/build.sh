@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # Build del Worker Rust/WASM. Lo usan wrangler ([build] en wrangler.toml),
-# Cloudflare Workers Builds (Build command: bash worker/build.sh o bash build.sh) y GitHub Actions.
+# Cloudflare Workers Builds y GitHub Actions.
 
 set -euo pipefail
 
-# Garantiza que worker-build se ejecute siempre dentro del directorio worker/
-cd "$(dirname "$0")"
+# Entra al directorio donde reside este script (worker/)
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.cargo/bin:/usr/local/cargo/bin:$PATH"
 
-if ! command -v cargo >/dev/null 2>&1; then
-  echo "[build.sh] cargo no encontrado: instalando rustup (minimal)"
+if ! command -v cargo >/dev/null 2>&1 || ! command -v rustup >/dev/null 2>&1; then
+  echo "[build.sh] cargo o rustup no encontrado: instalando rustup"
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --profile minimal --default-toolchain 1.88.0
   # shellcheck disable=SC1091
-  . "$HOME/.cargo/env"
+  [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 fi
 
 rustup target add wasm32-unknown-unknown
