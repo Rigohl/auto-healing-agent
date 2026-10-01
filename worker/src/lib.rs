@@ -102,7 +102,9 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .await
 }
 
-async fn handle_webhook(mut req: Request, env: Env) -> Result<Response> {
+async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let env = ctx.env();
+
     // 1. Autorización. Sin secret configurado el endpoint queda cerrado:
     //    nunca "fail open" en un path que puede abrir PRs.
     match env.secret("WEBHOOK_SECRET") {
