@@ -10,7 +10,25 @@ on:
       - "crates/feature_engine/**"
       - "crates/repair_operators/**"
       - "worker/**"
+  # Sin esto el artefacto WASM solo se construia en el push a main: un PR que
+  # rompia repair_nn_core se enteraba al mergear, no al abrirlo.
+  pull_request:
+    paths:
+      - "crates/repair_nn_wasm/**"
+      - "crates/repair_nn_core/**"
+      - "crates/repair_types/**"
+      - "crates/feature_engine/**"
+      - "crates/repair_operators/**"
+      - "worker/**"
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wasm-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,4 +37,5 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
       - run: cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown

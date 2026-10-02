@@ -64,3 +64,14 @@ impl RepairModel {
         FeatureVector::DIM
     }
 }
+
+// `clippy::new_without_default`: un tipo con `new()` sin `Default` obliga a
+// los consumidores a escribir `RepairModel::new()` en cada punto de uso. El
+// modelo sin pesos es exactamente el estado inicial, asi que `default()` y
+// `new()` coinciden. Ademas reparte el diagnostico que veia
+// fix/ci-fmt-clippy-workspace-9559682751243179716 (PR #9, CLOSED).
+impl Default for RepairModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}

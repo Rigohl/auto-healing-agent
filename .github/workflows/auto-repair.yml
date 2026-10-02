@@ -11,6 +11,13 @@ on:
         required: false
         default: "rust-only"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: auto-repair-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   notice:
     runs-on: ubuntu-latest

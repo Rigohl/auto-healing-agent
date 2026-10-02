@@ -16,6 +16,13 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ---------------- workspace raiz (crates/) ----------------
   workspace-test:
@@ -34,6 +41,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - uses: Swatinem/rust-cache@v2
       # Warnings son errores: el set de crates es pequeno para mantenerlo limpio.
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
@@ -61,6 +69,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "worker -> target"
       # Host: compila todos los targets (tests incluidos).
       - run: cargo check --manifest-path worker/Cargo.toml --all-targets
       # El artefacto que despliega wrangler es un modulo wasm32: probar el

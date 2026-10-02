@@ -3,12 +3,21 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regression-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       # Alineado con ci.yml (item 31): el workspace raiz entero. El worker se
       # cubre en CI por los jobs worker-*; aqui no se duplica.
       - run: cargo test --workspace
