@@ -93,6 +93,10 @@ Criterio de fase: cerrar/mergear PRs sin dejar main no compilable y documentar t
 | 49 | Mergify / CODEOWNERS / dependabot / SECURITY.md | No existen `.mergify.yml`, `CODEOWNERS`, `dependabot.yml`, `SECURITY.md` | **Ausentes; no creados** | P1 no los crea sin pedido humano explicito. Mergify no se introduce (AUTO_MERGE=false). |
 | 50 | `VERCEL_ORG_ID` literal en legacy | `legacy/CONFIG.md` contiene un org-id Vercel literal (era V0, archivada) | **Reportado; no rotado** | No se rota ni elimina en silencio: decision humana. `legacy/` no se ejecuta. |
 | 51 | Job `worker` rojo en main HEAD (`d8212dc`) | check-runs del HEAD: `worker` = failure; `test`/`clippy`/`build`/`hygiene` = success | **Preexistente, de P2; no ocultado** | El worker de main no compila hoy (deuda activa de P2 tras `2f4b023`/`d8212dc`). La nueva CI lo sigue mostrando en rojo: `worker-check`/`worker-test`/`worker-clippy` fallaran hasta que P2 lo arregle. Este PR no lo enmascara ni lo corrige (fuera de alcance). |
+| 52 | `Cargo.lock` sin versionar | Cuatro ramas (`#7`, `#8`, `#9`, `#10`) lo anaden con `--locked` en CI para builds reproducibles | **`main` NO los versiona; se mantiene la decision, documentada** | Un lockfile de esas ramas es anterior a `repair_types::contract` y a `serde_json` como dev-dependency: adoptarlo con `--locked` rompe la resolucion, y sin `--locked` es un archivo que miente sobre las dependencias reales. Ademas fijaria el toolchain `stable` a un instante concreto sin decidirlo explicitamente. Como resolverlo exige `cargo generate-lockfile` contra el arbol actual, es una PR propia con su propio `--locked`, no un efecto secundario de esta unificacion. |
+| 53 | Contrato GitHub ↔ Cloudflare | `feat/contract-github-cloudflare-4476481194757304259` (PR #11, DRAFT) lo define entero, y su seccion 7 afirma HMAC `x-hub-signature-256` con `subtle::constant_time_eq` | **Se integra el modulo y el doc, con la seccion 7 corregida** | El codigo real verifica un secret compartido (`x-webhook-secret`) en tiempo constante con `runtime::security::verify_webhook_secret`; no hay HMAC ni crate `subtle`. Dejar la afirmacion seria un claim falso sobre la seguridad del endpoint. |
+| 54 | Ramas de PR #6–#12 revierten el runtime PART3 | Cuatro ramas modifican `worker/src/lib.rs` para volver al pipeline sincrono V0 | **Se rechaza ese hunk; se acepta el resto de la rama** | Borrarian el Durable Object, la Queue, `#[event(queue)]`, quotas y anti-loop, y cambiarian la comparacion del secret por igualdad simple. Un merge traeria ese rollback por detras del "delta util" que las justificaba. |
+| 55 | `repair_nn_wasm` sin `Default` | `clippy::new_without_default` en `RepairModel::new()` era la razon de que `workspace-clippy` estuviese rojo | **Corregido** con `impl Default for RepairModel` (delta de PR #9) | Un modelo sin pesos es exactamente el estado inicial, asi que `default()` y `new()` coinciden. Sin esto, `workspace-clippy` sigue rojo con `-D warnings`. |
 
 ### Resultados observados del PR #12 (2026-10-02)
 
@@ -108,3 +112,46 @@ Primera ejecucion de la CI real sobre la rama `chore/p1-ci-real-governance`:
 | `worker-clippy` | failure | Mismo motivo. |
 
 Los rojos son deuda preexistente expuesta por la CI real, no regresiones introducidas por el PR #12. Antes de este PR, cuatro de esas seis senales no existian y la unica que si existia (check del worker) ya estaba roja en el HEAD de main (`d8212dc`).
+| 56 | Workers Builds rojo en todos los commits | `failure` en `88ff048`, `abf6566`, `d8212dc`, `f9b2025`, `f7522c8` y en el PR #13 | **Preexistente; no lo introduce esta unificacion** | El check de la integracion de Cloudflare falla en 0s, o sea antes de compilar nada: es configuracion del build en el dashboard, no codigo. El build de GitHub Actions (`worker-check` sobre `wasm32-unknown-unknown --release`) si pasa. Diagnostico y arreglo: accion humana en el dashboard. |
+| 57 | `Kilo Code Review` en rojo | `action_required`: "Review could not start because the account has insufficient credits" | **Externo al repo; no bloquea nada** | Es la cuenta de quien lo dispara, no una propiedad del codigo. Se registra para que el rojo no se lea como un fallo de este PR. |
+
+### Estado tras la unificación del 2026-10-02
+
+Los tres errores que la tabla anterior documenta como deuda preexistente estan
+corregidos (items 51 y 55). La tabla se conserva: describe lo que se vio, que es
+lo que hace el CI observable, y no lo que se cree hoy.
+
+| Check | Antes (run `36963179520`) | Causa | Ahora |
+|-------|--------------------------|-------|-------|
+| `workspace-clippy` | failure | `clippy::new_without_default` en `RepairModel` | corregido (item 55) |
+| `worker-check` | failure | lifetime en `model.rs` + import sin usar | corregido (item 51) |
+| `worker-test` | failure | el mismo error de compilacion | corregido (item 51) |
+| `worker-clippy` | failure | los dos anteriores con `-D warnings` | corregido (item 51) |
+| `workspace-test` | success | — | sin cambios |
+| `workspace-fmt` | failure (advisory) | deuda de formato (item 34) | **sigue en rojo a proposito** |
+
+`workspace-fmt` continua siendo advisory y no se ha tocado: activarlo exige
+`cargo fmt --all` sobre todo el arbol, que no se puede hacer sin toolchain local
+y que es una PR de limpieza con su propia revision del diff.
+
+### Checks del PR #13 (run `36972303464` y `36972303364`)
+
+| Check | Resultado |
+|-------|-----------|
+| `workspace-test` | pass |
+| `workspace-clippy` | pass |
+| `worker-check` | pass (host y `wasm32-unknown-unknown --release`) |
+| `worker-test` | pass |
+| `worker-clippy` | pass |
+| `workspace-fmt` | failure, **advisory** por diseno (item 34) |
+| `verify` (consistency) | pass, 45 claims, 0 FAIL |
+| `validate` (repair-validation) | pass |
+| `Cargo Audit` | pass, raiz y worker/, sin advisories |
+| `Gitleaks` | pass |
+| `Guards de deploy` | pass |
+| `build` (wasm.yml) | pass |
+| `Workers Builds` | failure **preexistente** (item 56) |
+| `Kilo Code Review` | failure **externo** (item 57) |
+
+Los seis checks de `ci.yml` que fallaban en `main` pasan. Los dos unicos rojos
+que quedan no son de codigo y estan registrados como tales.

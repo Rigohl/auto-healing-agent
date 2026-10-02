@@ -3,6 +3,15 @@
 
 extern crate alloc;
 
+pub mod contract;
+
+pub use contract::{
+    compute_idempotency_key, get_error_policy, CandidatePatch, ContractError, ContractErrorCode,
+    DuplicatePRBehavior, DuplicateResponse, ErrorPolicy, GitHubEventType, GitHubPermission,
+    MinimumPermissions, OutboundPRRequest, RepairEvent, VerifiedResult, CONTRACT_VERSION,
+    IDEMPOTENCY_TTL_SECONDS,
+};
+
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -106,7 +115,7 @@ impl Default for Incident {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub struct FailureSignature {
     pub error_code: String,
     pub error_step: String,

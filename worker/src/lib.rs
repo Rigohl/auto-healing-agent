@@ -107,11 +107,12 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     let quota_cfg = QuotaConfig::from_env(&env);
     let anti_cfg = AntiLoopConfig::from_env(&env);
     let qs = format!(
-        "/ingest?repo={}&incident_id={}&signature={}&delivery_id={}&idem_key={}&correlation_id={}&max_attempts_per_incident={}&max_repairs_per_repo={}&max_open_repairs={}&cooldown_seconds={}&daily_budget={}&max_same_incident={}&max_same_signature={}&window_seconds={}",
+        // Sin `delivery_id`: el DO deduplica por `idem_key`, que ya lo
+        // codifica (FNV-1a(delivery_id | signature)). Mandarlo era ruido.
+        "/ingest?repo={}&incident_id={}&signature={}&idem_key={}&correlation_id={}&max_attempts_per_incident={}&max_repairs_per_repo={}&max_open_repairs={}&cooldown_seconds={}&daily_budget={}&max_same_incident={}&max_same_signature={}&window_seconds={}",
         urlencode(&repo),
         urlencode(&incident_id),
         urlencode(&signature),
-        urlencode(&delivery_id),
         urlencode(&idem_key),
         urlencode(&correlation_id),
         quota_cfg.max_attempts_per_incident,

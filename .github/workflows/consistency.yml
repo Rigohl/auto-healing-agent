@@ -1,0 +1,52 @@
+name: Consistency
+
+# ¿El repo hace lo que dice? cargo test comprueba que el codigo que compila
+# behaves; este workflow comprueba las afirmaciones que cruzan tres unidades de
+# build (crates/, worker/ y .github/workflows/) mas los permisos del arbol, que
+# no son codigo Rust y que ningun test ve.
+#
+# NO es la autoridad de VERIFY (eso es ci.yml, docs/GOVERNANCE.md). Es el
+# detector de deriva: si alguien borra el gate, cambia el umbral 0.55, quita
+# `permissions` de un workflow o deja una rama sin integrar, sale aqui antes de
+# que llegue a review.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: consistency-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # fetch-depth: 0 es OBLIGATORIO, no una optimizacion. Con el shallow
+          # default (1) no existen refs de origin y el claim BRANCH_DRIFT no
+          # tendria nada que mirar: pasaria en verde sin comprobar la politica
+          # de una sola rama.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Comprobacion de consistencia y deriva
+        run: python3 scripts/verify_repo.py --out verification_evidence.json
+
+      - name: Subir evidencia
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-evidence
+          path: verification_evidence.json
+          if-no-files-found: warn
+          retention-days: 14

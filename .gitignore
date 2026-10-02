@@ -16,6 +16,15 @@ Cargo.lock.orig
 .env.*
 !.env.example
 
+# Evidencia de scripts/verify_repo.py: es un artefacto generado, se sube como
+# artifact de CI. Versionarlo seria evidencia que nadie regenera y por tanto
+# solo puede quedarse vieja.
+/verification_evidence.json
+
+# Python (scripts/verify_repo.py corre en CI, no se byte-compila en el repo)
+__pycache__/
+*.pyc
+
 # Editors / OS
 .DS_Store
 *.swp

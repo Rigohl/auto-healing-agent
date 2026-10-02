@@ -60,18 +60,26 @@ async fn load_from(env: &Env, key: &str) -> Option<RepairNet> {
     RepairNet::from_weights(&values).ok()
 }
 
+/// ¿Existe la clave en MODEL_KV?
+///
+/// `async fn` y no un closure `|key: &str| async move { .. }` a proposito:
+/// dentro de un closure el lifetime de `key` es independiente del de la future
+/// devuelta, y el compilador rechaza el `await` con "lifetime may not live long
+/// enough" (E0621 en el CI del 2026-10-02, item 51 de DISCREPANCIES). Una
+/// `async fn` de nivel de modulo conecta ambos lifetimes correctamente.
+async fn exists(env: &Env, key: &str) -> bool {
+    match env.kv(KV_BINDING) {
+        Ok(kv) => matches!(kv.get(key).text().await, Ok(Some(_))),
+        Err(_) => false,
+    }
+}
+
 /// GET /model: observabilidad del registro. Declara la politica de fallback y
 /// el estado de cada puntero. No expone los pesos.
 pub async fn report(env: &Env) -> Result<Response> {
-    let probe = |key: &str| async move {
-        match env.kv(KV_BINDING) {
-            Ok(kv) => matches!(kv.get(key).text().await, Ok(Some(_))),
-            Err(_) => false,
-        }
-    };
-    let current = probe(KEY_CURRENT).await;
-    let stable = probe(KEY_STABLE).await;
-    let rollback = probe(KEY_ROLLBACK).await;
+    let current = exists(env, KEY_CURRENT).await;
+    let stable = exists(env, KEY_STABLE).await;
+    let rollback = exists(env, KEY_ROLLBACK).await;
     let (current_s, stable_s, rollback_s, kv_s) = match env.kv(KV_BINDING) {
         Ok(_) => (
             if current { "ok" } else { "missing" },

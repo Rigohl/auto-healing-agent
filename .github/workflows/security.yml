@@ -1,10 +1,80 @@
 name: Security
+
+# Escaneo real de dependencias y de secretos. Nada de esto declara PASS por
+# si solo: `cargo audit` falla ante un advisory con CVE y gitleaks falla ante
+# un token en el arbol o en el historial.
+# `fetch-depth: 0` es obligatorio en gitleaks: con historial shallow solo ve el
+# commit actual y el escaneo es theater.
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Dependencias nuevas aparecem sin push nuestro: un advisory puede nacer el
+    # martes y no volver a tocar main nunca.
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  hygiene:
+  audit:
+    name: Cargo Audit (dependencias Rust)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "No tokens in tree; use GitHub Secrets + wrangler secret"
+      - uses: dtolnay/rust-toolchain@stable
+      # `cargo install cargo-audit` compila ~200 crates y domina el tiempo de
+      # este job; cache-bin reutiliza el binario ya compilado.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: true
+      # Version fijada: `latest` hace que el resultado de VERIFY cambie sin que
+      # cambie el repo. Si se actualiza, es un commit, no un despliegue.
+      - name: Instalar cargo-audit 0.22.1
+        run: cargo install cargo-audit --version 0.22.1 --locked
+      # El repo NO versiona Cargo.lock (ver DISCREPANCIES, item 36). cargo audit
+      # necesita resolver el arbol, asi que el lock se genera aqui contra los
+      # indices de crates.io del momento: el resultado es "las dependencias que
+      # resolveria hoy el toolchain estable", no un lock congelado.
+      - name: Generar lock del workspace raiz
+        run: cargo generate-lockfile
+      - name: Auditar el workspace raiz
+        run: cargo audit
+      # worker/ es un [workspace] propio (DISCREPANCIES item 35): `cargo audit`
+      # sin --file no ve sus dependencias. Ojo: cargo-audit 0.22.1 NO acepta
+      # `--manifest-path` (no es cargo); el flag es `--file`, y apunta al lock.
+      - name: Generar lock de worker/
+        run: cargo generate-lockfile --manifest-path worker/Cargo.toml
+      - name: Auditar worker/
+        run: cargo audit --file worker/Cargo.lock
+
+  gitleaks:
+    name: Gitleaks (secretos en el arbol y el historial)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          # El propio token del workflow: es lo unico que la action necesita y
+          # no concede acceso a la organizacion.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  placeholders:
+    name: Guards de deploy (preflight y permisos)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Una sola implementacion de la logica de Preflight: este script, no una
+      # copia del `sed` del paso Preflight de deploy.yml. Si divergieran, el
+      # job passesaria mientras el deploy se cae, que es peor que no tenerlo.
+      - name: scripts/validate-preflight.sh
+        run: bash scripts/validate-preflight.sh

@@ -81,15 +81,17 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 
 | # | Gap |
 |---|------|
-| 25 | ~20 de las 64 entradas de `FeatureVector` están inertes (0.0). Sin extractor AST/CFG. |
+| 25 | **Parcialmente cerrado por el encoder V1**: los 64 slots llevan señal explícita y un test lo comprueba sobre 1000 muestras sintéticas. Lo que sigue faltando es la señal de AST/CFG, que sigue sin extraerse. |
 | — | El webhook ya corre `Incident → features → NN → gate` y falla cerrado sin secret. Falta: abrir PR efímera, persistir `RepairCase`, y `apply()` sigue sin generar diff real. |
 | 9, 10 | Sin bindings R2/D1/DO, sin driver Rust de MongoDB, sin conector Mem0. Diseñado, no implementado. |
 | 5, 6, 22 | Sin pesos reales: no hay `scripts/train` ni `scripts/export_weights`; training y promoción de checkpoint siguen diferidos. |
 | — | `apply()` tiene un brazo por operador y devuelve `CandidatePatch` (files + steps), pero no genera diff ni escribe ficheros. |
 | — | E2E completo no verde (ver `docs/E2E_CHECKLIST.md`). |
-| — | Sin `Cargo.lock` (ítem 7): las versiones resuelven en cada build de CI. |
-| 34 | Parcial: clippy con `-D warnings` activo; falta `cargo fmt --check` (necesita toolchain local). |
+| 7, 52 | Sin `Cargo.lock`, **por decisión** (ítem 52): las versiones resuelven en cada build de CI. Cuatro ramas pidieron versionarlos; se explica en DISCREPANCIES por qué no se adoptan tal cual. |
+| 34 | Parcial: clippy con `-D warnings` activo y **verde** (los seis checks de `ci.yml` pasan en el PR #13); falta `cargo fmt --check` bloqueante, que necesita toolchain local para aplicar el formato. |
+| 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`) y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están corregidos. |
 | 41 | **Deploy bloqueado**: sin `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` y sin toolchain Rust en el entorno. `wrangler.toml` conserva `REPLACE_WITH_KV_NAMESPACE_ID`. **Nada desplegado.** Vía lista en `.github/workflows/deploy.yml` (manual + environment `production` + preflight + smoke test). |
+| 56 | Workers Builds rojo desde al menos `f7522c8`: falla en 0s, o sea configuracion del build en el dashboard de Cloudflare, no codigo. El build de GitHub Actions sobre `wasm32-unknown-unknown --release` pasa. Arreglo: accion humana en el dashboard. |
 | — | Objetivo de entrenamiento sin λ fijados: la fórmula loss/reward está documentada en PART2 pero no implementada, y nada calcula `reward` en el repo. |
 
 ## Decisiones clave
