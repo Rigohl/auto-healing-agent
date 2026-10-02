@@ -5,7 +5,16 @@
 # La imagen de Workers Builds no lista Rust entre sus herramientas: si falta
 # `cargo`, se instala rustup en modo minimal. El toolchain exacto lo fija
 # ../rust-toolchain.toml (stable + wasm32-unknown-unknown).
+#
+# worker-build --release (y cargo) buscan Cargo.toml en el directorio actual.
+# Este script tiene invocadores con CWD distintos: worker/ (wrangler [build] y
+# Workers Builds con Root directory = worker) y la raiz del repo (build.sh de
+# la raiz delega aqui cuando Workers Builds corre con Root directory = raiz).
+# Fijar el CWD al directorio del propio script hace que cualquier invocador
+# funcione sin depender de donde este parado.
 set -euo pipefail
+
+cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 export PATH="$HOME/.cargo/bin:$PATH"
 
