@@ -9,12 +9,39 @@ MIN_CONFIDENCE=0.55
 MAX_RISK=0.45
 ```
 
-**Fuente de verdad de umbrales**: este archivo (0.55 / 0.45).
+**Fuente de verdad de umbrales**: este archivo (0.55 / 0.45). El runtime los
+replica en `worker/src/worker/mod.rs` y `scripts/verify_repo.py` comprueba que
+no se separen (claim `GATE_THRESHOLDS_RUNTIME` / `GATE_THRESHOLDS_DOCS`).
 
 Cadena de autoridad:
 ```
 POLICY → PATCH VALIDATION → CI → VERIFY → PUSH AUTHORIZATION → main
 ```
+
+## Matriz de transiciones (auditada 2026-10-02)
+
+De donde viene la matriz: `jules-5813573718571814256-249ce1c3` (PR #7). Se
+integra aqui sin sustituir las secciones ya auditadas de este archivo, que se
+verificaron contra la API de GitHub y que la rama habia borrado.
+
+| Transicion | Actor | Autoridad | Input | Output | Evidencia | Permiso | Fallback |
+|---|---|---|---|---|---|---|---|
+| **INCIDENT → SIGNATURE** | Edge Worker | `repair_types::FailureSignature` | `Incident` | firma + fingerprint | hash FNV-1a no criptografico | isolate de solo lectura | descartar incidente |
+| **SIGNATURE → FEATURES** | Edge Worker | `feature_engine::extract` (V1) | `Incident` + firma | `FeatureVector[64]` | invariancia verificada en test | isolate de solo lectura | 64 ceros (fail-closed) |
+| **FEATURES → ACTION** | Edge Worker | `RepairNet` (WEIGHT_COUNT = 2863) | `FeatureVector` | `RepairAction` (op, conf, risk) | log del isolate | WASM en el propio Worker | `model/stable` → `model/current` → red de ceros declarada |
+| **ACTION → GATE** | Edge Worker | `repair_operators::gate` | `RepairAction` | allow / deny + `AgentStatus` | `PipelineReport` | minimo: sin escritura | `BLOCKED` + `NeedsHuman` |
+| **ACTION → PATCH** | Operadores deterministas | `repair_operators::apply` | `RepairAction` | `CandidatePatch` | allowlist de operadores | `contents: read` | escalar a humano (advisory) |
+| **INCIDENT → ESTADO** | Durable Object | `IncidentState` (SQLite) | repo + incidente | veredicto dedup/quota/anti-loop | estado transaccional | binding `INCIDENT_STATE` | 503 `state_store_unavailable` |
+| **VERDICT → COLA** | Edge Worker | Queue `REPAIR_QUEUE` | veredicto `queued` | `QueueTask` | 202 + `correlation_id` | productor de la cola | 503 `queue_unavailable` |
+| **COLA → PATCH** | Consumidor asincrono | `queue_consumer` | `QueueTask` | decision + verificacion | `max_retries=3` + DLQ | consumidor | DLQ y registro en el DO |
+| **GATE → PR** | GitHub App / bot | fuera de este repo hoy | `CandidatePatch` | Pull Request | diff unificado obligatorio | `contents: write`, `pull_requests: write` | **BLOCKED**: sin generador de diff no hay PR (`docs/CONTRACT.md` §3) |
+| **PR → VERIFY** | GitHub Actions | autoridad de VERIFY | commit de la PR | PASS / FAIL | logs de `ci.yml` | `actions: read`, `checks: read` | CI rojo bloquea el merge |
+| **VERIFY → main** | Persona maintainer | `AUTO_MERGE=false` | verdict + CI | commit | SHA en `main` | admin del repo | `git revert` |
+| **main → DEPLOY** | `deploy.yml` | environment `production` | commit de `main` | Worker desplegado | log de wrangler + smoke test | `production` + required reviewers |wrangler falla y no publica |
+
+La fila **GATE → PR** esta vacia a proposito: hoy el sistema no abre PRs.
+`docs/CONTRACT.md` marca el generador de diff como P2 `[BLOCKED]`, y sin diff
+unificado una PR seria ruido, no un arreglo.
 
 ## Lógica de gate (resumen)
 
@@ -22,8 +49,14 @@ POLICY → PATCH VALIDATION → CI → VERIFY → PUSH AUTHORIZATION → main
 if confidence < MIN_CONFIDENCE → BLOCK (LowConfidence)
 if risk > MAX_RISK             → BLOCK (HighRisk)
 if operator_id desconocido     → BLOCK
+if WEBHOOK_SECRET no configurado → 503 (endpoint cerrado, nunca fail-open)
+if WEBHOOK_SECRET incorrecto     → 401
 else                           → ALLOW
 ```
+
+La comparacion del secret es en tiempo constante
+(`runtime::security::verify_webhook_secret`). Un secret compartido no es una
+firma: `x-hub-signature-256` no se verifica y `docs/CONTRACT.md` §7 no lo afirma.
 
 La NN solo propone. Governance + CI/VERIFY deciden.
 
@@ -47,6 +80,11 @@ GitHub Actions es la autoridad de VERIFY, concretamente los jobs de
 | `worker-check` | `cargo check --manifest-path worker/Cargo.toml --all-targets` y `--target wasm32-unknown-unknown --release` | si |
 | `worker-test` | `cargo test --manifest-path worker/Cargo.toml` | si |
 | `worker-clippy` | `cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings` | si |
+
+Workflows que apoyan a VERIFY pero **no** son su autoridad, y por eso no deben
+entrar en required checks: `consistency.yml` (deriva entre docs, codigo y
+workflows), `repair-validation.yml` (mismo gate de PR, mas explicito),
+`security.yml` (audit + gitleaks), `wasm.yml`, `regression.yml`.
 
 `worker/` tiene su propio `[workspace]` (item 35): ningun comando
 `--workspace`/`--all` del manifiesto raiz lo compila. Por eso existen los jobs

@@ -10,7 +10,9 @@
 | [PROMPT_PAD.md](PROMPT_PAD.md) | Contrato de implementación (fases, reglas) |
 | [DISCREPANCIES.md](DISCREPANCIES.md) | Decisiones repo vs Notion |
 | [INVENTORY.md](INVENTORY.md) | Estado real del árbol |
-| [GOVERNANCE.md](GOVERNANCE.md) | Umbrales 0.55 / 0.45 + flags |
+| [GOVERNANCE.md](GOVERNANCE.md) | Umbrales 0.55 / 0.45, flags y matriz de transiciones |
+| [CONTRACT.md](CONTRACT.md) | Contrato GitHub ↔ Cloudflare v1: eventos, idempotencia, matriz de errores |
+| [BRANCH_POLICY.md](BRANCH_POLICY.md) | Por qué solo `main` persiste y qué se hizo con cada rama |
 | [NO_LLM_POLICY.md](NO_LLM_POLICY.md) | Por qué no hay LLM ni fallback híbrido |
 | [E2E_CHECKLIST.md](E2E_CHECKLIST.md) | Checklist FASE 9 + qué está verde hoy |
 | [REFERENCES.md](REFERENCES.md) | Enlaces oficiales + glosario del código |
@@ -28,8 +30,16 @@
 5. Regla Context7: verificar API antes de escribir código.
 
 ## Estado resumido
-- crates: types / feature_engine / nn_core / nn_wasm / operators → ✅
-- worker → esqueleto
-- model/ → placeholders
+- crates: types (+ `contract`) / feature_engine (V1) / nn_core / nn_wasm / operators → ✅
+- worker → runtime PART3async: webhook fail-closed → DO (dedup, quota, anti-loop) → Queue → 202
+- model/ → placeholders (`weights: null`; no hay entrenamiento todavia)
+- docs/verification_evidence.json → artefacto de CI, no versionado
 - legacy/ → archivado (no ejecutar)
 - Mem0 → pendiente de conector
+
+## Comprobaciones ejecutables
+
+| Script | Qué guarantee |
+|---------|---------------|
+| `scripts/verify_repo.py` | Deriva entre docs, codigo, workflows y refs de git (45 claims) |
+| `scripts/validate-preflight.sh` | Logica de Preflight del deploy y permisos de los scripts de build |

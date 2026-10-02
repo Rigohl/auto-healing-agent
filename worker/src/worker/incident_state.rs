@@ -23,7 +23,10 @@ use worker::*;
 use crate::runtime::{
     anti_loop::{self, AntiLoopConfig, LoopSignals},
     now_ms,
-    quota::{self, QuotaConfig, QuotaUsage, QuotaVerdict},
+    // Sin `self`: este archivo usa QuotaConfig/QuotaUsage/QuotaVerdict por
+    // nombre, nunca `quota::algo`. El `self` sin usar era warning, y
+    // `worker-clippy` corre con -D warnings (item 51 de DISCREPANCIES).
+    quota::{QuotaConfig, QuotaUsage, QuotaVerdict},
 };
 
 pub const STATE_QUEUED: &str = "queued";
