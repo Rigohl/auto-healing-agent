@@ -93,3 +93,18 @@ Criterio de fase: cerrar/mergear PRs sin dejar main no compilable y documentar t
 | 49 | Mergify / CODEOWNERS / dependabot / SECURITY.md | No existen `.mergify.yml`, `CODEOWNERS`, `dependabot.yml`, `SECURITY.md` | **Ausentes; no creados** | P1 no los crea sin pedido humano explicito. Mergify no se introduce (AUTO_MERGE=false). |
 | 50 | `VERCEL_ORG_ID` literal en legacy | `legacy/CONFIG.md` contiene un org-id Vercel literal (era V0, archivada) | **Reportado; no rotado** | No se rota ni elimina en silencio: decision humana. `legacy/` no se ejecuta. |
 | 51 | Job `worker` rojo en main HEAD (`d8212dc`) | check-runs del HEAD: `worker` = failure; `test`/`clippy`/`build`/`hygiene` = success | **Preexistente, de P2; no ocultado** | El worker de main no compila hoy (deuda activa de P2 tras `2f4b023`/`d8212dc`). La nueva CI lo sigue mostrando en rojo: `worker-check`/`worker-test`/`worker-clippy` fallaran hasta que P2 lo arregle. Este PR no lo enmascara ni lo corrige (fuera de alcance). |
+
+### Resultados observados del PR #12 (2026-10-02)
+
+Primera ejecucion de la CI real sobre la rama `chore/p1-ci-real-governance`:
+
+| Check | Resultado | Lectura |
+|-------|-----------|---------|
+| `workspace-test` | success | El workspace raiz compila y pasa tests. |
+| `workspace-clippy` | failure | `repair_nn_wasm` nunca paso por clippy `-D warnings`: el listado `-p` lo exclia. Deuda preexistente ahora visible; arreglarla es edicion de `crates/**` (P2/P4), fuera del alcance de P1. |
+| `workspace-fmt` | failure (advisory) | Esperado: item 46. Deuda de formato real, no bloquea. |
+| `worker-check` | failure | El worker de main no compila (item 51): deuda activa de P2. |
+| `worker-test` | failure | Mismo motivo (no compila, no llega a ejecutar tests). |
+| `worker-clippy` | failure | Mismo motivo. |
+
+Los rojos son deuda preexistente expuesta por la CI real, no regresiones introducidas por el PR #12. Antes de este PR, cuatro de esas seis senales no existian y la unica que si existia (check del worker) ya estaba roja en el HEAD de main (`d8212dc`).
