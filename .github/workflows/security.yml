@@ -48,11 +48,12 @@ jobs:
       - name: Auditar el workspace raiz
         run: cargo audit
       # worker/ es un [workspace] propio (DISCREPANCIES item 35): `cargo audit`
-      # sin --manifest-path no ve sus dependencias.
+      # sin --file no ve sus dependencias. Ojo: cargo-audit 0.22.1 NO acepta
+      # `--manifest-path` (no es cargo); el flag es `--file`, y apunta al lock.
       - name: Generar lock de worker/
         run: cargo generate-lockfile --manifest-path worker/Cargo.toml
       - name: Auditar worker/
-        run: cargo audit --manifest-path worker/Cargo.toml
+        run: cargo audit --file worker/Cargo.lock
 
   gitleaks:
     name: Gitleaks (secretos en el arbol y el historial)

@@ -139,7 +139,10 @@ struct IngestQuery {
     #[serde(default)] repo: String,
     #[serde(default)] incident_id: String,
     #[serde(default)] signature: String,
-    #[serde(default)] delivery_id: String,
+    // Sin `delivery_id`: la deduplicacion va por `idem_key`, que el Worker
+    // calcula como FNV-1a(delivery_id | signature). Reenviarlo seria mandar un
+    // parametro que nadie lee, que es peor que no mandarlo. El valor sigue
+    //viandonos por `idem_key` (docs/PART3_CLOUDFLARE_RUNTIME.md).
     #[serde(default)] idem_key: String,
     #[serde(default)] correlation_id: String,
     #[serde(default)] max_attempts_per_incident: String,
@@ -191,9 +194,11 @@ struct CountRow {
     count: i64,
 }
 
+/// Solo `attempts`: `id` estaba en el SELECT pero nadie lo leia, y con
+/// `-D warnings` eso es un error, no una nota. Si hace falta para depurar, que
+/// salga en el log de transiciones, no en una fila deserializada al vacio.
 #[derive(Debug, Deserialize)]
 struct IncidentRow {
-    #[serde(default)] id: String,
     #[serde(default)] attempts: i64,
 }
 
@@ -401,7 +406,7 @@ impl IncidentState {
         let row: Option<IncidentRow> = self
             .sql
             .exec(
-                "SELECT id, attempts FROM incidents WHERE correlation_id = ?",
+                "SELECT attempts FROM incidents WHERE correlation_id = ?",
                 vec![SqlStorageValue::from(q.correlation_id.as_str())],
             )?
             .to_array()?
