@@ -112,6 +112,8 @@ Primera ejecucion de la CI real sobre la rama `chore/p1-ci-real-governance`:
 | `worker-clippy` | failure | Mismo motivo. |
 
 Los rojos son deuda preexistente expuesta por la CI real, no regresiones introducidas por el PR #12. Antes de este PR, cuatro de esas seis senales no existian y la unica que si existia (check del worker) ya estaba roja en el HEAD de main (`d8212dc`).
+| 56 | Workers Builds rojo en todos los commits | `failure` en `88ff048`, `abf6566`, `d8212dc`, `f9b2025`, `f7522c8` y en el PR #13 | **Preexistente; no lo introduce esta unificacion** | El check de la integracion de Cloudflare falla en 0s, o sea antes de compilar nada: es configuracion del build en el dashboard, no codigo. El build de GitHub Actions (`worker-check` sobre `wasm32-unknown-unknown --release`) si pasa. Diagnostico y arreglo: accion humana en el dashboard. |
+| 57 | `Kilo Code Review` en rojo | `action_required`: "Review could not start because the account has insufficient credits" | **Externo al repo; no bloquea nada** | Es la cuenta de quien lo dispara, no una propiedad del codigo. Se registra para que el rojo no se lea como un fallo de este PR. |
 
 ### Estado tras la unificación del 2026-10-02
 
@@ -131,3 +133,25 @@ lo que hace el CI observable, y no lo que se cree hoy.
 `workspace-fmt` continua siendo advisory y no se ha tocado: activarlo exige
 `cargo fmt --all` sobre todo el arbol, que no se puede hacer sin toolchain local
 y que es una PR de limpieza con su propia revision del diff.
+
+### Checks del PR #13 (run `36972303464` y `36972303364`)
+
+| Check | Resultado |
+|-------|-----------|
+| `workspace-test` | pass |
+| `workspace-clippy` | pass |
+| `worker-check` | pass (host y `wasm32-unknown-unknown --release`) |
+| `worker-test` | pass |
+| `worker-clippy` | pass |
+| `workspace-fmt` | failure, **advisory** por diseno (item 34) |
+| `verify` (consistency) | pass, 45 claims, 0 FAIL |
+| `validate` (repair-validation) | pass |
+| `Cargo Audit` | pass, raiz y worker/, sin advisories |
+| `Gitleaks` | pass |
+| `Guards de deploy` | pass |
+| `build` (wasm.yml) | pass |
+| `Workers Builds` | failure **preexistente** (item 56) |
+| `Kilo Code Review` | failure **externo** (item 57) |
+
+Los seis checks de `ci.yml` que fallaban en `main` pasan. Los dos unicos rojos
+que quedan no son de codigo y estan registrados como tales.

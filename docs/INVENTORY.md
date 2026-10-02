@@ -88,9 +88,10 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 | — | `apply()` tiene un brazo por operador y devuelve `CandidatePatch` (files + steps), pero no genera diff ni escribe ficheros. |
 | — | E2E completo no verde (ver `docs/E2E_CHECKLIST.md`). |
 | 7, 52 | Sin `Cargo.lock`, **por decisión** (ítem 52): las versiones resuelven en cada build de CI. Cuatro ramas pidieron versionarlos; se explica en DISCREPANCIES por qué no se adoptan tal cual. |
-| 34 | Parcial: clippy con `-D warnings` activo; falta `cargo fmt --check` (necesita toolchain local). |
+| 34 | Parcial: clippy con `-D warnings` activo y **verde** (los seis checks de `ci.yml` pasan en el PR #13); falta `cargo fmt --check` bloqueante, que necesita toolchain local para aplicar el formato. |
 | 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`) y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están corregidos. |
 | 41 | **Deploy bloqueado**: sin `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` y sin toolchain Rust en el entorno. `wrangler.toml` conserva `REPLACE_WITH_KV_NAMESPACE_ID`. **Nada desplegado.** Vía lista en `.github/workflows/deploy.yml` (manual + environment `production` + preflight + smoke test). |
+| 56 | Workers Builds rojo desde al menos `f7522c8`: falla en 0s, o sea configuracion del build en el dashboard de Cloudflare, no codigo. El build de GitHub Actions sobre `wasm32-unknown-unknown --release` pasa. Arreglo: accion humana en el dashboard. |
 | — | Objetivo de entrenamiento sin λ fijados: la fórmula loss/reward está documentada en PART2 pero no implementada, y nada calcula `reward` en el repo. |
 
 ## Decisiones clave
