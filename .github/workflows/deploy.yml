@@ -42,7 +42,10 @@ jobs:
             fi
           done
           # Un id de KV placeholder no despliega: fallaría tarde y confuso.
-          if grep -q "REPLACE_WITH" worker/wrangler.toml; then
+          # Se filtran los comentarios (absorbido del PR #8): documentar
+          # REPLACE_WITH en un comentario no debe bloquear el deploy
+          # (falso positivo del P0 reportado en el historial del proyecto).
+          if sed -e 's/#.*//' worker/wrangler.toml | grep -q "REPLACE_WITH"; then
             echo "::error::worker/wrangler.toml tiene REPLACE_WITH_*; rellena los ids reales"
             exit 1
           fi

@@ -9,4 +9,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators
+      # Alineado con ci.yml (item 31): el workspace raiz entero. El worker se
+      # cubre en CI por los jobs worker-*; aqui no se duplica.
+      - run: cargo test --workspace
