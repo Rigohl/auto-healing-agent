@@ -74,3 +74,22 @@ Sin resolver:
 - [ ] Ítems 9, 10, 21: R2/D1/DO, driver Rust de MongoDB y conector Mem0 siguen sin implementar
 - [ ] Sin `Cargo.lock` (ítem 7): las versiones resuelven en cada build de CI
 - [ ] Pipeline no cableado: el webhook descarta el body; `apply()` no genera diff; `wrangler.toml` sin `[wasm_modules]` y con `REPLACE_WITH_KV_NAMESPACE_ID`
+
+---
+
+## Reconciliacion P1: CI real, gobernanza y PRs #6-#9 (2026-10-02)
+
+Criterio de fase: cerrar/mergear PRs sin dejar main no compilable y documentar toda decision de alcance.
+
+| # | Elemento | Estado encontrado | Decision | Justificacion |
+|---|----------|-------------------|----------|---------------|
+| 42 | PRs #6-#9 | 4 drafts abiertos, todos `mergeable_state: dirty`, basados en `f7522c83` (era worker 0.5 sincrona) | **Cerrados como superados** (ramas conservadas) | main absorbio sus cambios nucleo y evoluciono al runtime PART3 async (`c5fadd4`: Durable Object SQLite, Queues+DLQ, quotas, anti-loop; `d8212dc`: migracion a workers-rs 0.8.7). Mergear cualquiera regresaria el runtime: p.ej. el #8 eliminaria los bindings de Durable Objects y Queues de `worker/wrangler.toml` (-26 lineas). Analisis por PR en el comentario de cierre de cada PR. |
+| 43 | `worker = "0.8.x"` | main: `worker = { version = "0.8", features = ["queue"] }` -> resuelve 0.8.7 (`max_stable_version` de crates.io, verificado 2026-10-02) | **Ya resuelto; sin cambio en este PR** | La subida 0.5->0.8.x que proponian #6/#9 ya esta en main, con el feature `queue` que el runtime PART3 necesita. No se edito `worker/Cargo.toml`. |
+| 44 | Excepcion de alcance Fase 0 | El alcance nominal de P1 prohibe `worker/src/**` y `model/**`; los PRs #6-#9 los modifican | **Excepcion autorizada solo para merge/cierre; NO ejercida para editar** | Se decidio cerrar sin mergear: ningun fichero de `worker/**`, `crates/**` ni `model/**` fue editado por P1. Ediciones del worker = P2; promocion de `model/` = P4. |
+| 45 | CI que no cubria el workspace ni el worker completo | `ci.yml`: listado `-p` selectivo (excluia `repair_nn_wasm`), worker solo `check`, sin fmt, sin test/clippy del worker | **Reescrito con 6 jobs** | `workspace-test`/`workspace-clippy`/`workspace-fmt` + `worker-check`/`worker-test`/`worker-clippy` con `--manifest-path worker/Cargo.toml` (su `[workspace]` propio lo vuelve inalcanzable desde el raiz, item 35). `regression.yml` alineado a `--workspace`. |
+| 46 | `cargo fmt` ausente (item 34) | Deuda de formato; activar `--check` dejaria CI rojo sin toolchain local para corregir | **Check real, advisory hoy** | `workspace-fmt` ejecuta `cargo fmt --all -- --check` con `continue-on-error`: resultado visible y veridico (rojo mientras exista deuda), no bloquea. Al ejecutar `cargo fmt --all` sobre el arbol: quitar `continue-on-error` y anadirlo a required checks. Nunca verde falso. |
+| 47 | Falso positivo del preflight REPLACE_WITH | `deploy.yml` grepea `worker/wrangler.toml` completo, comentarios incluidos | **Filtro de comentarios (absorbido de #8)** | Un comentario que documente el placeholder bloquearia el unico camino de deploy (P0 reportado en el historial). Ahora `sed -e 's/#.*//'` antes del grep. |
+| 48 | Branch protection / rulesets | `branches/main/protection` -> 401 sin admin; `rulesets` -> `[]`; `main.protected = false` | **UNVERIFIABLE/ausente; no se afirma enforcement** | Ningun check es obligatorio hoy a nivel de plataforma. Required checks propuestos con nombres exactos en GOVERNANCE.md; activarlos es accion manual humana. |
+| 49 | Mergify / CODEOWNERS / dependabot / SECURITY.md | No existen `.mergify.yml`, `CODEOWNERS`, `dependabot.yml`, `SECURITY.md` | **Ausentes; no creados** | P1 no los crea sin pedido humano explicito. Mergify no se introduce (AUTO_MERGE=false). |
+| 50 | `VERCEL_ORG_ID` literal en legacy | `legacy/CONFIG.md` contiene un org-id Vercel literal (era V0, archivada) | **Reportado; no rotado** | No se rota ni elimina en silencio: decision humana. `legacy/` no se ejecuta. |
+| 51 | Job `worker` rojo en main HEAD (`d8212dc`) | check-runs del HEAD: `worker` = failure; `test`/`clippy`/`build`/`hygiene` = success | **Preexistente, de P2; no ocultado** | El worker de main no compila hoy (deuda activa de P2 tras `2f4b023`/`d8212dc`). La nueva CI lo sigue mostrando en rojo: `worker-check`/`worker-test`/`worker-clippy` fallaran hasta que P2 lo arregle. Este PR no lo enmascara ni lo corrige (fuera de alcance). |

@@ -1,42 +1,85 @@
 name: CI
+
+# VERIFY real (docs/GOVERNANCE.md, "Autoridad de VERIFY"). Este workflow ES la
+# autoridad de VERIFY del repo y cubre DOS unidades de build separadas:
+#   1. El workspace raiz (crates/): los comandos --workspace lo cubren entero.
+#   2. worker/: paquete de Cloudflare con su PROPIO [workspace] (DISCREPANCIES
+#      item 35). Ningun comando del raiz lo compila: solo
+#      --manifest-path worker/Cargo.toml lo alcanza. Sin los jobs worker-*
+#      romper el worker dejaria CI en verde.
+# No se declara PASS sin estos checks. Branch protection NO los exige hoy
+# (ver GOVERNANCE.md, "Merge"): la exigencia es disciplinaria hasta que se
+# activen los required checks.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
 jobs:
-  test:
+  # ---------------- workspace raiz (crates/) ----------------
+  workspace-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - run: cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators
+      # --workspace: los 5 crates del raiz, incluido repair_nn_wasm (que el
+      # listado -p anterior exclia). El worker NO es miembro: jobs worker-*.
+      - run: cargo test --workspace
 
-  # worker/ is deliberately outside the Cargo workspace (separate Cloudflare
-  # package built by worker-build), so no workspace command compiles it.
-  # Without this job worker/src/lib.rs could break with CI green.
-  worker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - run: cargo check --manifest-path worker/Cargo.toml --all-targets
-      # The deployable artifact is a wasm32 module. Checking it for the host
-      # target does not prove it builds for Cloudflare, which is what
-      # worker-build does at deploy time.
-      - run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
-
-  clippy:
+  workspace-clippy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      # Warnings are errors: the crate set is small enough to keep clean.
-      # rustfmt is still not enforced (DISCREPANCIES.md 34).
-      - run: cargo clippy -p repair_types -p feature_engine -p repair_nn_core -p repair_operators --all-targets -- -D warnings
+      # Warnings son errores: el set de crates es pequeno para mantenerlo limpio.
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # Transicion honesta (DISCREPANCIES item 34): el arbol todavia no esta
+  # formateado con rustfmt, asi que --check es hoy advisory: se ejecuta de
+  # verdad y su resultado es visible (rojo = deuda real), pero no bloquea.
+  # Cuando `cargo fmt --all` se ejecute sobre el arbol: quitar
+  # continue-on-error y anadir este check a los required checks de
+  # GOVERNANCE.md. Nunca verde falso.
+  workspace-fmt:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  # ---------------- worker (artefacto desplegable) ----------------
+  worker-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      # Host: compila todos los targets (tests incluidos).
+      - run: cargo check --manifest-path worker/Cargo.toml --all-targets
+      # El artefacto que despliega wrangler es un modulo wasm32: probar el
+      # host no prueba el deploy; esto es lo que romperia el build de
+      # Cloudflare en produccion.
+      - run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
+
+  worker-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --manifest-path worker/Cargo.toml
+
+  worker-clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings
