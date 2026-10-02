@@ -7,8 +7,15 @@
 //!
 //! Generador: LCG de 64 bits con semilla explicita, asi que la salida es
 //! reproducible byte a byte y el test no depende de `rand`.
+//!
+//! `use alloc::string::String` es obligatorio aunque no se use `String::from`:
+//! el worker compila este crate con `default-features = false`, o sea en
+//! `no_std`, donde `String` no esta en el prelude. Los jobs `workspace-*` de
+//! CI compilan con `std` y no lo detectan; solo `worker-check` lo ve
+//! (DISCREPANCIES item 35: son dos unidades de build, no una).
 
 use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
 use repair_types::{FailureSignature, Incident};
 
