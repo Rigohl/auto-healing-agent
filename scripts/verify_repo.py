@@ -653,8 +653,15 @@ def check_branch_drift(r: Report) -> None:
             ).stdout.strip()
         except (subprocess.SubprocessError, OSError):
             head_ref = ""
+    # `main` nunca es efimera, aunque HEAD este en ella: si no, un push a main
+    # marcaria origin/main como "la rama bajo revision" y dejaria el claim en
+    # FAIL con el repo exactamente como debe estar.
     ephemeral = [
-        b for b in branches if head_ref and b in (f"origin/{head_ref}", head_ref)
+        b
+        for b in branches
+        if head_ref
+        and head_ref not in ("main", "master")
+        and b in (f"origin/{head_ref}", head_ref)
     ]
     persistent = sorted(b for b in branches if b not in ephemeral)
 
