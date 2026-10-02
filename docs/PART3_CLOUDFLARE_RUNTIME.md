@@ -290,3 +290,59 @@ Bloqueado por, en orden:
 5. Verificación de compilación pendiente: el job `worker` de CI debe estar verde en `c5fadd48` (y en el commit de este doc).
 
 Nada de esto se simula ni se declara. Cuando existan credenciales reales y CI verde, el estado pasa a **READY** y `npx wrangler deploy` (o el `workflow_dispatch` de `deploy.yml`) produce la evidencia real (URL pública + `wrangler deployments list`).
+
+
+---
+
+## DevOps: matriz build/deploy y pipeline de staging (2026-10-02)
+
+> Sección añadida por el PR de DevOps (instrucción explícita del dueño:
+> "PR devops para el repo"). Fuentes oficiales consultadas el 2026-10-02:
+> Workers Builds – Configuration
+> (https://developers.cloudflare.com/workers/ci-cd/builds/configuration/),
+> Build branches (https://developers.cloudflare.com/workers/ci-cd/builds/build-branches/),
+> Wrangler – Environments (https://developers.cloudflare.com/workers/wrangler/environments/).
+
+### Matriz de rutas build → deploy
+
+| Ruta | Trigger | Build | Deploy | Estado |
+|---|---|---|---|---|
+| Workers Builds (dashboard) | push a main / PR | `build.sh` raíz → `worker/build.sh` (`worker-build --release`) | `npx wrangler deploy` | Rojo en 0s: configuración del dashboard, no del código (ítem 56) |
+| `deploy.yml` | `workflow_dispatch` | wrangler (working-directory `worker`) | `npx wrangler deploy` | No verificado sin credenciales (GOVERNANCE: sin auto-deploy) |
+| `deploy-staging.yml` (nuevo) | `workflow_dispatch` | ídem | `npx wrangler deploy --env staging` | No verificado sin credenciales |
+
+Ambos scripts de build son CWD-independientes (PR #14): Workers Builds funciona
+con Root directory = raíz del repo **o** `worker`. La recomendación se mantiene
+`worker`: ahí viven `Cargo.toml`, `wrangler.toml` y `build.sh`, y el shim
+`build/worker/shim.mjs` se resuelve sin depender del `cd` del envoltorio.
+
+### Workers Builds: settings exactos recomendados
+
+- Root directory: `worker`
+- Build command: `bash build.sh` (el default `npx wrangler deploy` no sirve
+  para workers-rs: el build lo hace `worker-build`)
+- Deploy command: `npx wrangler deploy`
+- Branch de producción: `main`; previews automáticos en PRs (Build branches).
+
+### Runbook de staging
+
+1. Crear en Cloudflare las colas que referencia `[env.staging]` de
+   `worker/wrangler.toml`: `auto-healing-repairs-staging` y
+   `auto-healing-repairs-staging-dlq` (el deploy de un consumer no crea colas).
+2. GitHub Settings → Environments → `staging`: añadir secrets
+   `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `WEBHOOK_SECRET`
+   y la var `WORKER_URL_STAGING` (URL de `auto-healing-agent-staging`).
+3. Actions → "Deploy Worker (Staging)" → Run workflow (input `note` obligatorio).
+4. El smoke test integrado valida: `/health` 200, `/webhook` sin secret NO 200
+   (fail-closed), `/webhook` con secret responde con `operator_id`.
+   Sin `WORKER_URL_STAGING` el smoke se omite con un notice, no falla.
+
+### Estado de checks conocidos (no regresiones de este PR)
+
+- `verify` (Consistency): rojo por `BRANCH_DRIFT` mientras existan las ramas
+  residuales `fix/root-build-cd-worker` / `fix/worker-build-cwd` (ya mergeadas
+  en main; borrado manual del dueño + re-run).
+- `workspace-fmt`: advisory (deuda de formato, ítem 34).
+- `Workers Builds`: rojo en 0s, antes de ejecutar build command = settings del
+  dashboard (ítem 56), no del código.
+- `Kilo Code Review`: créditos de la cuenta (ítem 57).
