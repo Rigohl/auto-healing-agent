@@ -11,6 +11,21 @@
 | PRs abiertos | 0 |
 | Tags | 0 |
 
+### Estado tras la segunda unificación (verificado 2026-10-02)
+
+Comprobado contra la API de GitHub, no de memoria:
+
+| Comprobación | Resultado |
+|--------------|-----------|
+| Ramas en `origin` | 2 — `main` y `chore/unify-branches-into-main` (la efímera del PR #13) |
+| Ramas en `origin` tras mergear el PR #13 | 1 — `main` |
+| PRs abiertos | 1 — el #13; el #11 (DRAFT) se cerró sin merge porque su contenido entra por el #13 |
+| Tags | 0 |
+
+Las 9 ramas se borraron con `DELETE /repos/:owner/:repo/git/refs/heads/<rama>`,
+después de integrar su delta útil. Ninguna tenía trabajo sin integrar: lo que no
+era útil ya estaba en `main` y lo que lo era está ahora.
+
 Esa tabla era cierta el 2026-10-01 y dejo de serlo el 2026-10-02: las PRs #6 a
 #12 dejaron 9 ramas. El estado real de hoy lo comprueba `scripts/verify_repo.py`
 (claim `BRANCH_DRIFT`) en vez de una tabla escrita a mano, porque una tabla

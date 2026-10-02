@@ -584,8 +584,17 @@ def check_contract_module(r: Report) -> None:
 def check_branch_drift(r: Report) -> None:
     """docs/BRANCH_POLICY.md: solo main persiste. Esta claim lo hace real."""
     try:
+        # symref aparte: `origin/HEAD` es un puntero symbolic y
+        # `%(refname:short)` lo devuelve como `origin`, no como `origin/HEAD`.
+        # Filtrarlo por sufijo "/HEAD" no lo caza y `origin` acaba contado como
+        # si fuera una rama. Es lo que pasa en actions/checkout.
         out = subprocess.run(
-            ["git", "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin"],
+            [
+                "git",
+                "for-each-ref",
+                "--format=%(refname)%09%(symref)",
+                "refs/remotes/origin",
+            ],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -602,9 +611,17 @@ def check_branch_drift(r: Report) -> None:
         )
         return
 
-    branches = [b.strip() for b in out.splitlines() if b.strip()]
-    # origin/HEAD es un puntero symbolic, no una rama.
-    branches = [b for b in branches if not b.endswith("/HEAD")]
+    branches: list[str] = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        refname, _, symref = line.partition("\t")
+        if symref:
+            continue  # puntero symbolic (origin/HEAD), no una rama
+        short = refname.removeprefix("refs/remotes/")
+        if short == "origin" or short.endswith("/HEAD"):
+            continue
+        branches.append(short)
 
     if not branches:
         # Un checkout shallow (fetch-depth: 1, el default de actions/checkout)
