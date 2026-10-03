@@ -376,10 +376,15 @@ DEPLOYED por esta via.
 
 ### Limpiar ramas residuales (verify -> verde)
 
-Actions -> "Branch cleanup" -> Run workflow (pre-rellenadas
-`feat/nn-train-v1`, `fix/deep-audit-2026-10-03`,
-`fix/deep-audit-2026-10-03-v2`). Fail-closed: borra solo ramas cuyo head
-sea ancestro de main (`git merge-base --is-ancestor`); si alguna tiene
-commits sin mergear, falla sin borrar nada. Tras el borrado, el siguiente
-push (o re-run manual de Consistency) deja `BRANCH_DRIFT` en verde cuando
+Actions -> "Branch cleanup" -> Run workflow. Input (8 ramas, todas 100%
+fusionadas en `main` verificado con `git merge-base --is-ancestor`):
+`chore/rustfmt-tree devops/orphan-code-hygiene devops/promote-model-kv
+docs/sync-incomplete-2026-10-03 feat/gate-to-pr-v1 feat/nn-train-v1
+fix/deep-audit-2026-10-03-v2` (separadas por espacio).
+⚠️ NO incluir `fix/deep-audit-2026-10-03` (sin sufijo): está **divergida**
+(commits fuera de `main`) y el fail-closed abortaría el workflow entero.
+Fail-closed: borra solo ramas cuyo head sea ancestro de main
+(`git merge-base --is-ancestor`); si alguna tiene commits sin mergear, falla
+sin borrar nada. Tras el borrado, el siguiente push (o re-run manual de
+Consistency) deja `BRANCH_DRIFT` en verde cuando
 `persistent == ["origin/main"]`.
