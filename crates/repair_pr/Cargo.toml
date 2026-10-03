@@ -1,0 +1,19 @@
+[package]
+name = "repair_pr"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "GATE->PR bridge V1: unified diff generator (similar) + PR opener (octocrab)"
+
+[dependencies]
+repair_types = { path = "../repair_types" }
+similar = "3"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+octocrab = "0.54"
+secrecy = "0.10"
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[[bin]]
+name = "repair-pr"
+path = "src/main.rs"
