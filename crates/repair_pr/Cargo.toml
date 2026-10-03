@@ -24,7 +24,8 @@ octocrab = { version = "0.54", default-features = false, features = [
     "jwt-aws-lc-rs",
 ] }
 secrecy = "0.10"
-tokio = { version = "1", features = ["rt", "macros"] }
+# Runtime::new() del bin requiere rt-multi-thread (con solo rt no existe).
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
 [[bin]]
 name = "repair-pr"
