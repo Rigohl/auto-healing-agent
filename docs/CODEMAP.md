@@ -16,6 +16,7 @@ crates/repair_nn_core
 crates/repair_nn_wasm
 crates/repair_operators
 crates/repair_train   (trainer offline, bin repair-train)
+crates/repair_pr      (GATE→PR V1: diff real con similar + PR con octocrab, bin repair-pr)
 worker/   (CF, build con wrangler)
 ```
 
@@ -27,6 +28,7 @@ repair_types::Incident
   → feature_engine::extract → [f32; 64]
   → repair_nn_core::RepairNet::predict → RepairAction
   → repair_operators::gate + apply → CandidatePatch
+  → repair_pr::patch_bundle (diff real, similar) + PR (octocrab) → Actions VERIFY
 ```
 
 WASM: `repair_nn_wasm::RepairModel`  
