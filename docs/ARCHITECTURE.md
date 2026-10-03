@@ -35,6 +35,7 @@ RepairCase → MongoDB (memory, diseñado) + TrainingExample (offline `repair_tr
 | `repair_nn_core` | MLP inference, `no_std` + alloc, 2863 weights | ✅ |
 | `repair_nn_wasm` | wasm-bindgen adapter: `RepairModel` | ✅ (build in CI) |
 | `repair_operators` | `apply()` + `gate()` deterministic stubs | ✅ partial (AST real = later) |
+| `repair_pr` | GATE→PR V1: unified diff real (`similar`) + PR opener (`octocrab`), bin `repair-pr` | ✅ V1 (sin cablear al worker) |
 | `worker` | CF Worker: `/health`, `/model` (KV pointer), `/webhook` + consumidor de cola + Durable Object de estado | ✅ runtime asíncrono PART3 (webhook fail-closed → DO → Queue → pipeline) |
 
 ## Inference path (edge)
@@ -45,7 +46,7 @@ RepairCase → MongoDB (memory, diseñado) + TrainingExample (offline `repair_tr
 4. `RepairNet::predict` (or WASM `RepairModel::predictFromFeatures`) → `RepairAction`.
 5. Gate on `confidence >= 0.55` / `risk <= 0.45`.
 6. If actionable → `repair_operators::apply` → `CandidatePatch`.
-7. Open PR; GitHub Actions verifies (PASS / FAIL / BLOCKED) — **CI is VERIFY authority, never model confidence**.
+7. If actionable, `repair_pr` builds the unified diff (`similar`) and opens the PR (`octocrab`, fail-closed); GitHub Actions verifies (PASS / FAIL / BLOCKED) — **CI is VERIFY authority, never model confidence**.
 8. Persist `RepairCase`.
 
 ## Training path (offline)
