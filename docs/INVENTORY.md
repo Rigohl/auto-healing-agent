@@ -102,3 +102,20 @@ PART*.md = diseño consolidado y conciso.
 `PROMPT_PAD.md` + `DISCREPANCIES.md` + `INVENTORY.md` = fuente de verdad de diseño.
 Una sola rama persistente: main.
 Ningún success se declara por confidence del modelo: la autoridad es GitHub Actions.
+## Actualización 2026-10-03 (auditoría a profundidad)
+
+- **Ramas**: `origin` solo tiene `main` (3 residuales 100% fusionadas borradas;
+  SHAs `cb889cf`, `e781600`, `493594e`). Una sola línea.
+- **Reparado en `7dd891f`** (worker): señales anti-loop 3 y 4 reales
+  (antes hardcodeadas a 0, config muerta), quota por intentos reales
+  (antes COUNT sobre PK: inalcanzable), hard stop de cola (rama inalcanzable
+  eliminada; tope real = `max_retries=3` → DLQ + `/attempt` del DO), guard
+  `correlation_stale_or_missing` en `/attempt`/`/result`/`/poison`,
+  `from_state` real en auditoría, TTL de idempotencia + retención (24 h /
+  7 días), `idem_key` canónica del contrato, cola real en `record_poison`.
+  Detalle: `DISCREPANCIES` 58–66.
+- **Docs sincronizadas** (GOVERNANCE, CONTRACT §2, PART3 §8/§9/§10/§12/§13,
+  E2E_CHECKLIST, ARCHITECTURE, PHASE_STATUS, BRANCH_POLICY) y
+  `verify_repo.py` ahora cubre `deploy-staging.yml`.
+- Verificación: `cargo test --workspace`, clippy `-D warnings`, worker
+  host + `wasm32-unknown-unknown --release`, `verify_repo.py` OVERALL PASS.

@@ -44,7 +44,7 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 | 37 | `apply()` con catch-all | `other =>` cubría OperatorId 4–12 | Un brazo explícito por variante, sin default | **Corregido** | Añadir una variante al enum compilaba y producía un parche genérico. Ahora `apply()` es exhaustivo: añadir un `OperatorId` rompe el build. `EnvVarRepair` y `CacheClear` pasan por `escalate()`, que por construcción no toca ficheros. Los operadores 4, 6, 7, 8, 9, 11, 12 pasaron de "allowlisted transform only" a ficheros y pasos concretos. |
 | 38 | Webhook sin pipeline | `let _body = req.text()` descartaba el body y devolvía respuesta fija | 5 pasos reales hasta el gate | **Corregido** | `Incident` → `FailureSignature` → `extract` → `RepairNet::predict` → `gate`, respondiendo con el `PipelineReport`. Sin `unwrap()` en el path. PR sigue ausente y la respuesta lo declara (`"pr": null`). |
 | 39 | Webhook fail-open | Si faltaba `WEBHOOK_SECRET` se saltaba la comprobación | 503 si no está configurado | **Corregido** | En un path que pronto abrirá PRs, aceptar tráfico sin secret es fail-open. |
-| 40 | Pesos malformados | Sin validación | Archivo entero rechazado | **Corregido** | `load_weights` exige exactamente `WEIGHT_COUNT` f32 finitos separados por espacio. Un token no numérico invalida todo el archivo en vez de ignorarse, porque ignorarlo dejaría la red con pesos desplazados. Sin pesos válidos cae a ceros y lo declara. |
+| 40 | Pesos malformados | Sin validación | Archivo entero rechazado | **Corregido** | `load_weights` exige exactamente `WEIGHT_COUNT` f32 finitos separados por espacio. Un token no numérico invalida todo el archivo en vez de ignorarse, porque ignorarlo dejaría la red con pesos desplazados. Sin pesos válidos: **BLOCKED** (`blocked_no_model`); red de ceros prohibida (`model.rs`: "Nunca: current failure -> zeros -> PASS"). (Corrección 2026-10-03: el texto anterior decía "cae a ceros y lo declara", desfasado de la política actual.) |
 | 41 | Deploy a Cloudflare | — | **No ejecutable desde el entorno actual** | **Bloqueado, no fallido** | Faltan tres cosas verificables: (a) no hay `CLOUDFLARE_API_TOKEN` ni `CLOUDFLARE_ACCOUNT_ID` — las variables `CLOUDFLARE_*` presentes son la infraestructura del sandbox, **no** credenciales de la cuenta; (b) no hay toolchain Rust (`cargo`/`rustc` ausentes), y `wrangler deploy` invoca `cargo install worker-build && worker-build --release`; (c) `worker/wrangler.toml` conserva `REPLACE_WITH_KV_NAMESPACE_ID`. **No se ha desplegado nada y no se declara despliegue exitoso.** Se deja la vía preparada y verificable: `deploy.yml` (solo `workflow_dispatch`, environment `production`, preflight que aborta si faltan secrets o hay `REPLACE_WITH_*`, y smoke test que verifica /health, el fail-closed sin secret y el pipeline con secret) y un job de CI que compila el worker para `wasm32-unknown-unknown`, que es el artefacto real de deploy. |
 
 
@@ -66,7 +66,7 @@ Sin resolver (no bloquean la unificación):
 - [x] Ítem 36: PDF de diseño PART1–4 cotejado; origen aguas arriba de los ítems 21 y 24
 
 Sin resolver:
-- [ ] Ítem 25: ~20 slots de `FeatureVector[64]` inertes hasta que exista extractor AST/CFG
+- [x] Ítem 25: el encoder V1 rellena los slots 48–62 (bucetos hash) y un test comprueba que no hay slots constantes en 1000 muestras sintéticas. Queda abierto solo el extraer señal AST/CFG real.
 - [x] Ítem 27: `wasm.yml` cubre `feature_engine/`, `repair_operators/` y `worker/`
 - [x] Ítems 37-40: allowlist exhaustivo, pipeline del webhook, fail-closed, validación de pesos
 - [ ] Ítem 41: deploy a Cloudflare bloqueado (sin credenciales ni toolchain). Vía preparada en `deploy.yml`; **nada desplegado**
@@ -155,3 +155,26 @@ y que es una PR de limpieza con su propia revision del diff.
 
 Los seis checks de `ci.yml` que fallaban en `main` pasan. Los dos unicos rojos
 que quedan no son de codigo y estan registrados como tales.
+
+## Auditoria a profundidad 2026-10-03 (leer cada archivo + reparar)
+
+Auditoria completa (todas las ramas, cada carpeta y archivo, compilar/test/clippy
+en host y `wasm32-unknown-unknown`): el codigo compilaba y pasaba tests, pero la
+auditoria de semantica encontro errores reales y code muerto en `worker/`.
+Corregido y push a `main` (`7dd891f`).
+
+| # | Elemento | Estado encontrado | Decision / correccion | Justificacion |
+|---|----------|-------------------|-----------------------|---------------|
+| 58 | 2 de las 4 señales anti-loop muertas | `same_fingerprint_recent` y `same_failing_verification_recent` hardcodeadas a 0 en `/ingest` y `/attempt`; `ANTI_LOOP_MAX_SAME_FINGERPRINT` / `ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION` se leían de `[vars]` pero no se enviaban al DO; tabla `fingerprints` escrita pero nunca leída | **Corregido**: las 4 señales ahora son reales en `/ingest` y `/attempt` (huella contra `incidents.last_fingerprint`; verificaciones `blocked`/`poison` de la tabla `verification`); los límites viajan en el query string | PART3 §12 documentaba "alimentadas por /result": era falso. Con esto los 4 topes de `[vars]` son operativos. |
+| 59 | Quota y anti-loop medían la PK | `attempts_of_incident` y `same_incident_recent` usaban `COUNT(*)` sobre `incidents` (PK `id`): siempre 0 o 1, nunca alcanzaban el límite (default 3) → checks inalcanzables | **Corregido**: `attempts` reales desde la columna `attempts` (la incrementa `/attempt`); `same_incident_recent` cuenta transiciones del incidente en la ventana | El límite de intentos del ingest solo tenía sentido con el contador real; antes era dead logic. |
+| 60 | Hard stop propio del consumidor inalcanzable | `MAX_QUEUE_ATTEMPTS=3` sobre `QueueTask.attempts`: el body del mensaje es inmutable al reintentar, el contador nunca avanzaba, la rama `if attempt_no >= MAX_QUEUE_ATTEMPTS` jamás se ejecutaba (dead code) | **Corregido**: rama y campo eliminados; el tope es `max_retries=3` de la cola → DLQ y el hard stop del DO (`/attempt`); reintento transitorio con delay fijo de 10 s | El corte por número de intentos ya existía en el DO; el del consumidor era teatro. Documentado en PART3 §10. |
+| 61 | UPDATEs por correlación sin rowcount | Un task obsoleto (correlación reemplazada por una entrega nueva) no encontraba su fila: `attempts=0+1=1` → `allowed: true`, los UPDATEs afectaban 0 filas "con éxito" y `/result` sobrescribía `verification` del incidente vigente | **Corregido**: guard `correlation_stale_or_missing` en `/attempt`, `/result` y `/poison`; denegado sin escribir | Single-threaded DO no protege contra tareas que se cruzan entre entregas del mismo incidente. |
+| 62 | `from_state` hardcodeado | Las transiciones `/result` y `/poison` registraban `from_state='repairing'` incluso cuando el incidente estaba en `queued` (p. ej. compensación `queue_send_failed`) | **Corregido**: `from_state` leído de la fila | Auditoría precisa (PART3 §8). |
+| 63 | Idempotencia sin TTL y sin retención | CONTRACT.md §5 declaraba TTL 24 h; `IDEMPOTENCY_TTL_SECONDS` existía en `repair_types` pero nadie la usaba; `idempotency`/`signature_events`/`fingerprints`/`repair_events` crecían sin bound | **Corregido**: `/ingest` aplica el TTL (decisión expirada → reprocesa) y purga: idempotency 24 h, eventos 7 días; `transitions` (auditoría) no se purga | Sin retención el DO crece sin bound (1 GB/objeto Free). |
+| 64 | Dos fórmulas de idempotencia | El worker usaba `FNV(delivery_id\|signature)`; el contrato documentaba (y `compute_idempotency_key` calculaba) `FNV(repo\|incident\|delivery\|fingerprint)` — la función canónica estaba sin usar | **Corregido**: el worker usa `repair_types::compute_idempotency_key`; una sola fuente de verdad | Equivalente en dedup (el delivery_id sigue incluido) y consistente con CONTRACT.md §5. |
+| 65 | `record_poison` hardcodeaba `DLQ_PROD` | Un veneno de la cola de staging se registraba en el DO como `dlq:auto-healing-repairs-dlq` | **Corregido**: el nombre de cola real (prod/staging) llega al DO | Observabilidad correcta por entorno. |
+| 66 | Docs desfasadas de la conducta real | GOVERNANCE (orden de fallback de modelo invertida + "red de ceros"), E2E_CHECKLIST ("cae a red de ceros", "KV sin enlazar", "devuelve PipelineReport"), ARCHITECTURE ("skeleton; NN wiring pending"), PHASE_STATUS ("NN sin cablear"), CONTRACT.md §2 (payload entrante documentado como `RepairEvent` cuando el wire vive en `WebhookPayload`) | **Corregido** en 2026-10-03 | El wire real es `WebhookPayload` (`queue_consumer.rs`); `RepairEvent` queda como contrato versionado objetivo (P1). `verify_repo.py` además ahora cubre `deploy-staging.yml` (antes no chequeaba su `permissions:`). |
+
+Ramas: la auditoria dejó el repo en **una sola línea** — `origin` solo tiene
+`main` (las 3 ramas residuales, 100% fusionadas, se borraron el 2026-10-03;
+SHAs: `cb889cf`, `e781600`, `493594e`). `verify_repo.py`: OVERALL PASS.

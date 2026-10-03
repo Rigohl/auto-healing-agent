@@ -35,7 +35,7 @@ RepairCase → MongoDB (memory) + TrainingExample (offline Burn)
 | `repair_nn_core` | MLP inference, `no_std` + alloc, 2863 weights | ✅ |
 | `repair_nn_wasm` | wasm-bindgen adapter: `RepairModel` | ✅ (build in CI) |
 | `repair_operators` | `apply()` + `gate()` deterministic stubs | ✅ partial (AST real = later) |
-| `worker` | CF Worker: `/health`, `/model` (KV pointer), `/webhook` | ✅ skeleton; NN wiring pending |
+| `worker` | CF Worker: `/health`, `/model` (KV pointer), `/webhook` + consumidor de cola + Durable Object de estado | ✅ runtime asíncrono PART3 (webhook fail-closed → DO → Queue → pipeline) |
 
 ## Inference path (edge)
 

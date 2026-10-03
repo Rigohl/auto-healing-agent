@@ -3,11 +3,11 @@
 | Fase | Estado |
 |------|--------|
 | 1 Inventario | completed |
-| 2 Representación | partial (DIM=64, pero ~20 slots inertes; sin AST/CFG — `DISCREPANCIES` 25) |
+| 2 Representación | partial (encoder V1: los 64 slots llevan señal, con test de no-constancia; falta señal AST/CFG — `DISCREPANCIES` 25) |
 | 3 Repair engine | partial (NN + stubs de operador) |
 | 4 Verification | partial (ci/wasm; legacy HF off) |
 | 5 Learning | partial (sin pesos reales ni export) |
-| 6 Cloudflare | partial (esqueleto; NN sin cablear) |
+| 6 Cloudflare | completed como runtime (asíncrono PART3: webhook fail-closed → DO → Queue → pipeline; señales anti-loop reales, TTL y retención). Deploy bloqueado por credenciales — `DISCREPANCIES` 41 |
 | 7 Agentes docs | completed (`AGENTS.md` + `NO_LLM_POLICY.md`) |
 | 8 Pony | **omitted** — actor runtime nativo fuera del repo (`AGENTS.md`) |
 | 9 E2E | not green — ver `docs/E2E_CHECKLIST.md` |

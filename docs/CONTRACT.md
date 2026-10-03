@@ -77,7 +77,29 @@ Per GitHub documentation, auto-repair triggers are restricted to the following v
 4. `pull_request`: Action `opened` or `synchronize`.
 5. `repository_dispatch`: Event type `auto_repair_trigger`.
 
-### Inbound Payload Schema (`RepairEvent`)
+### Inbound Payload Schema — estado real del código (esquema del wire)
+
+> El worker VIVO deserializa `worker/src/worker/queue_consumer.rs::WebhookPayload`
+> (todo opcional: un payload parcial nunca rompe el isolate). Un sender que
+> implemente el `RepairEvent` de abajo **no** funcionaría contra el worker hoy:
+> los campos son distintos. Lo de arriba es el contrato versionado objetivo
+> (P1, `repair_types::contract`); el esquema del wire es lo que existe.
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `String` | ID del incidente (si falta, el incident es `unidentified`). |
+| `source` | `String` | Origen del incidente (default `webhook`). |
+| `error_code` | `String` | Código de error (parte de la firma `error_code\|error_step\|command`). |
+| `error_step` | `String` | Paso donde falló. |
+| `command` | `String` | Comando que falló. |
+| `message` | `String` | Mensaje de error. |
+| `project` | `String` | Repositorio `owner/repo` (default `default`). |
+| `attempts` | `u32` | Reintentos previos declarados por el sender. |
+| `stack_hint` | `String` | Pista de stack (entrada del encoder V1). |
+| `language_hint` / `framework_hint` | `String` | Pistas de family/lang/fw (entrada del encoder V1). |
+
+### Inbound Payload Schema — contrato versionado objetivo (`RepairEvent`)
+
 Rust Type: `crates/repair_types/src/contract.rs::RepairEvent`
 
 | Field | Type | Description |

@@ -68,6 +68,7 @@ WORKFLOWS = [
     ".github/workflows/regression.yml",
     ".github/workflows/repair-validation.yml",
     ".github/workflows/auto-repair.yml",
+    ".github/workflows/deploy-staging.yml",
 ]
 
 DOCS = [

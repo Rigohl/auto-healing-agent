@@ -23,7 +23,7 @@ El webhook ya NO ejecuta el pipeline de forma síncrona. Flujo:
 5. El consumidor de la cola pide permiso (`/attempt`: hard-stop de intentos + anti-loop), ejecuta el pipeline determinista (features → NN → gate) y registra el resultado (`/result`: decisión, huella de parche, `verify_status=pending_ci`).
 6. El veneno (3 intentos) cae a la DLQ; el consumidor de la DLQ lo registra (`/poison`) y asiente.
 
-Hard stops efectivos: quota por incidente/repo/abierto/día, anti-loop por ventana, `MAX_QUEUE_ATTEMPTS=3` propio del consumidor y `max_retries=3` + DLQ de la cola. La deduplicación y los bloqueos son transaccionales dentro del DO (single-threaded).
+Hard stops efectivos: quota por incidente/repo/abierto/día, anti-loop por ventana (4 señales) y el hard stop de intentos del DO (`/attempt`, `max_attempts_per_incident`); el tope de reintentos del consumidor es `max_retries=3` + DLQ de la cola. La deduplicación y los bloqueos son transaccionales dentro del DO (single-threaded).
 
 ## 2. Diagrama
 
@@ -118,8 +118,9 @@ No se introduce un servicio solo porque exista.
 
 - `#[durable_object]` `IncidentState`; un objeto por repositorio (`id_from_name(repo)`): serializa el estado del repo y hace triviales los contadores por repo.
 - El lock es estructural: un DO es single-threaded; no hay condición de carrera entre `/ingest` concurrentes del mismo repo.
-- Rutas: `/health`, `/ingest` (idempotencia → anti-loop → quota → alta), `/attempt` (puerta de intentos), `/result` (decisión + verificación + huella), `/poison` (DLQ), `/state` (observabilidad).
-- Estados: `queued` → `repairing` → `done` | `blocked` | `dead_letter`. Cada transición lleva `correlation_id` y timestamp.
+- Rutas: `/health`, `/ingest` (retención → idempotencia con TTL → anti-loop 4 señales → quota → alta), `/attempt` (puerta de intentos), `/result` (decisión + verificación + huella), `/poison` (DLQ), `/state` (observabilidad).
+- Estados: `queued` → `repairing` → `done` | `blocked` | `dead_letter`. Cada transición lleva `correlation_id` y timestamp; el `from_state` es el estado REAL leído de la fila (antes venía hardcodeado a `repairing`).
+- Guard de correlación: `/attempt`, `/result` y `/poison` verifican que la fila del incidente sigue perteneciendo a ese `correlation_id`. Si una entrega nueva del mismo incidente reemplazó la correlación (upsert de `/ingest`), el task obsoleto es denegado (`correlation_stale_or_missing`) en vez de escribir 0 filas «con éxito» y seguir hacia `verification`.
 - La configuración NO vive aquí: llega en cada llamada desde las `[vars]` del Worker.
 
 ## 9. SQLite
@@ -131,13 +132,15 @@ Esquema real (adaptó el mínimo solicitado tras verificar el código):
 - `transitions` (incident_id, from_state, to_state, correlation_id, created_at): auditoría de cada cambio.
 - `verification` (incident_id, status, evidence_ref, fingerprint, created_at): estado de VERIFY (`pending_ci` = GitHub Actions).
 - `signature_events`, `fingerprints`, `repair_events`: ventanas temporales para anti-loop y quota (con índices compuestos).
+- Retención: `/ingest` purga `idempotency` según el TTL del contrato (24 h) y las tres tablas de eventos a los 7 días (solo alimentan ventanas de 15 min / 1 h / 1 día). `transitions` es auditoría y NO se purga. Sin retención el DO crecería sin bound (1 GB por objeto).
 - El esquema es idempotente (`IF NOT EXISTS`) y se prepara en el constructor del DO.
 - Presupuesto de filas: ver §16.
 
 ## 10. Queue / DLQ (`worker/src/worker/queue_consumer.rs`)
 
-- `MAX_QUEUE_ATTEMPTS = 3`: contador propio en el `QueueTask`; corta ANTES del `max_retries` de la cola (doble hard-stop). **Nunca retry infinito.**
-- Backoff exponencial: 5 s · 2^n con tope 300 s (`retry_with_options`).
+- **Nunca retry infinito**: el tope de reintentos es `max_retries=3` de la cola (al superarse, el mensaje cae a la DLQ). El hard stop por NÚMERO DE INTENTOS es el DO (`/attempt`, `max_attempts_per_incident`): el 4º `/attempt` del incidente se deniega.
+- No hay «contador propio» en el consumidor: el body del mensaje es inmutable al reintentar, así que un contador en el `QueueTask` nunca avanzaba entre redeliveries (la rama era inalcanzable y se eliminó). Los intentos REALES viven en el DO.
+- Reintento por fallo transitorio: delay fijo de 10 s (`retry_with_options`).
 - Veneno: registra `dead_letter` + `verification.status = poison` en el DO y hace `ack` del mensaje.
 - Consumidor de DLQ: registra el veneno (best-effort) y `ack_all`.
 - `correlation_id` SIEMPRE presente en cada `QueueTask`; idempotencia: la puerta `/attempt` del DO decide si un intento procede (un duplicado no consume quota dos veces).
@@ -173,12 +176,12 @@ Detecta, dentro de una ventana (`ANTI_LOOP_WINDOW_SECONDS=900` por defecto):
 - misma huella de parche (`ANTI_LOOP_MAX_SAME_FINGERPRINT=2`),
 - misma verificación fallida (`ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION=3`),
 
-y produce **BLOCKED** (`blocked_anti_loop`) al exceder cualquier límite, con el motivo registrado. Señales en `/ingest` (incidente, firma), en `/attempt` (firma) y alimentadas por `/result` (huella, verificación). `evaluate()` pura + tests por señal.
+y produce **BLOCKED** (`blocked_anti_loop`) al exceder cualquier límite, con el motivo registrado. Señales en `/ingest` (las 4) y en `/attempt` (firma, huella, verificación): la huella de la entrega vigente se mide contra la última huella registrada del incidente (`incidents.last_fingerprint`, alimentada por `/result`); la verificación fallida se mide sobre la tabla `verification` (estados `blocked`/`poison`). `evaluate()` pura + tests por señal.
 
 ## 13. Idempotencia
 
-- `idem_key = FNV-1a(delivery_id | signature)`. Sin delivery id usa el incident id.
-- El DO guarda la respuesta EXACTA en `idempotency`: una redelivery obtiene la misma decisión (200) sin reprocesar ni consumir quota.
+- `idem_key = repair_types::compute_idempotency_key(repo, incident_id, delivery_id, fingerprint)` = FNV-1a(repo | incident | delivery | fingerprint): la fórmula CANÓNICA de CONTRACT.md §5 (antes el worker usaba una fórmula propia distinta y la función del contrato estaba sin usar). Sin delivery id usa el incident id.
+- El DO guarda la respuesta EXACTA en `idempotency` con su `created_at`: una redelivery obtiene la misma decisión (200) sin reprocesar ni consumir quota. Con **TTL** (CONTRACT.md §5, `IDEMPOTENCY_TTL_SECONDS` = 24 h): una decisión guardada expira y la entrega se reprocesa; `/ingest` purga además las filas caducadas.
 - Las decisiones bloqueadas también se guardan: reintentar una entrega bloqueada no revive el bloqueo.
 - El consumidor es idempotente por diseño: `/attempt` incrementa `attempts` en el DO; un intento duplicado topa con el hard-stop de `max_attempts_per_incident`.
 

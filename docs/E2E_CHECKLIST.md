@@ -27,13 +27,13 @@ Marcado lo que existe hoy en `main`:
 | NN → RepairAction | ✅ `crates/repair_nn_core`, `crates/repair_nn_wasm` (build en CI) |
 | Governance gate | ✅ `repair_operators::gate` (0.55 / 0.45) |
 | Deterministic operator → CandidatePatch | ⚠️ `apply()` con un brazo explícito por cada uno de los 13 operadores; genera `CandidatePatch` (files + steps), **no un diff**. AST real = fase posterior |
-| Worker: webhook → Incident → features → NN → gate | ✅ `worker/src/lib.rs` corre los 5 pasos y devuelve el `PipelineReport` |
+| Worker: webhook → Incident → features → NN → gate | ✅ `worker/src/lib.rs` valida el secret, calcula `correlation_id`/`idem_key`, consulta al DO (`/ingest`) y encola; el consumidor corre features → NN → gate. Devuelve `status`/`correlation_id`/`preview` (no un `PipelineReport`). |
 | Worker: verificación de secret | ✅ **fail closed**: sin `WEBHOOK_SECRET` responde 503, no acepta tráfico |
-| Pesos reales | ❌ `model/*.json` con `weights: null`; el Worker cae a red de ceros y lo declara en la respuesta |
+| Pesos reales | ❌ `model/*.json` con `weights: null`; sin `model/current`/`model/stable` en KV el Worker responde `blocked_no_model` (fail-closed, red de ceros prohibida). |
 | PR efímera + Actions VERIFY | ❌ no implementado; la respuesta incluye `"pr": null` y lo dice |
 | RepairCase + TrainingExample on PASS | ❌ sin persistencia |
 | Offline train / export / promote R2-KV | ❌ diferido (λ sin fijar, ver `PART2_NEURAL_NETWORK.md`) |
-| Edge carga pesos STABLE | ⚠️ lee `MODEL_KV:model/current` si existe; `wrangler.toml` sin ids reales ⇒ KV sin enlazar |
+| Edge carga pesos STABLE | ⚠️ lee `MODEL_KV:model/current` y, si falla, `model/stable`; `wrangler.toml` ya enlaza el namespace real (`73014a1b32b7446397461a8d438c8ab2`), pero las claves aún no tienen pesos. |
 
 **Full E2E no está verde.** No se declara PASS por confidence del modelo:
 la autoridad es GitHub Actions (`docs/NO_LLM_POLICY.md`).

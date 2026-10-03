@@ -28,7 +28,7 @@ verificaron contra la API de GitHub y que la rama habia borrado.
 |---|---|---|---|---|---|---|---|
 | **INCIDENT → SIGNATURE** | Edge Worker | `repair_types::FailureSignature` | `Incident` | firma + fingerprint | hash FNV-1a no criptografico | isolate de solo lectura | descartar incidente |
 | **SIGNATURE → FEATURES** | Edge Worker | `feature_engine::extract` (V1) | `Incident` + firma | `FeatureVector[64]` | invariancia verificada en test | isolate de solo lectura | 64 ceros (fail-closed) |
-| **FEATURES → ACTION** | Edge Worker | `RepairNet` (WEIGHT_COUNT = 2863) | `FeatureVector` | `RepairAction` (op, conf, risk) | log del isolate | WASM en el propio Worker | `model/stable` → `model/current` → red de ceros declarada |
+| **FEATURES → ACTION** | Edge Worker | `RepairNet` (WEIGHT_COUNT = 2863) | `FeatureVector` | `RepairAction` (op, conf, risk) | log del isolate | WASM en el propio Worker | `model/current` → `model/stable` → `BLOCKED` (red de ceros prohibida) |
 | **ACTION → GATE** | Edge Worker | `repair_operators::gate` | `RepairAction` | allow / deny + `AgentStatus` | `PipelineReport` | minimo: sin escritura | `BLOCKED` + `NeedsHuman` |
 | **ACTION → PATCH** | Operadores deterministas | `repair_operators::apply` | `RepairAction` | `CandidatePatch` | allowlist de operadores | `contents: read` | escalar a humano (advisory) |
 | **INCIDENT → ESTADO** | Durable Object | `IncidentState` (SQLite) | repo + incidente | veredicto dedup/quota/anti-loop | estado transaccional | binding `INCIDENT_STATE` | 503 `state_store_unavailable` |

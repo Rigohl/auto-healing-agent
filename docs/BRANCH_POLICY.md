@@ -72,6 +72,21 @@ esas cuatro es en su mayoría código que `main` ya tenía, escrito de otra form
 El detalle de qué se rechaza y por qué está en el mensaje de cada commit y en
 `docs/DISCREPANCIES.md`. La regla que lo hace sostenible es la siguiente.
 
+## Tercera unificación (2026-10-03): limpieza de residuales + una sola línea
+
+Tras la DevOps PR #16, `origin` volvía a tener 3 ramas residuales
+(`devops/staging-pipeline`, `fix/root-build-cd-worker`, `fix/worker-build-cwd`):
+100% fusionadas en `main` (verificado con `git merge-base --is-ancestor`), pero
+aún presentes, y por eso `verify_repo.py` fallaba `BRANCH_DRIFT`.
+
+- **Borradas** el 2026-10-03: `devops/staging-pipeline` (`cb889cf`),
+  `fix/root-build-cd-worker` (`e781600`), `fix/worker-build-cwd` (`493594e`).
+  Pérdida nula: todos sus commits son alcanzables desde `main`.
+- Desde entonces `origin` solo tiene `main`. Estado: **una sola línea**.
+- En local se aplicó la misma regla: no quedan ramas efímeras; el trabajo
+  llega a `main` directamente (commit `7dd891f`: auditoría a profundidad y
+  reparación de errores reales del runtime, ver `DISCREPANCIES` 58–66).
+
 ## Reglas
 
 1. Cualquier rama que no sea `main` es **efímera**: se elimina tras merge o abandono.
