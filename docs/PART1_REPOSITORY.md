@@ -15,6 +15,7 @@ auto-healing-agent/
 │   ├── repair_nn_wasm/  # wasm-bindgen adapter
 │   ├── repair_operators/# deterministic AST operators + gate
 │   └── repair_train/    # trainer offline V1 (SGD determinista, bin repair-train)
+│   ├── repair_pr/      # GATE→PR V1: diff unificado real (similar) + PR (octocrab), bin repair-pr
 ├── worker/              # Cloudflare workers-rs (orchestrator only)
 ├── model/               # schema.json, current.json, stable.json, current.txt (payload KV real)
 ├── docs/                # ARCHITECTURE, GOVERNANCE, PART*, PROMPT_PAD…
@@ -43,6 +44,7 @@ auto-healing-agent/
 | repair_nn_wasm | Adaptador wasm-bindgen | No |
 | repair_operators | Operadores deterministas + gate | Parcial |
 | repair_train | Entrenamiento offline V1 + export del payload | No (std, fuera del edge) |
+| repair_pr | Puente GATE→PR V1: diff unificado real + apertura de PR | No (std, fuera del edge) |
 | worker | Orquestador CF | No |
 
 ## Fases Prompt Pad relacionadas
