@@ -69,6 +69,8 @@ WORKFLOWS = [
     ".github/workflows/repair-validation.yml",
     ".github/workflows/auto-repair.yml",
     ".github/workflows/deploy-staging.yml",
+    ".github/workflows/promote-model.yml",
+    ".github/workflows/cleanup-branches.yml",
 ]
 
 DOCS = [
