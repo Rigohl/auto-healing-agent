@@ -31,11 +31,11 @@ El operador determinista aplica el cambio real.
 
 ## Stack
 - **Inferencia**: repair_nn_core (no_std + alloc) → repair_nn_wasm.
-- **Entrenamiento**: Burn offline (fuera de CF). Export de pesos planos a model/.
+- **Entrenamiento**: trainer propio offline V1 (`crates/repair_train`, SGD determinista, sin `rand` ni LLM). Burn sigue como referencia de diseño. Export del payload plano a `model/current.txt`.
 - Alternativas evaluadas: tract, MicroFlow (solo referencia).
 
 ## Separación Training / Inference
-Cloudflare ejecuta **solo** inferencia. Train/eval ocurre offline → export_weights → model/current.json → KV/R2 pointer.
+Cloudflare ejecuta **solo** inferencia. Train/eval ocurre offline → export del payload plano → `model/current.txt` → KV (`model/current` / `model/stable`).
 
 ## Contrato mínimo repair_nn_core
 
@@ -49,9 +49,11 @@ pub fn infer(features: &[f32; 64], weights: &Weights) -> Prediction;
 
 ## Objetivo de entrenamiento (conceptual, offline)
 
-Recuperado del documento de diseño en PDF de PART1–4. **No implementado**:
-no hay trainer en el repo y `model/*.json` sigue con `weights: null`
-(`DISCREPANCIES` 5, 6, 22). Se documenta para que FASE 5 no redefina el criterio.
+Recuperado del documento de diseño en PDF de PART1–4. **Implementado en V1**
+(2026-10-03): `crates/repair_train` entrena con CE sobre la cabeza de operador y
+BCE sobre las cabezas de conf/risk (`DISCREPANCIES` 5, 6, 22 cerrados). Los
+términos `L_location`/`L_compile`/etc. del diseño quedan como criterio
+conceptual para fases con señal real.
 
 Loss ponderada por término:
 
@@ -68,7 +70,8 @@ reward = compile_success + tests_fixed + regression_free
        + structural_validity − patch_size − risk
 ```
 
-Los λ no están fijados: es la decisión abierta de FASE 5.
+Los λ están fijados en V1 (`λ_conf = λ_risk = 0.5`, `crates/repair_train`):
+cierra la decisión abierta de FASE 5.
 
 > Nota: `RepairCase.reward` y `TrainingExample.reward` existen como `f32` en
 > `crates/repair_types/src/lib.rs` pero **nada en el repo las calcula**. Esta

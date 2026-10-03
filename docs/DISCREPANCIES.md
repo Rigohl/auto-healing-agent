@@ -177,6 +177,11 @@ Corregido y push a `main` (`7dd891f`).
 | 67 | `set-github-secrets.sh` no parseaba | Operador de heredoc escrito `<<<<` (2 usos): bash falla con "Expected redirection target"; el script era inejecutable desde que se versionó | **Corregido** en 2026-10-03: herestring `<<< "$KEY_JSON"` (JSON por stdin a `python3`), que era la intención original | `verify_repo.py` solo comprobaba su existencia (FILES_PRESENT), nunca lo ejecutó: por eso el rojo nunca se vio. |
 | 68 | Residuo de comentarios/docs tras la auditoría del 2026-10-03 | `incident_state.rs`: dos pasos "// 4." en `/ingest` (el alta es el 5.º); `lib.rs`: comentario citaba `worker/queue_consumer.rs` (real: `worker/src/worker/`); `deploy.yml`/`deploy-staging.yml`: comentario citaba un `[build]` command que ya no existe (`bash ./build.sh` desde el PR #14); typos: `ci.yml` ("exclia"), `consistency.yml` ("behaves"), `security.yml` ("aparecem", "passesaria"), `INDEX.md` ("PART3async", "Qué guarantee", "todavia"); `INVENTORY.md` ("25 ítems" → 66; "worker esqueleto" → runtime PART3) | **Corregido** en 2026-10-03 en la rama efímera de auditoría | `verify_repo.py` conserva sus propios typos de comentario: es 100755 y el push del conector no puede garantizar el bit, se deja intacto. |
 
-Ramas: la auditoria dejó el repo en **una sola línea** — `origin` solo tiene
-`main` (las 3 ramas residuales, 100% fusionadas, se borraron el 2026-10-03;
-SHAs: `cb889cf`, `e781600`, `493594e`). `verify_repo.py`: OVERALL PASS.
+| 69 | Docs desfasadas tras los merges del gap de pesos (2026-10-03) | PART2 ("no hay trainer", "λ sin fijar"), INDEX ("model/ → placeholders; no hay entrenamiento"), INVENTORY ítem 41 ("wrangler.toml conserva REPLACE_WITH" — ya reemplazado por el id real), BRANCH_POLICY/DISCREPANCIES ("origin solo tiene main" — los PRs #18–#20 dejaron residuales), PART1/PROMPT_PAD (sin `repair_train` en el layout), ARCHITECTURE (training path vía `current.json`), REFERENCES (Burn como trainer real) | **Corregido** el 2026-10-03 (PR de docs sync tras auditoría doc↔código) | `verify_repo.py` solo comprueba existencia de estos docs, no su contenido: por eso la deriva no puso ningún claim en rojo |
+| 70 | `verify_repo.py` sin los workflows del PR #20 | `WORKFLOWS` no incluía `promote-model.yml` ni `cleanup-branches.yml` → `WORKFLOW_LEAST_PRIVILEGE` no los escaneaba | **Corregido**: añadidos (ambos declaran `permissions:` explícitos) | Mismo patrón que `deploy-staging.yml` antes del PR de auditoría |
+
+Ramas: la auditoria dejó el repo en una sola línea, pero los PRs #18–#20
+(2026-10-03, tarde) dejaron de nuevo ramas residuales efímeras 100% fusionadas
+(`feat/nn-train-v1`, `fix/deep-audit-2026-10-03`, `-v2`, `devops/promote-model-kv`):
+`BRANCH_DRIFT` las reporta hasta que `cleanup-branches.yml` las borre bajo
+dispatch humano.

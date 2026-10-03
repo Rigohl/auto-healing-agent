@@ -30,9 +30,9 @@
 5. Regla Context7: verificar API antes de escribir código.
 
 ## Estado resumido
-- crates: types (+ `contract`) / feature_engine (V1) / nn_core / nn_wasm / operators → ✅
+- crates: types (+ `contract`) / feature_engine (V1) / nn_core / nn_wasm / operators / train (V1) → ✅
 - worker → runtime PART3 async: webhook fail-closed → DO (dedup, quota, anti-loop) → Queue → 202
-- model/ → placeholders (`weights: null`; no hay entrenamiento todavía)
+- model/ → `current.txt` = payload KV real (2863 `f32`, entrenado por `repair_train`); `current.json`/`stable.json` siguen como placeholders de metadata
 - docs/verification_evidence.json → artefacto de CI, no versionado
 - legacy/ → archivado (no ejecutar)
 - Mem0 → pendiente de conector

@@ -24,7 +24,7 @@ La NN solo clasifica. CI declara PASS/FAIL. Always Free.
 - Editar solo: crates/*, worker/*, model/*, docs/*, .github/workflows/ci|wasm|*
 - Target: wasm32-unknown-unknown; workers-rs; wasm-bindgen solo en repair_nn_wasm
 - Inferencia no_std + alloc en repair_nn_core
-- Train offline (Burn) fuera de CF; pesos en R2/KV pointers
+- Train offline (trainer V1 propio; Burn = referencia) fuera de CF; pesos en KV (`model/current`/`model/stable`)
 - Repo: única rama persistente main
 </capability>
 
@@ -67,7 +67,7 @@ Ninguno salta CI, risk gates, patch limits, protected files, SoT, rollback.
 </agents_logical>
 
 <repo_layout>
-crates/{repair_types,feature_engine,repair_nn_core,repair_nn_wasm,repair_operators}
+crates/{repair_types,feature_engine,repair_nn_core,repair_nn_wasm,repair_operators,repair_train}
 worker/  model/  docs/  scripts/  .github/workflows/
 legacy/ = archivo muerto (no ejecutar)
 </repo_layout>

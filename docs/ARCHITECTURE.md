@@ -23,7 +23,7 @@ Deterministic Operator (repair_operators)   CandidatePatch — no free-form code
    ↓
 GitHub PR → Actions CI/wasm = VERIFY (PASS / FAIL / BLOCKED)
    ↓
-RepairCase → MongoDB (memory) + TrainingExample (offline Burn)
+RepairCase → MongoDB (memory, diseñado) + TrainingExample (offline `repair_train`)
 ```
 
 ## Crates
@@ -50,8 +50,8 @@ RepairCase → MongoDB (memory) + TrainingExample (offline Burn)
 
 ## Training path (offline)
 
-Burn (or any trainer) outside CF → export flat `f32[2863]` → `model/current.json` / `stable.json`.
-The Worker never loads Burn; only exported weights. `model/current.json` is still a placeholder.
+Trainer offline V1 (`crates/repair_train`, deterministic SGD, no LLM) outside CF → export flat `f32[2863]` → `model/current.txt` → KV (`MODEL_KV`: `model/current` / `model/stable`).
+The Worker never trains; only loads exported weights. `current.json` / `stable.json` remain metadata placeholders.
 
 Layer arithmetic (from `crates/repair_nn_core/src/lib.rs:18`):
 `64*32+32` (W1,b1) + `32*16+16` (W2,b2) + `16*13+13` (operator head)

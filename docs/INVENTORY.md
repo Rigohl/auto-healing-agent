@@ -5,6 +5,9 @@ Estado real de `main` tras absorber el delta útil de las 9 ramas y borrarlas.
 ## Ramas
 
 Verificado 2026-10-01: **1 rama local, 1 rama en `origin`, 0 PRs abiertos, 0 tags.**
+(desfasado: los PRs #18–#20 dejaron ramas residuales efímeras 100% fusionadas;
+el estado vivo lo comprueba `verify_repo.py` claim `BRANCH_DRIFT`, y se limpia
+con el workflow `cleanup-branches.yml`)
 Detalle y reglas: `docs/BRANCH_POLICY.md`.
 
 - **main** — única rama persistente.
@@ -40,7 +43,7 @@ Detalle y reglas: `docs/BRANCH_POLICY.md`.
 docs/
 ├── ARCHITECTURE.md            ← flujo + aritmética de pesos
 ├── PROMPT_PAD.md              ← contrato de implementación (SoT)
-├── DISCREPANCIES.md           ← 66 ítems, todos con decisión
+├── DISCREPANCIES.md           ← 68 ítems, todos con decisión
 ├── INVENTORY.md               ← este archivo
 ├── GOVERNANCE.md              ← SoT umbrales 0.55 / 0.45
 ├── NO_LLM_POLICY.md           ← por qué no hay LLM ni fallback híbrido
@@ -64,7 +67,8 @@ docs/
 - `FeatureVector::DIM = 64`, `WEIGHT_COUNT = 2863`, gate `0.55 / 0.45`,
   `OperatorId` 0–12 (`OPERATOR_COUNT = 13`).
 
-## Verificación (CI en `acddb02`, todas en verde)
+## Verificación (histórica, CI de `acddb02`; la actual es `ci.yml` con
+`workspace-*` + `worker-*` + `validate`, incluyendo los tests de `repair_train`)
 
 | Workflow | Resultado |
 |----------|-----------|
@@ -90,7 +94,7 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 | 7, 52 | Sin `Cargo.lock`, **por decisión** (ítem 52): las versiones resuelven en cada build de CI. Cuatro ramas pidieron versionarlos; se explica en DISCREPANCIES por qué no se adoptan tal cual. |
 | 34 | Parcial: clippy con `-D warnings` activo y **verde** (los seis checks de `ci.yml` pasan en el PR #13); falta `cargo fmt --check` bloqueante, que necesita toolchain local para aplicar el formato. |
 | 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`) y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están corregidos. |
-| 41 | **Deploy bloqueado**: sin `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` y sin toolchain Rust en el entorno. `wrangler.toml` conserva `REPLACE_WITH_KV_NAMESPACE_ID`. **Nada desplegado.** Vía lista en `.github/workflows/deploy.yml` (manual + environment `production` + preflight + smoke test). |
+| 41 | **Deploy bloqueado**: sin `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` y sin toolchain Rust en el entorno. `worker/wrangler.toml` ya enlaza el namespace real de `MODEL_KV` (el `REPLACE_WITH` fue reemplazado en la auditoría del 2026-10-03). **Nada desplegado.** Vía lista en `.github/workflows/deploy.yml` (manual + environment `production` + preflight + smoke test). |
 | 56 | Workers Builds rojo desde al menos `f7522c8`: falla en 0s, o sea configuracion del build en el dashboard de Cloudflare, no codigo. El build de GitHub Actions sobre `wasm32-unknown-unknown --release` pasa. Arreglo: accion humana en el dashboard. |
 | — | **λ fijadas (2026-10-03)**: λ_conf = λ_risk = 0.5 en `crates/repair_train`, implementadas (BCE sobre las cabezas de conf/risk) y testeadas. `reward` sigue sin calcularse en el repo (bucle online = fase posterior). |
 
@@ -136,3 +140,12 @@ Ningún success se declara por confidence del modelo: la autoridad es GitHub Act
   acción humana; nada se declara PASS sin GitHub Actions.
 - Los placeholders `current.json`/`stable.json` se conservan (metadata, nadie
   los consume).
+
+## Actualización 2026-10-03 (docs sync tras auditoría doc↔código)
+
+- Auditoría completa doc↔código (20 docs vs código en `4dafd33`): corregidas las
+  afirmaciones desfasadas de PART2 / INDEX / INVENTORY-41 / BRANCH_POLICY, y
+  añadido `repair_train` a los layouts de PART1 / PROMPT_PAD (ítems 69–70 de
+  DISCREPANCIES).
+- `verify_repo.py` ahora escanea también `promote-model.yml` y
+  `cleanup-branches.yml` (`WORKFLOW_LEAST_PRIVILEGE`).

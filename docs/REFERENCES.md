@@ -45,7 +45,7 @@ Target fijado en `rust-toolchain.toml`: `wasm32-unknown-unknown`, toolchain `sta
 
 | Framework | URL | Nota |
 |-----------|-----|------|
-| Burn | https://burn.dev/ | Training + export (offline, fuera de CF) |
+| Burn | https://burn.dev/ | Referencia de diseño de training; el trainer V1 real es propio (`crates/repair_train`) |
 | Burn (docs.rs) | https://docs.rs/burn/latest/burn/ | |
 | Burn (repo) | https://github.com/tracel-ai/burn | |
 | Burn (ejemplo MNIST WASM) | https://github.com/tracel-ai/burn/tree/main/examples/mnist-inference-wasm | Referencia WASM |
