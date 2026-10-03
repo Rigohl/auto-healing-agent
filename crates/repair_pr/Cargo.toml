@@ -1,0 +1,32 @@
+[package]
+name = "repair_pr"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "GATE->PR bridge V1: unified diff generator (similar) + PR opener (octocrab)"
+
+[dependencies]
+repair_types = { path = "../repair_types" }
+similar = "3"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+# jwt-aws-lc-rs en vez de jwt-rust-crypto (default): la feature por defecto
+# arrastra rsa ^0.9 via jsonwebtoken/rust_crypto y enciende
+# RUSTSEC-2023-0071 (Marvin Attack, sin version parcheada). Solo usamos
+# personal_token (sin GitHub App auth); aws-lc-rs evita el crate rsa sin
+# ignorar el advisory. timeout evita hangs infinitos; retry queda fuera a
+# proposito: la matriz de reintentos (CONTRACT.md §6) es del caller.
+octocrab = { version = "0.54", default-features = false, features = [
+    "default-client",
+    "rustls",
+    "rustls-ring",
+    "timeout",
+    "jwt-aws-lc-rs",
+] }
+secrecy = "0.10"
+# Runtime::new() del bin requiere rt-multi-thread (con solo rt no existe).
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+
+[[bin]]
+name = "repair-pr"
+path = "src/main.rs"

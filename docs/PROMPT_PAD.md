@@ -25,6 +25,7 @@ La NN solo clasifica. CI declara PASS/FAIL. Always Free.
 - Target: wasm32-unknown-unknown; workers-rs; wasm-bindgen solo en repair_nn_wasm
 - Inferencia no_std + alloc en repair_nn_core
 - Train offline (trainer V1 propio; Burn = referencia) fuera de CF; pesos en KV (`model/current`/`model/stable`)
+- GATE→PR: diff unificado real (similar) + PR (octocrab) en `repair_pr`, fuera del edge
 - Repo: única rama persistente main
 </capability>
 
@@ -46,7 +47,7 @@ GitHub webhook → Worker Rust → Incident → Evidence → FailureSignature
 → (Parser/AST/CFG/DFG cuando exista) → FeatureEncoder[64]
 → RepairNet → RepairAction {node_id, repair_operator, parameters, confidence, risk}
 → Governance gate → Deterministic operator → CandidatePatch
-→ PR → Actions compile/test/regression = VERIFY
+→ repair_pr (diff real + octocrab) → PR → Actions compile/test/regression = VERIFY
 → RepairCase → TrainingExample → Burn offline → R2/KV → edge
 </architecture>
 
@@ -67,7 +68,7 @@ Ninguno salta CI, risk gates, patch limits, protected files, SoT, rollback.
 </agents_logical>
 
 <repo_layout>
-crates/{repair_types,feature_engine,repair_nn_core,repair_nn_wasm,repair_operators,repair_train}
+crates/{repair_types,feature_engine,repair_nn_core,repair_nn_wasm,repair_operators,repair_train,repair_pr}
 worker/  model/  docs/  scripts/  .github/workflows/
 legacy/ = archivo muerto (no ejecutar)
 </repo_layout>

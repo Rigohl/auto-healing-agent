@@ -117,6 +117,17 @@ Donde la fuente absorbida discrepaba, se indica.
 | **Gate** | `confidence ≥ 0.55 ∧ risk ≤ 0.45 ∧ operator != NoOp/Unknown`. SoT: `docs/GOVERNANCE.md` |
 | **Latent** | Capa intermedia, 16 dimensiones |
 
+### GATE→PR (V1)
+
+| Tema | URL |
+|------|-----|
+| similar (diff unificado) | https://crates.io/crates/similar |
+| similar (docs.rs) | https://docs.rs/similar |
+| octocrab (cliente GitHub / PR) | https://crates.io/crates/octocrab |
+| octocrab (docs.rs) | https://docs.rs/octocrab |
+
+Versiones ancladas en `crates/repair_pr/Cargo.toml` (verificadas contra crates.io, 2026-10-03): `similar = "3"` (3.2.0), `octocrab = "0.54"` (0.54.2), `secrecy = "0.10"` (0.10.3). Crates std fuera del edge: el Worker nunca abre PRs.
+
 ### Runtime
 
 | Término | Definición |

@@ -144,6 +144,8 @@ $$\text{apply()} \to \text{CandidatePatch} \neq \text{git diff}$$
 * **Rule**: NO INVENTED DIFFS.
 * **Fallback**: If a diff generator is unavailable (`has_diff_generator == false`) or the diff string is empty, the pipeline status is strictly **`BLOCKED`**, and a P2 dependency is logged against `repair_operators`.
 
+**Estado de implementación (2026-10-03, GATE→PR V1)**: la dependencia P2 del diff generator está cubierta por `crates/repair_pr` (std, fuera del edge): `diff::patch_bundle` compone el unified diff **real** con la crate `similar` a partir de los contenidos antes/después reales, y `diff::attach_bundle` es el único punto donde `has_diff_generator` pasa a `true`. Contenidos idénticos ⇒ bundle vacío ⇒ el `CandidatePatch` del contrato sigue `is_blocked()`. `github::open_pr` abre el PR con `octocrab` (token solo vía `GITHUB_TOKEN`, least-privilege §7; duplicado abierto ⇒ `ReturnExisting` §5). La regla no cambia: sin diff real, el estado del pipeline sigue siendo estrictamente `BLOCKED`. Falta cablear worker→`repair_pr` y un workflow de dispatch; VERIFY sigue siendo Actions (§4).
+
 ---
 
 ## 4. Verification Authority (VERIFY)

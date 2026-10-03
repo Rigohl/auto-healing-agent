@@ -7,6 +7,7 @@ members = [
     "crates/repair_nn_wasm",
     "crates/repair_operators",
     "crates/repair_train",
+    "crates/repair_pr",
 ]
 # worker/ is a separate CF package (workers-rs); build via wrangler, not always in workspace tests
 

@@ -45,6 +45,9 @@ CRATE_FILES = [
     "crates/repair_nn_core/src/lib.rs",
     "crates/repair_nn_wasm/src/lib.rs",
     "crates/repair_operators/src/lib.rs",
+    "crates/repair_pr/src/lib.rs",
+    "crates/repair_pr/src/diff.rs",
+    "crates/repair_pr/src/github.rs",
 ]
 
 WORKER_FILES = [
@@ -581,6 +584,40 @@ def check_contract_module(r: Report) -> None:
     )
 
 
+def check_gate_to_pr(r: Report) -> None:
+    """GATE->PR V1 (CONTRACT §3, P2): diff real + apertura de PR, fail-closed."""
+    root_manifest = read("Cargo.toml")
+    repair_pr_manifest = read("crates/repair_pr/Cargo.toml")
+    diff_rs = read("crates/repair_pr/src/diff.rs")
+    github_rs = read("crates/repair_pr/src/github.rs")
+
+    r.expect(
+        "GATE_TO_PR_IN_WORKSPACE",
+        'crates/repair_pr es miembro del workspace raiz (GATE->PR V1)',
+        '"crates/repair_pr"' in root_manifest,
+        "el puente GATE->PR quedo fuera del workspace",
+    )
+    r.expect(
+        "GATE_TO_PR_DIFF_GENERATOR",
+        "repair_pr declara similar (diff unificado) y octocrab (PR)",
+        "similar" in repair_pr_manifest and "octocrab" in repair_pr_manifest,
+        "sin similar/octocrab no hay diff real ni PR (item 71)",
+    )
+    r.expect(
+        "GATE_TO_PR_NO_INVENTED_DIFFS",
+        "contenido identico => bundle vacio => el contrato sigue blocked",
+        "if change.before == change.after" in diff_rs
+        and "patch.diff = None" in diff_rs,
+        "el generador podria inventar diffs (CONTRACT §3)",
+    )
+    r.expect(
+        "GATE_TO_PR_FAIL_CLOSED",
+        "sin token o con bundle vacio la apertura falla cerrada",
+        "MissingToken" in github_rs and "Blocked" in github_rs,
+        "fail-open abriria PRs sin autorizacion",
+    )
+
+
 # ---------------------------------------------------------------- git / drift
 
 
@@ -730,6 +767,7 @@ CHECKS = [
     check_weight_count,
     check_encoder_invariants,
     check_contract_module,
+    check_gate_to_pr,
     check_branch_drift,
     check_workflow_permissions,
     check_smoke_test_reachable,
