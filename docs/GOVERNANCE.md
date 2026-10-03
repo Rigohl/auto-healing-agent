@@ -31,7 +31,8 @@ verificaron contra la API de GitHub y que la rama habia borrado.
 | **FEATURES → ACTION** | Edge Worker | `RepairNet` (WEIGHT_COUNT = 2863) | `FeatureVector` | `RepairAction` (op, conf, risk) | log del isolate | WASM en el propio Worker | `model/current` → `model/stable` → `BLOCKED` (red de ceros prohibida) |
 | **ACTION → GATE** | Edge Worker | `repair_operators::gate` | `RepairAction` | allow / deny + `AgentStatus` | `PipelineReport` | minimo: sin escritura | `BLOCKED` + `NeedsHuman` |
 | **ACTION → PATCH** | Operadores deterministas | `repair_operators::apply` | `RepairAction` | `CandidatePatch` | allowlist de operadores | `contents: read` | escalar a humano (advisory) |
-| **INCIDENT → ESTADO** | Durable Object | `IncidentState` (SQLite) | repo + incidente | veredicto dedup/quota/anti-loop | estado transaccional | binding `INCIDENT_STATE` | 503 `state_store_unavailable` |
+| **INCIDENT → ESTADO** | Durable Object | `IncidentState` (SQLite) | repo + incidente | veredicto dedup/quota/anti-loop | estado transa
+ccional | binding `INCIDENT_STATE` | 503 `state_store_unavailable` |
 | **VERDICT → COLA** | Edge Worker | Queue `REPAIR_QUEUE` | veredicto `queued` | `QueueTask` | 202 + `correlation_id` | productor de la cola | 503 `queue_unavailable` |
 | **COLA → PATCH** | Consumidor asincrono | `queue_consumer` | `QueueTask` | decision + verificacion | `max_retries=3` + DLQ | consumidor | DLQ y registro en el DO |
 | **GATE → PR** | GitHub App / bot | fuera de este repo hoy | `CandidatePatch` | Pull Request | diff unificado obligatorio | `contents: write`, `pull_requests: write` | **BLOCKED**: sin generador de diff no hay PR (`docs/CONTRACT.md` §3) |
@@ -62,6 +63,7 @@ La NN solo propone. Governance + CI/VERIFY deciden.
 
 Notas:
 - Valores hot-reloadables vía KV en el futuro.
+
 - Cada decisión se registra en RepairCase para auditoría.
 - Por qué no existe fallback a LLM: `docs/NO_LLM_POLICY.md`.
 - Qué está verde hoy en el flujo: `docs/E2E_CHECKLIST.md`.
@@ -79,7 +81,8 @@ GitHub Actions es la autoridad de VERIFY, concretamente los jobs de
 | `workspace-fmt` | `cargo fmt --all -- --check` | no aun: advisory hasta limpiar la deuda de formato (item 34 de DISCREPANCIES) |
 | `worker-check` | `cargo check --manifest-path worker/Cargo.toml --all-targets` y `--target wasm32-unknown-unknown --release` | si |
 | `worker-test` | `cargo test --manifest-path worker/Cargo.toml` | si |
-| `worker-clippy` | `cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings` | si |
+| `worker-clippy` | `cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings` | si || `unused-deps` | `cargo machete` + `cargo shear` (deps declaradas sin uso / archivos sin enlazar) | si (nuevo 2026-10-03) |
+
 
 Workflows que apoyan a VERIFY pero **no** son su autoridad, y por eso no deben
 entrar en required checks: `consistency.yml` (deriva entre docs, codigo y
@@ -97,12 +100,13 @@ workflows), `repair-validation.yml` (mismo gate de PR, mas explicito),
 - Mergify NO esta configurado (no existe `.mergify.yml`); no analizar ni
   documentar como si existiera. No se introduce.
 - Branch protection de `main`: UNVERIFIABLE/ausente. Evidencia (2026-10-02):
-  la API `branches/main/protection` responde 401 sin token admin;
+  
+la API `branches/main/protection` responde 401 sin token admin;
   `rulesets` devuelve `[]`; `main.protected = false`. En consecuencia NINGUN
   check es hoy obligatorio a nivel de plataforma y este documento no afirma
   que GitHub los exija: la exigencia es disciplinaria hasta que una persona
   con permisos de admin los active en Settings -> Branches -> Require status
-  checks (los seis nombres exactos de la tabla de arriba).
+  checks (los siete nombres exactos de la tabla de arriba).
 - Ausentes por decision explicita (crear solo con pedido humano):
   `CODEOWNERS`, `dependabot.yml`, `SECURITY.md`.
 

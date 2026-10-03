@@ -1,1 +1,5 @@
-worker/wrangler.toml
+# PUNTERO — NO es configuración válida a propósito.
+# La configuración real del Worker vive en worker/wrangler.toml
+# (Workers Builds: Root directory = worker; ver PYH-31).
+# Un wrangler ejecutado desde la raíz NO encuentra config aquí: ese es el
+# stop deseado, no un error a corregir.
