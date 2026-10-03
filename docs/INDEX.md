@@ -31,15 +31,15 @@
 
 ## Estado resumido
 - crates: types (+ `contract`) / feature_engine (V1) / nn_core / nn_wasm / operators → ✅
-- worker → runtime PART3async: webhook fail-closed → DO (dedup, quota, anti-loop) → Queue → 202
-- model/ → placeholders (`weights: null`; no hay entrenamiento todavia)
+- worker → runtime PART3 async: webhook fail-closed → DO (dedup, quota, anti-loop) → Queue → 202
+- model/ → placeholders (`weights: null`; no hay entrenamiento todavía)
 - docs/verification_evidence.json → artefacto de CI, no versionado
 - legacy/ → archivado (no ejecutar)
 - Mem0 → pendiente de conector
 
 ## Comprobaciones ejecutables
 
-| Script | Qué guarantee |
+| Script | Qué garantiza |
 |---------|---------------|
 | `scripts/verify_repo.py` | Deriva entre docs, codigo, workflows y refs de git (45 claims) |
 | `scripts/validate-preflight.sh` | Logica de Preflight del deploy y permisos de los scripts de build |

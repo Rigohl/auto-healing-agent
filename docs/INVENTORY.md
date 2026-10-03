@@ -40,7 +40,7 @@ Detalle y reglas: `docs/BRANCH_POLICY.md`.
 docs/
 ├── ARCHITECTURE.md            ← flujo + aritmética de pesos
 ├── PROMPT_PAD.md              ← contrato de implementación (SoT)
-├── DISCREPANCIES.md           ← 25 ítems, todos con decisión
+├── DISCREPANCIES.md           ← 66 ítems, todos con decisión
 ├── INVENTORY.md               ← este archivo
 ├── GOVERNANCE.md              ← SoT umbrales 0.55 / 0.45
 ├── NO_LLM_POLICY.md           ← por qué no hay LLM ni fallback híbrido
@@ -57,7 +57,7 @@ docs/
 ## Código
 
 - `crates/` — 5 miembros: types, feature_engine, nn_core, nn_wasm, operators.
-- `worker/` — esqueleto, **fuera** del workspace Cargo (paquete CF aparte,
+- `worker/` — runtime PART3 async (webhook fail-closed → DO → Queue → consumidor), **fuera** del workspace Cargo (paquete CF aparte,
   se compila con wrangler).
 - `model/` — placeholders. `current.json` y `stable.json` con `weights: null`.
 - `legacy/` — archivado, no ejecutable. Se conserva íntegro.

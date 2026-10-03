@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       # --workspace: los 5 crates del raiz, incluido repair_nn_wasm (que el
-      # listado -p anterior exclia). El worker NO es miembro: jobs worker-*.
+      # listado -p anterior excluía). El worker NO es miembro: jobs worker-*.
       - run: cargo test --workspace
 
   workspace-clippy:
