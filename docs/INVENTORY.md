@@ -5,9 +5,9 @@ Estado real de `main` tras absorber el delta útil de las 9 ramas y borrarlas.
 ## Ramas
 
 Verificado 2026-10-01: **1 rama local, 1 rama en `origin`, 0 PRs abiertos, 0 tags.**
-(desfasado: los PRs #18–#20 dejaron ramas residuales efímeras 100% fusionadas;
-el estado vivo lo comprueba `verify_repo.py` claim `BRANCH_DRIFT`, y se limpia
-con el workflow `cleanup-branches.yml`)
+(desfasado: los PRs #18–#20, #22 y #24 dejaron 8 ramas residuales efímeras
+100% fusionadas; el estado vivo lo comprueba `verify_repo.py` claim
+`BRANCH_DRIFT`, y se limpia con el workflow `cleanup-branches.yml`)
 Detalle y reglas: `docs/BRANCH_POLICY.md`.
 
 - **main** — única rama persistente.
@@ -78,10 +78,7 @@ docs/
 | CI / test | ✅ `cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators` — 27 tests |
 | CI / worker | ✅ `cargo check --manifest-path worker/Cargo.toml --all-targets` (worker enlaza los 4 crates) |
 | CI / clippy | ✅ `-D warnings` |
-| WASM | ✅ `cargo b
-u
-i
-ld -p repair_nn_wasm --release --target wasm32-unknown-unknown` |
+| WASM | ✅ `cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown` |
 | Security | ✅ |
 
 El build WASM estaba roto desde antes de la unificación (`f32::exp()` en un
@@ -167,10 +164,7 @@ T3
 - **P2 de `CONTRACT.md` §3 cerrado como crate**: `crates/repair_pr` — generador
   de diff unificado real (`similar` 3.2.0) + apertura de PR (`octocrab` 0.54.2
   con `secrecy` 0.10.3; versiones verificadas contra crates.io). 7º miembro del
-  workspace; bin `repair-pr` (`d
-iff`
- off
-line | `pr` desde rama efímera).
+  workspace; bin `repair-pr` (`diff` offline | `pr` desde rama efímera).
 - **Fail-closed de extremo a extremo**: token solo de `GITHUB_TOKEN` (jamás
   adivinado ni logueado); bundle vacío ⇒ `Blocked` (NO INVENTED DIFFS); PR
   duplicado ⇒ `ReturnExisting` (CONTRACT §5); nunca declara PASS (§4: la
@@ -204,15 +198,14 @@ código huérfano o errores") usando GitHub, Context7, Sentry y Linear
   `NO_ORPHAN_DEPS_CI` en verify_repo.py.
 - `wrangler.toml` raíz: era un **symlink** a `worker/wrangler.toml` (el
   raw de GitHub sirve el contenido del destino — por eso parecía texto
-  plano). L
-a API disponible no recrea symlinks: queda como archivo de
+  plano). La API disponible no recrea symlinks: queda como archivo de
   solo-comentarios (fail-closed: un wrangler desde la raíz no despliega
   NADA) y `validate-preflight.sh` valida ahora ambas formas; jamás acepta
   una config activa divergente. Restaurar el symlink es opcional y humano
-  (`ln -sfn worker/wrangler.toml wrangler.toml` + commit).un archivo corrupto.
+  (`ln -sfn worker/wrangler.toml wrangler.toml` + commit).
 - **Sentry**: org `pyhentretaiment` con 0 proyectos — sin monitoreo de
   errores conectado (worker sin deploy verificado; observabilidad = PART4).
-- Orfanas conocidas que NO son código: 5 ramas residuales (BRANCH_DRIFT,
+- Orfanas conocidas que NO son código: 8 ramas residuales (BRANCH_DRIFT,
   dispatch humano de `cleanup-branches.yml`) y `legacy/` (archivo V0
   intencional).
 
