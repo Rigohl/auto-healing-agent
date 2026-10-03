@@ -73,7 +73,7 @@ pub fn client_from_env() -> Result<octocrab::Octocrab, PrError> {
         return Err(PrError::MissingToken);
     }
     let octocrab = octocrab::Octocrab::builder()
-        .personal_token(SecretString::new(token))
+        .personal_token(SecretString::new(token.into_boxed_str()))
         .build()?;
     Ok(octocrab)
 }
@@ -110,7 +110,7 @@ pub async fn open_pr(
     if let Some(pr) = existing.items.into_iter().next() {
         return Ok(PrOutcome {
             number: pr.number,
-            url: pr.html_url.to_string(),
+            url: pr.html_url.as_ref().map(ToString::to_string).unwrap_or_default(),
             duplicate: true,
         });
     }
@@ -122,7 +122,7 @@ pub async fn open_pr(
         .await?;
     Ok(PrOutcome {
         number: pr.number,
-        url: pr.html_url.to_string(),
+        url: pr.html_url.as_ref().map(ToString::to_string).unwrap_or_default(),
         duplicate: false,
     })
 }
@@ -160,7 +160,7 @@ mod tests {
 
     fn test_client() -> octocrab::Octocrab {
         octocrab::Octocrab::builder()
-            .personal_token(SecretString::new("x".to_string()))
+            .personal_token(SecretString::new("x".into()))
             .build()
             .expect("client construction is offline")
     }
