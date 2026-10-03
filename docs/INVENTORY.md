@@ -35,6 +35,7 @@ Detalle y reglas: `docs/BRANCH_POLICY.md`.
 - ~~kilo/bionic-owl-ok9~~ — 30 archivos / +7634. Absorbido **depurado**:
   `docs/REFERENCES.md` (enlaces oficiales + glosario corregido).
   Descartados: `DOCUMENTATION.md` 
+
 (afirma "MongoDB ✅ Conectado" sin driver,
   ítem 21) y `ACADEMIC_REFS.md` (citas académicas falsificadas, ítem 24).
 
@@ -76,7 +77,8 @@ docs/
 | CI / test | ✅ `cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators` — 27 tests |
 | CI / worker | ✅ `cargo check --manifest-path worker/Cargo.toml --all-targets` (worker enlaza los 4 crates) |
 | CI / clippy | ✅ `-D warnings` |
-| WASM | ✅ `cargo bui
+| WASM | ✅ `cargo bu
+i
 ld -p repair_nn_wasm --release --target wasm32-unknown-unknown` |
 | Security | ✅ |
 
@@ -95,7 +97,8 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 | — | E2E completo no verde (ver `docs/E2E_CHECKLIST.md`). |
 | 7, 52 | Sin `Cargo.lock`, **por decisión** (ítem 52): las versiones resuelven en cada build de CI. Cuatro ramas pidieron versionarlos; se explica en DISCREPANCIES por qué no se adoptan tal cual. |
 | 34 | Parcial: clippy con `-D warnings` activo y **verde** (los seis checks de `ci.yml` pasan en el PR #13); falta `cargo fmt --check` bloqueante, que necesita toolchain local para aplicar el formato. |
-| 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`) y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están cor
+| 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`) y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están c
+or
 regidos. |
 | 41 | **Deploy bloqueado**: sin `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` y sin toolchain Rust en el entorno. `worker/wrangler.toml` ya enlaza el namespace real de `MODEL_KV` (el `REPLACE_WITH` fue reemplazado en la auditoría del 2026-10-03). **Nada desplegado.** Vía lista en `.github/workflows/deploy.yml` (manual + environment `production` + preflight + smoke test). |
 | 56 | Workers Builds rojo desde al menos `f7522c8`: falla en 0s, o sea configuracion del build en el dashboard de Cloudflare, no codigo. El build de GitHub Actions sobre `wasm32-unknown-unknown --release` pasa. Arreglo: accion humana en el dashboard. |
@@ -121,7 +124,8 @@ Ningún success se declara por confidence del modelo: la autoridad es GitHub Act
   `from_state` real en auditoría, TTL de idempotencia + retención (24 h /
   7 días), `idem_key` canónica del contrato, cola real en `record_poison`.
   Detalle: `DISCREPANCIES` 58–66.
-- **Docs sincronizadas** (GOVERNANCE, CONTRACT §2, PART3 
+- **Docs sincronizadas** (GOVERNANCE, CONTRACT §2, PAR
+T3 
 §8/§9/§10/§12/§13,
   E2E_CHECKLIST, ARCHITECTURE, PHASE_STATUS, BRANCH_POLICY) y
   `verify_repo.py` ahora cubre `deploy-staging.yml`.
@@ -159,7 +163,8 @@ Ningún success se declara por confidence del modelo: la autoridad es GitHub Act
 - **P2 de `CONTRACT.md` §3 cerrado como crate**: `crates/repair_pr` — generador
   de diff unificado real (`similar` 3.2.0) + apertura de PR (`octocrab` 0.54.2
   con `secrecy` 0.10.3; versiones verificadas contra crates.io). 7º miembro del
-  workspace; bin `repair-pr` (`diff` off
+  workspace; bin `repair-pr` (`diff`
+ off
 line | `pr` desde rama efímera).
 - **Fail-closed de extremo a extremo**: token solo de `GITHUB_TOKEN` (jamás
   adivinado ni logueado); bundle vacío ⇒ `Blocked` (NO INVENTED DIFFS); PR
@@ -192,9 +197,13 @@ código huérfano o errores") usando GitHub, Context7, Sentry y Linear
   nuevo en ci.yml (cargo-machete 0.9.2 + cargo-shear 1.14.0, verificados
   contra docs.rs) + claims nuevos `NO_ORPHAN_CRATES` y
   `NO_ORPHAN_DEPS_CI` en verify_repo.py.
-- `wrangler.toml` raíz convertido de puntero de texto plano a comentarios:
-  sigue sin ser config válida a propósito, pero ahora lo dice en lugar de
-  parecer un archivo corrupto.
+- `wrangler.toml` raíz: era un **symlink** a `worker/wrangler.toml` (el
+  raw de GitHub sirve el contenido del destino — por eso parecía texto
+  plano). La API disponible no recrea symlinks: queda como archivo de
+  solo-comentarios (fail-closed: un wrangler desde la raíz no despliega
+  NADA) y `validate-preflight.sh` valida ahora ambas formas; jamás acepta
+  una config activa divergente. Restaurar el symlink es opcional y humano
+  (`ln -sfn worker/wrangler.toml wrangler.toml` + commit).un archivo corrupto.
 - **Sentry**: org `pyhentretaiment` con 0 proyectos — sin monitoreo de
   errores conectado (worker sin deploy verificado; observabilidad = PART4).
 - Orfanas conocidas que NO son código: 5 ramas residuales (BRANCH_DRIFT,
