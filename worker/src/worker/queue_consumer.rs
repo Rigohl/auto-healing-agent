@@ -1,9 +1,9 @@
 //! Consumidor de la cola de reparaciones.
 //!
-//! Reglas PART3: retry limitado (nunca infinito), backoff exponencial con
-//! tope, deteccion de veneno, DLQ, correlation_id en cada mensaje e
-//! idempotencia via el Durable Object (la puerta /attempt decide si el
-//! intento procede; un duplicado nunca consume quota dos veces).
+//! Reglas PART3: retry acotado (nunca infinito: max_retries=3 de la cola ->
+//! DLQ), deteccion de veneno en el consumidor de la DLQ, correlation_id en
+//! cada mensaje e idempotencia via el Durable Object (la puerta /attempt
+//! decide si el intento procede; un duplicado nunca consume quota dos veces).
 
 use serde::{Deserialize, Serialize};
 use worker::*;
@@ -26,11 +26,13 @@ pub const QUEUE_STAGING: &str = "auto-healing-repairs-staging";
 pub const DLQ_PROD: &str = "auto-healing-repairs-dlq";
 pub const DLQ_STAGING: &str = "auto-healing-repairs-dlq-staging";
 
-/// Hard stop propio: nunca retry infinito. El max_retries=3 del wrangler
-/// manda el mensaje a la DLQ; nosotros cortamos antes con este contador.
-const MAX_QUEUE_ATTEMPTS: u32 = 3;
-const BACKOFF_BASE_SECONDS: u32 = 5;
-const BACKOFF_CAP_SECONDS: u32 = 300;
+/// Delay fijo de reintento. Antes habia un "contador propio" (MAX_QUEUE_ATTEMPTS)
+/// que era inalcanzable: Cloudflare reentrega el MISMO body al reintentar, asi
+/// que el contador del mensaje nunca avanzaba y la rama nunca se ejecutaba
+/// (dead code). El hard stop autoritativo de intentos es el DO (`/attempt`,
+/// max_attempts_per_incident) y el tope de reintentos es `max_retries=3` de la
+/// cola (trascendido, el mensaje cae a la DLQ). Nunca retry infinito.
+const RETRY_DELAY_SECONDS: u32 = 10;
 
 /// Cuerpo entrante del webhook. Todo opcional: un payload parcial nunca
 /// rompe el isolate.
@@ -91,6 +93,11 @@ impl WebhookPayload {
 }
 
 /// Mensaje de cola: correlation_id SIEMPRE presente para trazabilidad.
+///
+/// Sin campo `attempts`: el body del mensaje es inmutable al reintentar,
+/// asi que un contador aqui no sobreviviria a los redeliveries. El numero de
+/// intentos REALES vive en el DO (columna `incidents.attempts`, la incrementa
+/// `/attempt`); ver `RETRY_DELAY_SECONDS`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueTask {
     pub correlation_id: String,
@@ -98,15 +105,7 @@ pub struct QueueTask {
     pub repo: String,
     pub signature: String,
     pub payload: WebhookPayload,
-    pub attempts: u32,
     pub enqueued_at: i64,
-}
-
-fn backoff_seconds(attempts: u32) -> u32 {
-    let shift = attempts.min(6);
-    BACKOFF_BASE_SECONDS
-        .saturating_mul(1u32 << shift)
-        .min(BACKOFF_CAP_SECONDS)
 }
 
 /// Punto de entrada del evento de cola. Un solo handler para produccion,
@@ -115,10 +114,12 @@ fn backoff_seconds(attempts: u32) -> u32 {
 pub async fn consume(batch: MessageBatch<QueueTask>, env: Env) -> Result<()> {
     let queue_name = batch.queue();
     if queue_name == DLQ_PROD || queue_name == DLQ_STAGING {
-        // DLQ: registrar el veneno en el DO (best-effort) y asentar.
+        // DLQ: registrar el veneno en el DO (best-effort) y asentar. El
+        // nombre de la cola REAL va al DO: un veneno de staging no se
+        // registra como produccion.
         for message in batch.messages()? {
             let task = message.body().clone();
-            if let Err(e) = record_poison(env.clone(), task).await {
+            if let Err(e) = record_poison(env.clone(), task, &queue_name).await {
                 console_error!("dlq record failed: {}", e);
             }
         }
@@ -134,41 +135,27 @@ pub async fn consume(batch: MessageBatch<QueueTask>, env: Env) -> Result<()> {
     let anti_cfg = AntiLoopConfig::from_env(&env);
     for message in batch.messages()? {
         let task = message.body().clone();
-        let attempt_no = task.attempts + 1;
-        let task = QueueTask { attempts: attempt_no, ..task };
         match process(env.clone(), task.clone(), quota_cfg, anti_cfg).await {
             Ok(()) => {
                 message.ack();
             }
             Err(err) => {
-                if attempt_no >= MAX_QUEUE_ATTEMPTS {
-                    // Veneno: NO reintentar para siempre. Registrar y ack.
-                    console_error!(
-                        "poison correlation_id={} tras {} intentos: {}",
-                        task.correlation_id,
-                        attempt_no,
-                        err
-                    );
-                    if let Err(e) = record_poison(env.clone(), task).await {
-                        console_error!("poison record failed: {}", e);
-                    }
-                    message.ack();
-                } else {
-                    // Backoff exponencial con tope: 5s, 10s, 20s... max 300s.
-                    let delay = backoff_seconds(attempt_no);
-                    console_warn!(
-                        "retry correlation_id={} intento {} en {}s: {}",
-                        task.correlation_id,
-                        attempt_no,
-                        delay,
-                        err
-                    );
-                    message.retry_with_options(
-                        &QueueRetryOptionsBuilder::new()
-                            .with_delay_seconds(delay)
-                            .build(),
-                    );
-                }
+                // Fallo transitorio (DO o KV no disponible). Se reintenta con
+                // delay fijo; el TOPE es max_retries=3 de la cola, y ahi el
+                // mensaje cae a la DLQ (su consumidor lo registra como
+                // veneno). El corte autoritativo por numero de intentos es el
+                // DO (/attempt), no este consumidor.
+                console_warn!(
+                    "retry correlation_id={} en {}s: {}",
+                    task.correlation_id,
+                    RETRY_DELAY_SECONDS,
+                    err
+                );
+                message.retry_with_options(
+                    &QueueRetryOptionsBuilder::new()
+                        .with_delay_seconds(RETRY_DELAY_SECONDS)
+                        .build(),
+                );
             }
         }
     }
@@ -183,14 +170,16 @@ async fn process(
     quota_cfg: QuotaConfig,
     anti_cfg: AntiLoopConfig,
 ) -> Result<()> {
-    // 1. Puerta: quota + anti-loop + contador de attempts en el DO.
+    // 1. Puerta: quota + anti-loop (las 4 señales) + contador de attempts en el DO.
     let qs = format!(
-        "/attempt?correlation_id={}&incident_id={}&signature={}&max_attempts_per_incident={}&max_same_signature={}&window_seconds={}",
+        "/attempt?correlation_id={}&incident_id={}&signature={}&max_attempts_per_incident={}&max_same_signature={}&max_same_fingerprint={}&max_same_failing_verification={}&window_seconds={}",
         urlencode(&task.correlation_id),
         urlencode(&task.incident_id),
         urlencode(&task.signature),
         quota_cfg.max_attempts_per_incident,
         anti_cfg.max_same_signature,
+        anti_cfg.max_same_fingerprint,
+        anti_cfg.max_same_failing_verification,
         anti_cfg.window_seconds
     );
     let text = crate::runtime::call_do(env.clone(), task.repo.clone(), qs).await?;
@@ -248,12 +237,12 @@ fn blocked_result_qs(task: &QueueTask, decision: &str, reason: &str) -> String {
 }
 
 #[worker::send]
-async fn record_poison(env: Env, task: QueueTask) -> Result<()> {
+async fn record_poison(env: Env, task: QueueTask, queue_name: &str) -> Result<()> {
     let qs = format!(
         "/poison?correlation_id={}&incident_id={}&queue={}",
         urlencode(&task.correlation_id),
         urlencode(&task.incident_id),
-        urlencode(DLQ_PROD)
+        urlencode(queue_name)
     );
     crate::runtime::call_do(env, task.repo, qs).await.map(|_| ())
 }

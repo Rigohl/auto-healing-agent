@@ -25,7 +25,7 @@ mod runtime;
 
 use feature_engine::extract;
 use repair_operators::gate;
-use repair_types::FailureSignature;
+use repair_types::{compute_idempotency_key, FailureSignature};
 use worker::*;
 
 use crate::runtime::{
@@ -86,7 +86,13 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Err(_) => return Response::error("invalid_json", 400),
     };
 
-    // 3. Correlacion estructurada + clave de idempotencia (delivery id).
+    // 3. Correlacion estructurada + clave de idempotencia CANONICA del
+    //    contrato (CONTRACT.md §5 / repair_types::compute_idempotency_key):
+    //    FNV-1a(repo | incident | delivery | fingerprint). Antes el worker
+    //    usaba una formula propia (delivery|signature) distinta de la que el
+    //    contrato documenta; ahora hay UNA sola fuente de verdad.
+    let incident = payload.to_incident();
+    let fsig = FailureSignature::from_incident(&incident);
     let incident_id = payload.incident_id();
     let repo = payload.repo();
     let signature = payload.signature_str();
@@ -97,10 +103,7 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         incident_id,
         fnv1a64(format!("{}|{}|{}", incident_id, signature, now).as_bytes())
     );
-    let idem_key = format!(
-        "{:x}",
-        fnv1a64(format!("{}|{}", delivery_id, signature).as_bytes())
-    );
+    let idem_key = compute_idempotency_key(&repo, &incident_id, &delivery_id, &fsig.fingerprint);
 
     // 4. Durable Object: dedup, idempotencia, quota y anti-loop ANTES de
     //    encolar. Si el DO no responde: fail-closed 503, sin efectos.
@@ -108,8 +111,9 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     let anti_cfg = AntiLoopConfig::from_env(&env);
     let qs = format!(
         // Sin `delivery_id`: el DO deduplica por `idem_key`, que ya lo
-        // codifica (FNV-1a(delivery_id | signature)). Mandarlo era ruido.
-        "/ingest?repo={}&incident_id={}&signature={}&idem_key={}&correlation_id={}&max_attempts_per_incident={}&max_repairs_per_repo={}&max_open_repairs={}&cooldown_seconds={}&daily_budget={}&max_same_incident={}&max_same_signature={}&window_seconds={}",
+        // codifica (FNV-1a(repo | incident | delivery | fingerprint)).
+        // Mandarlo era ruido.
+        "/ingest?repo={}&incident_id={}&signature={}&idem_key={}&correlation_id={}&max_attempts_per_incident={}&max_repairs_per_repo={}&max_open_repairs={}&cooldown_seconds={}&daily_budget={}&max_same_incident={}&max_same_signature={}&max_same_fingerprint={}&max_same_failing_verification={}&window_seconds={}",
         urlencode(&repo),
         urlencode(&incident_id),
         urlencode(&signature),
@@ -122,6 +126,8 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         quota_cfg.daily_budget,
         anti_cfg.max_same_incident,
         anti_cfg.max_same_signature,
+        anti_cfg.max_same_fingerprint,
+        anti_cfg.max_same_failing_verification,
         anti_cfg.window_seconds
     );
     let do_text = match crate::runtime::call_do(env.clone(), repo.clone(), qs).await {
@@ -142,8 +148,6 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     // 5. Preview determinista del gate. Compatibilidad con el smoke test de
     //    deploy.yml (exige operator_id en la respuesta). La decision
     //    autoritativa es la del consumidor asincrono; VERIFY = Actions.
-    let incident = payload.to_incident();
-    let fsig = FailureSignature::from_incident(&incident);
     let features = extract(&incident, &fsig);
     let preview = match model::load(&env).await {
         Ok(loaded) => {
@@ -169,7 +173,6 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         repo: repo.clone(),
         signature: signature.clone(),
         payload,
-        attempts: 0,
         enqueued_at: now,
     };
     let queue = env.queue(queue_consumer::QUEUE_BINDING)?;

@@ -20,6 +20,10 @@
 use serde::Deserialize;
 use worker::*;
 
+// TTL canonica del contrato (CONTRACT.md §5): la declaracion vive en
+// repair_types, no en una constante suelta.
+use repair_types::IDEMPOTENCY_TTL_SECONDS;
+
 use crate::runtime::{
     anti_loop::{self, AntiLoopConfig, LoopSignals},
     now_ms,
@@ -140,9 +144,9 @@ struct IngestQuery {
     #[serde(default)] incident_id: String,
     #[serde(default)] signature: String,
     // Sin `delivery_id`: la deduplicacion va por `idem_key`, que el Worker
-    // calcula como FNV-1a(delivery_id | signature). Reenviarlo seria mandar un
-    // parametro que nadie lee, que es peor que no mandarlo. El valor sigue
-    //viandonos por `idem_key` (docs/PART3_CLOUDFLARE_RUNTIME.md).
+    // calcula con `repair_types::compute_idempotency_key` (FNV-1a
+    // repo|incident|delivery|fingerprint, CONTRACT.md §5). Reenviarlo seria
+    // mandar un parametro que nadie lee.
     #[serde(default)] idem_key: String,
     #[serde(default)] correlation_id: String,
     #[serde(default)] max_attempts_per_incident: String,
@@ -152,6 +156,8 @@ struct IngestQuery {
     #[serde(default)] daily_budget: String,
     #[serde(default)] max_same_incident: String,
     #[serde(default)] max_same_signature: String,
+    #[serde(default)] max_same_fingerprint: String,
+    #[serde(default)] max_same_failing_verification: String,
     #[serde(default)] window_seconds: String,
 }
 
@@ -162,6 +168,8 @@ struct AttemptQuery {
     #[serde(default)] signature: String,
     #[serde(default)] max_attempts_per_incident: String,
     #[serde(default)] max_same_signature: String,
+    #[serde(default)] max_same_fingerprint: String,
+    #[serde(default)] max_same_failing_verification: String,
     #[serde(default)] window_seconds: String,
 }
 
@@ -194,12 +202,34 @@ struct CountRow {
     count: i64,
 }
 
-/// Solo `attempts`: `id` estaba en el SELECT pero nadie lo leia, y con
-/// `-D warnings` eso es un error, no una nota. Si hace falta para depurar, que
-/// salga en el log de transiciones, no en una fila deserializada al vacio.
+/// Fila del incidente vista por `/attempt`: intentos REALES (columna
+/// `attempts`, la incrementa el propio `/attempt`), estado actual (para
+/// registrar la transicion de auditoria con su `from_state` verdadero) y la
+/// ultima huella de parche (senal anti-loop). `default` en todos: ni una
+/// columna ausente ni una fila parcial rompen el parseo.
 #[derive(Debug, Deserialize)]
 struct IncidentRow {
     #[serde(default)] attempts: i64,
+    #[serde(default)] state: String,
+    #[serde(default)] last_fingerprint: String,
+}
+
+/// Estado previo del incidente en `/ingest` (una sola query): intentos desde
+/// la columna `attempts` (antes se usaba `COUNT(*) WHERE id = ?`, que es
+/// siempre 0 o 1 porque `id` es PK: no media ni intentos ni eventos) y la
+/// ultima huella de parche (senal anti-loop de "misma huella repetida").
+#[derive(Debug, Deserialize)]
+struct IncidentPriorRow {
+    #[serde(default)] attempts: i64,
+    #[serde(default)] last_fingerprint: String,
+}
+
+/// Estado actual del incidente, usado como `from_state` real en las
+/// transiciones de auditoria (antes venia hardcodeado a `repairing` incluso
+/// cuando el incidente estaba en `queued`).
+#[derive(Debug, Deserialize)]
+struct StateRow {
+    #[serde(default)] state: String,
 }
 
 impl IncidentState {
@@ -259,7 +289,8 @@ impl IncidentState {
         .to_string()
     }
 
-    /// POST /ingest: dedup + idempotencia + quota + anti-loop + alta.
+    /// POST /ingest: retencion -> idempotencia (con TTL) -> anti-loop (4
+    /// señales reales) -> quota -> alta.
     fn ingest(&self, req: &Request) -> Result<Response> {
         let q: IngestQuery = req.query()?;
         let now = now_ms();
@@ -271,24 +302,71 @@ impl IncidentState {
             .unwrap_or(anti_defaults.window_seconds)
             * 1000;
 
+        // 0. Retencion: sin ella el DO creceria sin bound (1 GB por objeto).
+        //    idempotency: TTL del contrato (CONTRACT.md §5, 24 h).
+        //    eventos: solo alimentan ventanas de 15 min (anti-loop), 1 h
+        //    (cooldown) y 1 dia (daily_budget); 7 dias es margen amplio.
+        //    `transitions` es auditoria: no se purga.
+        let ttl_ms = IDEMPOTENCY_TTL_SECONDS as i64 * 1000;
+        let retention_ms = 7 * 86_400_000;
+        exec_write(
+            &self.sql,
+            "DELETE FROM idempotency WHERE created_at < ?",
+            vec![SqlStorageValue::from(now - ttl_ms)],
+        )?;
+        for table in ["signature_events", "fingerprints", "repair_events"] {
+            exec_write(
+                &self.sql,
+                &format!("DELETE FROM {table} WHERE created_at < ?"),
+                vec![SqlStorageValue::from(now - retention_ms)],
+            )?;
+        }
+
         // 1. Idempotencia: misma entrega -> misma respuesta sin reprocesar.
+        //    Con TTL: una decision guardada expira a las 24 h (CONTRACT.md §5)
+        //    y la entrega se reprocesa; un bloqueo eterno no es idempotencia.
         let existing: Option<IdemRow> = self
             .sql
             .exec(
-                "SELECT response FROM idempotency WHERE key = ?",
+                "SELECT response, created_at FROM idempotency WHERE key = ?",
                 vec![SqlStorageValue::from(q.idem_key.as_str())],
             )?
-            .to_array()?
-            .into_iter()
-            .next();
+            .one()?;
         if let Some(row) = existing {
-            return Response::ok(row.response);
+            if row.created_at + ttl_ms > now {
+                return Response::ok(row.response);
+            }
         }
 
-        // 2. Anti-loop (senales dentro de la ventana).
+        // 2. Estado previo del incidente (una sola query): intentos REALES y
+        //    ultima huella de parche. Antes el "intentos" venia de COUNT(*)
+        //    sobre la PK (0 o 1: jamas bloqueaba) y las senales de huella y
+        //    verificacion estaban hardcodeadas a 0 (config muerta).
+        let prior: Option<IncidentPriorRow> = self
+            .sql
+            .exec(
+                "SELECT attempts, last_fingerprint FROM incidents WHERE id = ?",
+                vec![SqlStorageValue::from(q.incident_id.as_str())],
+            )?
+            .one()?;
+        let same_fingerprint_recent = match &prior {
+            Some(p) if !p.last_fingerprint.is_empty() => self.count(
+                "SELECT COUNT(*) AS count FROM fingerprints WHERE fingerprint = ? AND created_at > ?",
+                vec![
+                    SqlStorageValue::from(p.last_fingerprint.as_str()),
+                    SqlStorageValue::from(now - window_ms),
+                ],
+            )? as u32,
+            _ => 0,
+        };
+
+        // 3. Anti-loop: las 4 senales, todas reales, dentro de la ventana.
         let loop_signals = LoopSignals {
+            // Este incidente ya tuvo N transiciones en la ventana (reaparicion
+            // activa). Antes contaba filas de `incidents` (PK: tope 1) y el
+            // limite (default 3) era inalcanzable.
             same_incident_recent: self.count(
-                "SELECT COUNT(*) AS count FROM incidents WHERE id = ? AND updated_at > ?",
+                "SELECT COUNT(*) AS count FROM transitions WHERE incident_id = ? AND created_at > ?",
                 vec![
                     SqlStorageValue::from(q.incident_id.as_str()),
                     SqlStorageValue::from(now - window_ms),
@@ -301,14 +379,29 @@ impl IncidentState {
                     SqlStorageValue::from(now - window_ms),
                 ],
             )? as u32,
-            same_fingerprint_recent: 0, // la huella aun no existe en ingest
-            same_failing_verification_recent: 0,
+            // La huella de ESTA entrega no existe todavia (el pipeline corre
+            // despues): se mide la ultima huella del incidente. Si el mismo
+            // parche ya se propuso N veces en la ventana, es un bucle.
+            same_fingerprint_recent,
+            same_failing_verification_recent: self.count(
+                "SELECT COUNT(*) AS count FROM verification WHERE incident_id = ? AND status IN ('blocked', 'poison') AND created_at > ?",
+                vec![
+                    SqlStorageValue::from(q.incident_id.as_str()),
+                    SqlStorageValue::from(now - window_ms),
+                ],
+            )? as u32,
         };
         let anti_cfg = AntiLoopConfig {
             max_same_incident: q.max_same_incident.parse().unwrap_or(anti_defaults.max_same_incident),
             max_same_signature: q.max_same_signature.parse().unwrap_or(anti_defaults.max_same_signature),
-            max_same_fingerprint: anti_defaults.max_same_fingerprint,
-            max_same_failing_verification: anti_defaults.max_same_failing_verification,
+            max_same_fingerprint: q
+                .max_same_fingerprint
+                .parse()
+                .unwrap_or(anti_defaults.max_same_fingerprint),
+            max_same_failing_verification: q
+                .max_same_failing_verification
+                .parse()
+                .unwrap_or(anti_defaults.max_same_failing_verification),
             window_seconds: q.window_seconds.parse().unwrap_or(anti_defaults.window_seconds),
         };
         if let anti_loop::LoopVerdict::Blocked(reason) = anti_loop::evaluate(&anti_cfg, &loop_signals) {
@@ -317,14 +410,14 @@ impl IncidentState {
             return Response::ok(resp);
         }
 
-        // 3. Quota (estado contable de este repositorio).
+        // 4. Quota (estado contable de este repositorio).
         let cooldown_ms = q.cooldown_seconds.parse::<i64>().unwrap_or(defaults.cooldown_seconds) * 1000;
         let day = (now / 86_400_000).to_string();
         let usage = QuotaUsage {
-            attempts_of_incident: self.count(
-                "SELECT COUNT(*) AS count FROM incidents WHERE id = ?",
-                vec![SqlStorageValue::from(q.incident_id.as_str())],
-            )? as u32,
+            // Intentos REALES del incidente (columna `attempts`, la incrementa
+            // /attempt): un incidente que ya agoto intentos no vuelve a
+            // encolar aunque llegue con un delivery_id nuevo.
+            attempts_of_incident: prior.map(|p| p.attempts as u32).unwrap_or(0),
             repairs_in_window: self.count(
                 "SELECT COUNT(*) AS count FROM repair_events WHERE repository = ? AND created_at > ?",
                 vec![
@@ -403,16 +496,34 @@ impl IncidentState {
         let defaults = QuotaConfig::default();
         let anti_defaults = AntiLoopConfig::default();
 
+        // La fila debe existir con ESTE correlation_id. Si una entrega nueva
+        // del mismo incidente reemplazo la correlacion (upsert de /ingest),
+        // este task es obsoleto: se deniega en vez de leer attempts=0
+        // invisiblemente y seguir ejecutando el pipeline para después
+        // sobrescribir la verification ajena por incident_id.
         let row: Option<IncidentRow> = self
             .sql
             .exec(
-                "SELECT attempts FROM incidents WHERE correlation_id = ?",
+                "SELECT attempts, state, last_fingerprint FROM incidents WHERE correlation_id = ?",
                 vec![SqlStorageValue::from(q.correlation_id.as_str())],
             )?
-            .to_array()?
-            .into_iter()
-            .next();
-        let attempts = row.map(|r| r.attempts).unwrap_or(0) + 1;
+            .one()?;
+        let Some(row) = row else {
+            return Response::ok(
+                serde_json::json!({
+                    "allowed": false,
+                    "reason": "correlation_stale_or_missing",
+                    "correlation_id": q.correlation_id,
+                })
+                .to_string(),
+            );
+        };
+        let from_state = if row.state.is_empty() {
+            String::from(STATE_QUEUED)
+        } else {
+            row.state
+        };
+        let attempts = row.attempts + 1;
         let max_attempts = q
             .max_attempts_per_incident
             .parse()
@@ -428,7 +539,7 @@ impl IncidentState {
                     SqlStorageValue::from(q.correlation_id.as_str()),
                 ],
             )?;
-            self.insert_transition(&q.incident_id, STATE_REPAIRING, STATE_BLOCKED, &q.correlation_id, now)?;
+            self.insert_transition(&q.incident_id, &from_state, STATE_BLOCKED, &q.correlation_id, now)?;
             return Response::ok(
                 serde_json::json!({
                     "allowed": false,
@@ -440,6 +551,9 @@ impl IncidentState {
             );
         }
 
+        // Anti-loop completo en la puerta: la huella de ESTE intento no existe
+        // todavia (el pipeline corre despues), asi que se mide la ultima
+        // huella registrada del incidente y las verificaciones fallidas.
         let window_ms = q.window_seconds.parse::<i64>().unwrap_or(anti_defaults.window_seconds) * 1000;
         let same_signature_recent = self.count(
             "SELECT COUNT(*) AS count FROM signature_events WHERE signature = ? AND created_at > ?",
@@ -448,12 +562,40 @@ impl IncidentState {
                 SqlStorageValue::from(now - window_ms),
             ],
         )? as u32;
+        let same_fingerprint_recent = if row.last_fingerprint.is_empty() {
+            0
+        } else {
+            self.count(
+                "SELECT COUNT(*) AS count FROM fingerprints WHERE fingerprint = ? AND created_at > ?",
+                vec![
+                    SqlStorageValue::from(row.last_fingerprint.as_str()),
+                    SqlStorageValue::from(now - window_ms),
+                ],
+            )? as u32
+        };
+        let same_failing_verification_recent = self.count(
+            "SELECT COUNT(*) AS count FROM verification WHERE incident_id = ? AND status IN ('blocked', 'poison') AND created_at > ?",
+            vec![
+                SqlStorageValue::from(q.incident_id.as_str()),
+                SqlStorageValue::from(now - window_ms),
+            ],
+        )? as u32;
         let anti_cfg = AntiLoopConfig {
             max_same_signature: q.max_same_signature.parse().unwrap_or(anti_defaults.max_same_signature),
+            max_same_fingerprint: q
+                .max_same_fingerprint
+                .parse()
+                .unwrap_or(anti_defaults.max_same_fingerprint),
+            max_same_failing_verification: q
+                .max_same_failing_verification
+                .parse()
+                .unwrap_or(anti_defaults.max_same_failing_verification),
             ..anti_defaults
         };
         let signals = LoopSignals {
             same_signature_recent,
+            same_fingerprint_recent,
+            same_failing_verification_recent,
             ..LoopSignals::default()
         };
         if let anti_loop::LoopVerdict::Blocked(reason) = anti_loop::evaluate(&anti_cfg, &signals) {
@@ -467,7 +609,7 @@ impl IncidentState {
                     SqlStorageValue::from(q.correlation_id.as_str()),
                 ],
             )?;
-            self.insert_transition(&q.incident_id, STATE_REPAIRING, STATE_BLOCKED, &q.correlation_id, now)?;
+            self.insert_transition(&q.incident_id, &from_state, STATE_BLOCKED, &q.correlation_id, now)?;
             return Response::ok(
                 serde_json::json!({
                     "allowed": false,
@@ -489,7 +631,7 @@ impl IncidentState {
                 SqlStorageValue::from(q.correlation_id.as_str()),
             ],
         )?;
-        self.insert_transition(&q.incident_id, STATE_QUEUED, STATE_REPAIRING, &q.correlation_id, now)?;
+        self.insert_transition(&q.incident_id, &from_state, STATE_REPAIRING, &q.correlation_id, now)?;
         Response::ok(
             serde_json::json!({
                 "allowed": true,
@@ -505,6 +647,26 @@ impl IncidentState {
         let q: ResultQuery = req.query()?;
         let now = now_ms();
         let final_state = if q.decision == "allow" { STATE_DONE } else { STATE_BLOCKED };
+        // Mismo guard que /attempt: si esta correlacion fue reemplazada por
+        // una entrega nueva del incidente, el resultado es de un task
+        // obsoleto y NO debe sobrescribir el estado ni la verification.
+        let guard: Option<StateRow> = self
+            .sql
+            .exec(
+                "SELECT state FROM incidents WHERE correlation_id = ?",
+                vec![SqlStorageValue::from(q.correlation_id.as_str())],
+            )?
+            .one()?;
+        let Some(guard) = guard else {
+            return Response::ok(
+                serde_json::json!({
+                    "ok": false,
+                    "skipped": "correlation_stale_or_missing",
+                    "correlation_id": q.correlation_id,
+                })
+                .to_string(),
+            );
+        };
         exec_write(
             &self.sql,
             "UPDATE incidents SET state = ?, last_fingerprint = ?, last_reason = ?, updated_at = ? WHERE correlation_id = ?",
@@ -565,7 +727,12 @@ impl IncidentState {
                 )?;
             }
         }
-        self.insert_transition(&q.incident_id, STATE_REPAIRING, final_state, &q.correlation_id, now)?;
+        let from_state = if guard.state.is_empty() {
+            String::from(STATE_QUEUED)
+        } else {
+            guard.state
+        };
+        self.insert_transition(&q.incident_id, &from_state, final_state, &q.correlation_id, now)?;
         Response::ok(serde_json::json!({ "ok": true }).to_string())
     }
 
@@ -573,6 +740,25 @@ impl IncidentState {
     fn poison(&self, req: &Request) -> Result<Response> {
         let q: PoisonQuery = req.query()?;
         let now = now_ms();
+        // Mismo guard: un veneno de una correlacion reemplazada no debe
+        // marcar dead_letter a la entrega vigente del incidente.
+        let guard: Option<StateRow> = self
+            .sql
+            .exec(
+                "SELECT state FROM incidents WHERE correlation_id = ?",
+                vec![SqlStorageValue::from(q.correlation_id.as_str())],
+            )?
+            .one()?;
+        let Some(guard) = guard else {
+            return Response::ok(
+                serde_json::json!({
+                    "ok": false,
+                    "skipped": "correlation_stale_or_missing",
+                    "correlation_id": q.correlation_id,
+                })
+                .to_string(),
+            );
+        };
         exec_write(
             &self.sql,
             "UPDATE incidents SET state = ?, last_reason = ?, updated_at = ? WHERE correlation_id = ?",
@@ -594,7 +780,12 @@ impl IncidentState {
                 SqlStorageValue::from(now),
             ],
         )?;
-        self.insert_transition(&q.incident_id, STATE_REPAIRING, STATE_DEAD_LETTER, &q.correlation_id, now)?;
+        let from_state = if guard.state.is_empty() {
+            String::from(STATE_QUEUED)
+        } else {
+            guard.state
+        };
+        self.insert_transition(&q.incident_id, &from_state, STATE_DEAD_LETTER, &q.correlation_id, now)?;
         Response::ok(serde_json::json!({ "ok": true }).to_string())
     }
 
@@ -638,6 +829,9 @@ impl IncidentState {
 #[derive(Debug, Deserialize)]
 struct IdemRow {
     response: String,
+    // Necesario para el TTL del contrato (CONTRACT.md §5): una respuesta
+    // guardada expira a las IDEMPOTENCY_TTL_SECONDS.
+    #[serde(default)] created_at: i64,
 }
 
 #[derive(Debug, Deserialize)]
