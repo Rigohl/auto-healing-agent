@@ -45,16 +45,12 @@ jobs:
       # Warnings son errores: el set de crates es pequeno para mantenerlo limpio.
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
-  # Transicion honesta (DISCREPANCIES item 34): el arbol todavia no esta
-  # formateado con rustfmt, asi que --check es hoy advisory: se ejecuta de
-  # verdad y su resultado es visible (rojo = deuda real), pero no bloquea.
-  # Cuando `cargo fmt --all` se ejecute sobre el arbol: quitar
-  # continue-on-error y anadir este check a los required checks de
-  # GOVERNANCE.md. Nunca verde falso.
+  # Item 34 cerrado (2026-10-03): el arbol se formateo con cargo fmt
+  # (workspace raiz + worker/) y --check pasa de advisory a BLOCKING.
+  # Rojo = formato divergente: el PR no se mergea. Nunca verde falso.
 
   workspace-fmt:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -104,7 +100,8 @@ jobs:
 
   worker-test:
     runs-on: ubuntu-latest
-    steps:
+    s
+teps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --manifest-path worker/Cargo.toml

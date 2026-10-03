@@ -36,6 +36,7 @@ Detalle y reglas: `docs/BRANCH_POLICY.md`.
   `docs/REFERENCES.md` (enlaces oficiales + glosario corregido).
   Descartados: `DOCUMENTATION.md` 
 
+
 (afirma "MongoDB ✅ Conectado" sin driver,
   ítem 21) y `ACADEMIC_REFS.md` (citas académicas falsificadas, ítem 24).
 
@@ -77,7 +78,8 @@ docs/
 | CI / test | ✅ `cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators` — 27 tests |
 | CI / worker | ✅ `cargo check --manifest-path worker/Cargo.toml --all-targets` (worker enlaza los 4 crates) |
 | CI / clippy | ✅ `-D warnings` |
-| WASM | ✅ `cargo bu
+| WASM | ✅ `cargo b
+u
 i
 ld -p repair_nn_wasm --release --target wasm32-unknown-unknown` |
 | Security | ✅ |
@@ -97,7 +99,8 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 | — | E2E completo no verde (ver `docs/E2E_CHECKLIST.md`). |
 | 7, 52 | Sin `Cargo.lock`, **por decisión** (ítem 52): las versiones resuelven en cada build de CI. Cuatro ramas pidieron versionarlos; se explica en DISCREPANCIES por qué no se adoptan tal cual. |
 | 34 | Parcial: clippy con `-D warnings` activo y **verde** (los seis checks de `ci.yml` pasan en el PR #13); falta `cargo fmt --check` bloqueante, que necesita toolchain local para aplicar el formato. |
-| 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`) y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están c
+| 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`) y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están
+ c
 or
 regidos. |
 | 41 | **Deploy bloqueado**: sin `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` y sin toolchain Rust en el entorno. `worker/wrangler.toml` ya enlaza el namespace real de `MODEL_KV` (el `REPLACE_WITH` fue reemplazado en la auditoría del 2026-10-03). **Nada desplegado.** Vía lista en `.github/workflows/deploy.yml` (manual + environment `production` + preflight + smoke test). |
@@ -124,7 +127,8 @@ Ningún success se declara por confidence del modelo: la autoridad es GitHub Act
   `from_state` real en auditoría, TTL de idempotencia + retención (24 h /
   7 días), `idem_key` canónica del contrato, cola real en `record_poison`.
   Detalle: `DISCREPANCIES` 58–66.
-- **Docs sincronizadas** (GOVERNANCE, CONTRACT §2, PAR
+- **Docs sincronizadas** (GOVERNANCE, CONTRACT §2, 
+PAR
 T3 
 §8/§9/§10/§12/§13,
   E2E_CHECKLIST, ARCHITECTURE, PHASE_STATUS, BRANCH_POLICY) y
@@ -163,7 +167,8 @@ T3
 - **P2 de `CONTRACT.md` §3 cerrado como crate**: `crates/repair_pr` — generador
   de diff unificado real (`similar` 3.2.0) + apertura de PR (`octocrab` 0.54.2
   con `secrecy` 0.10.3; versiones verificadas contra crates.io). 7º miembro del
-  workspace; bin `repair-pr` (`diff`
+  workspace; bin `repair-pr` (`d
+iff`
  off
 line | `pr` desde rama efímera).
 - **Fail-closed de extremo a extremo**: token solo de `GITHUB_TOKEN` (jamás
@@ -199,7 +204,8 @@ código huérfano o errores") usando GitHub, Context7, Sentry y Linear
   `NO_ORPHAN_DEPS_CI` en verify_repo.py.
 - `wrangler.toml` raíz: era un **symlink** a `worker/wrangler.toml` (el
   raw de GitHub sirve el contenido del destino — por eso parecía texto
-  plano). La API disponible no recrea symlinks: queda como archivo de
+  plano). L
+a API disponible no recrea symlinks: queda como archivo de
   solo-comentarios (fail-closed: un wrangler desde la raíz no despliega
   NADA) y `validate-preflight.sh` valida ahora ambas formas; jamás acepta
   una config activa divergente. Restaurar el symlink es opcional y humano
@@ -209,3 +215,17 @@ código huérfano o errores") usando GitHub, Context7, Sentry y Linear
 - Orfanas conocidas que NO son código: 5 ramas residuales (BRANCH_DRIFT,
   dispatch humano de `cleanup-branches.yml`) y `legacy/` (archivo V0
   intencional).
+
+
+## Actualización 2026-10-03 (cierre del item 34: árbol formateado)
+
+- Workflow temporal `fmt-tree.yml` (mismo patrón que el diag del PR #22)
+  ejecutó `cargo fmt --all` (workspace raíz + `worker/` con
+  `--manifest-path`) y commiteó el árbol formateado: 15 archivos `.rs`,
+  +653/−211, sin cambios semánticos. El workflow se elimina en el mismo PR.
+- `workspace-fmt` pasa de advisory (`continue-on-error: true`) a
+  **BLOCKING**; claim `FMT_BLOCKING` en verify_repo.py (ningún job de
+  ci.yml puede volver a ser advisory en silencio).
+- GOVERNANCE.md: fila `workspace-fmt` marcada requerida; DISCREPANCIES 34
+  cerrado con gap honesto: el check solo vigila el workspace raíz (worker/
+  formateado pero sin check propio).
