@@ -73,9 +73,12 @@ impl Rng {
     }
 }
 
-/// Hiperparametros V1. Los defaults son la corrida que produjo
+/// Hiperparametros V1. Los defaults son los de la corrida que produjo
 /// `model/current.txt` (dataset 1000 / seed 42, 120 epocas, batch 16,
-/// lr 0.1 -> 0.03 al 70% de las epocas, init seed 7).
+/// lr 0.1 -> 0.03 al 70% de las epocas, init seed 7). Re-entrenar con ellos
+/// produce una red equivalente, no bytes identicos: la aritmetica intermedia
+/// del runtime puede divergir en los ultimos bits. El contrato real es el
+/// artefacto comprometido, validado directo en CI (`tests/train_tests.rs`).
 #[derive(Debug, Clone, Copy)]
 pub struct TrainConfig {
     pub samples: usize,
