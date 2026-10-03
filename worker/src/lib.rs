@@ -52,7 +52,7 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 }
 
 /// Consumidor de cola (produccion, staging y DLQ): retry con backoff,
-/// hard-stop y DLQ. Ver worker/queue_consumer.rs.
+/// hard-stop y DLQ. Ver worker/src/worker/queue_consumer.rs.
 #[event(queue)]
 pub async fn queue_main(batch: MessageBatch<QueueTask>, env: Env, _ctx: Context) -> Result<()> {
     queue_consumer::consume(batch, env).await

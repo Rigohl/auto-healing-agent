@@ -1,7 +1,7 @@
 name: Consistency
 
 # ¿El repo hace lo que dice? cargo test comprueba que el codigo que compila
-# behaves; este workflow comprueba las afirmaciones que cruzan tres unidades de
+# se comporta; este workflow comprueba las afirmaciones que cruzan tres unidades de
 # build (crates/, worker/ y .github/workflows/) mas los permisos del arbol, que
 # no son codigo Rust y que ningun test ve.
 #

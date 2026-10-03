@@ -24,8 +24,8 @@ auth=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+js
 
 echo ">> Public key de $OWNER/$REPO"
 KEY_JSON=$(curl -sS "${auth[@]}" "$API/repos/$OWNER/$REPO/actions/secrets/public-key")
-KEY_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["key_id"])' <<<<"$KEY_JSON")
-PUB_KEY=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["key"])' <<<<"$KEY_JSON")
+KEY_ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["key_id"])' <<< "$KEY_JSON")
+PUB_KEY=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["key"])' <<< "$KEY_JSON")
 
 encrypt() {
   local plain="$1"

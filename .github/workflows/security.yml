@@ -11,7 +11,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Dependencias nuevas aparecem sin push nuestro: un advisory puede nacer el
+    # Dependencias nuevas aparecen sin push nuestro: un advisory puede nacer el
     # martes y no volver a tocar main nunca.
     - cron: "17 5 * * 1"
   workflow_dispatch:
@@ -75,6 +75,6 @@ jobs:
       - uses: actions/checkout@v4
       # Una sola implementacion de la logica de Preflight: este script, no una
       # copia del `sed` del paso Preflight de deploy.yml. Si divergieran, el
-      # job passesaria mientras el deploy se cae, que es peor que no tenerlo.
+      # job pasaría mientras el deploy se cae, que es peor que no tenerlo.
       - name: scripts/validate-preflight.sh
         run: bash scripts/validate-preflight.sh
