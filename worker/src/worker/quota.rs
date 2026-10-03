@@ -150,19 +150,31 @@ mod tests {
             daily_repairs: 0,
         };
         assert_eq!(
-            cfg().evaluate(&QuotaUsage { attempts_of_incident: 3, ..base }),
+            cfg().evaluate(&QuotaUsage {
+                attempts_of_incident: 3,
+                ..base
+            }),
             QuotaVerdict::Blocked("max_attempts_per_incident")
         );
         assert_eq!(
-            cfg().evaluate(&QuotaUsage { repairs_in_window: 2, ..base }),
+            cfg().evaluate(&QuotaUsage {
+                repairs_in_window: 2,
+                ..base
+            }),
             QuotaVerdict::Blocked("max_repairs_per_repo_cooldown")
         );
         assert_eq!(
-            cfg().evaluate(&QuotaUsage { open_repairs: 1, ..base }),
+            cfg().evaluate(&QuotaUsage {
+                open_repairs: 1,
+                ..base
+            }),
             QuotaVerdict::Blocked("max_open_repairs")
         );
         assert_eq!(
-            cfg().evaluate(&QuotaUsage { daily_repairs: 5, ..base }),
+            cfg().evaluate(&QuotaUsage {
+                daily_repairs: 5,
+                ..base
+            }),
             QuotaVerdict::Blocked("daily_budget")
         );
     }

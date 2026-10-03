@@ -90,7 +90,9 @@ mod tests {
     #[test]
     fn identical_contents_produce_an_empty_diff() {
         assert_eq!(unified_diff_file(&change("a.txt", "same\n", "same\n")), "");
-        assert!(bundle_is_empty(&patch_bundle(&[change("a.txt", "same\n", "same\n")])));
+        assert!(bundle_is_empty(&patch_bundle(&[change(
+            "a.txt", "same\n", "same\n"
+        )])));
     }
 
     #[test]
@@ -100,7 +102,10 @@ mod tests {
             "{\n  \"left\": \"1.0.0\"\n}\n",
             "{\n  \"left\": \"1.0.1\"\n}\n",
         ));
-        assert!(diff.starts_with("--- a/package.json"), "unexpected header: {diff}");
+        assert!(
+            diff.starts_with("--- a/package.json"),
+            "unexpected header: {diff}"
+        );
         assert!(diff.contains("+++ b/package.json"));
         assert!(diff.contains("@@"));
         assert!(diff.contains("-  \"left\": \"1.0.0\""));

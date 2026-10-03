@@ -25,7 +25,9 @@ use std::path::Path;
 use std::process::Command;
 use std::process::ExitCode;
 
-use repair_pr::{attach_bundle, bundle_is_empty, client_from_env, open_pr, patch_bundle, FileChange};
+use repair_pr::{
+    attach_bundle, bundle_is_empty, client_from_env, open_pr, patch_bundle, FileChange,
+};
 use repair_types::OutboundPRRequest;
 
 fn main() -> ExitCode {
@@ -81,8 +83,8 @@ fn cmd_diff(input_path: &str) -> Result<ExitCode, String> {
 }
 
 fn cmd_pr(input_path: &str, rest: &[String]) -> Result<ExitCode, String> {
-    let owner_repo = flag_value(rest, "--repo")?
-        .ok_or_else(|| "missing --repo owner/name".to_string())?;
+    let owner_repo =
+        flag_value(rest, "--repo")?.ok_or_else(|| "missing --repo owner/name".to_string())?;
     let (owner, repo) = owner_repo
         .split_once('/')
         .ok_or_else(|| format!("--repo must be owner/name, got {owner_repo}"))?;
@@ -136,8 +138,7 @@ fn cmd_pr(input_path: &str, rest: &[String]) -> Result<ExitCode, String> {
 }
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
-    let raw =
-        std::fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
+    let raw = std::fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
     serde_json::from_str(&raw).map_err(|e| format!("invalid JSON in {path}: {e}"))
 }
 
@@ -177,8 +178,11 @@ fn commit_files(
     head: &str,
 ) -> Result<(), String> {
     for change in changes {
-        std::fs::write(Path::new(repo_dir).join(&change.path), change.after.as_bytes())
-            .map_err(|e| format!("cannot write {}: {e}", change.path))?;
+        std::fs::write(
+            Path::new(repo_dir).join(&change.path),
+            change.after.as_bytes(),
+        )
+        .map_err(|e| format!("cannot write {}: {e}", change.path))?;
     }
     let mut add = vec!["add".to_string()];
     add.extend(changes.iter().map(|c| c.path.clone()));

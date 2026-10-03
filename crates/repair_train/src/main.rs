@@ -39,14 +39,19 @@ fn main() {
     let config = TrainConfig::default();
     eprintln!(
         "entrenando V1: {} muestras (seed {}), {} epocas, batch {}, lr {} -> {}",
-        config.samples, config.dataset_seed, config.epochs, config.batch, config.lr, config.lr_final
+        config.samples,
+        config.dataset_seed,
+        config.epochs,
+        config.batch,
+        config.lr,
+        config.lr_final
     );
 
     let weights = train(&config);
     let payload = export_payload(&weights).expect("train produce WEIGHT_COUNT pesos");
 
-    let train_m = evaluate(&weights, config.samples, config.dataset_seed)
-        .expect("pesos recien entrenados");
+    let train_m =
+        evaluate(&weights, config.samples, config.dataset_seed).expect("pesos recien entrenados");
     let holdout_m = evaluate(&weights, 500, 43).expect("pesos recien entrenados");
 
     println!(
@@ -62,7 +67,11 @@ fn main() {
         eprintln!("no se pudo escribir {}: {e}", out.display());
         process::exit(1);
     });
-    println!("payload KV escrito en {} ({} pesos)", out.display(), weights.len());
+    println!(
+        "payload KV escrito en {} ({} pesos)",
+        out.display(),
+        weights.len()
+    );
 
     if train_m.accuracy < MIN_ARTIFACT_ACCURACY || holdout_m.accuracy < MIN_ARTIFACT_ACCURACY {
         eprintln!(

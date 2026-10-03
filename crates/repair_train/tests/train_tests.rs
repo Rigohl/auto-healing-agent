@@ -6,8 +6,8 @@ use feature_engine::extract;
 use feature_engine::synthetic::generate_synthetic_dataset;
 use repair_nn_core::RepairNet;
 use repair_train::{
-    evaluate, export_payload, load_payload, train, LAMBDA_CONF, LAMBDA_RISK, MAX_RISK,
-    MIN_CONFIDENCE, TrainConfig, WEIGHT_COUNT,
+    evaluate, export_payload, load_payload, train, TrainConfig, LAMBDA_CONF, LAMBDA_RISK, MAX_RISK,
+    MIN_CONFIDENCE, WEIGHT_COUNT,
 };
 use repair_types::OperatorId;
 
@@ -116,14 +116,10 @@ fn load_payload_rejects_malformed() {
     assert!(load_payload("").is_err());
     assert!(load_payload("   ").is_err());
 
-    let too_few: String = (0..WEIGHT_COUNT - 1)
-        .map(|i| format!("{i}\n"))
-        .collect();
+    let too_few: String = (0..WEIGHT_COUNT - 1).map(|i| format!("{i}\n")).collect();
     assert!(load_payload(&too_few).is_err());
 
-    let too_many: String = (0..WEIGHT_COUNT + 1)
-        .map(|i| format!("{i}\n"))
-        .collect();
+    let too_many: String = (0..WEIGHT_COUNT + 1).map(|i| format!("{i}\n")).collect();
     assert!(load_payload(&too_many).is_err());
 
     let zeros = "0.0\n".repeat(WEIGHT_COUNT);

@@ -29,12 +29,12 @@ use repair_types::{compute_idempotency_key, FailureSignature};
 use worker::*;
 
 use crate::runtime::{
+    anti_loop::AntiLoopConfig,
     model,
     queue_consumer::{self, QueueTask, WebhookPayload},
     quota::QuotaConfig,
-    anti_loop::AntiLoopConfig,
     security::{fnv1a64, urlencode, verify_webhook_secret},
-    MIN_CONFIDENCE, MAX_RISK,
+    MAX_RISK, MIN_CONFIDENCE,
 };
 
 #[event(fetch)]
@@ -43,9 +43,10 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     Router::new()
         .get("/", |_, _| Response::ok("AUTO-REPAIR LAB"))
         .get("/health", |_, _| Response::ok("ok"))
-        .get_async("/model", |_, ctx| async move {
-            model::report(&ctx.env).await
-        })
+        .get_async(
+            "/model",
+            |_, ctx| async move { model::report(&ctx.env).await },
+        )
         .post_async("/webhook", handle_webhook)
         .run(req, env)
         .await
@@ -96,7 +97,11 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     let incident_id = payload.incident_id();
     let repo = payload.repo();
     let signature = payload.signature_str();
-    let delivery_id = if payload.id.is_empty() { incident_id.clone() } else { payload.id.clone() };
+    let delivery_id = if payload.id.is_empty() {
+        incident_id.clone()
+    } else {
+        payload.id.clone()
+    };
     let now = crate::runtime::now_ms();
     let correlation_id = format!(
         "{}-{:x}",
@@ -138,7 +143,10 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Ok(v) => v,
         Err(_) => return Response::error("state_store_invalid_response", 503),
     };
-    let status = verdict.get("status").and_then(|s| s.as_str()).unwrap_or("error");
+    let status = verdict
+        .get("status")
+        .and_then(|s| s.as_str())
+        .unwrap_or("error");
     if status != "queued" {
         // duplicate | blocked_quota | blocked_anti_loop: misma decision para
         // la misma entrega; el sender NO debe reintentar (200).

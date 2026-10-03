@@ -40,7 +40,11 @@ pub fn now_ms() -> i64 {
 /// cuerpo de la respuesta como texto. Fail-closed: cualquier error sube al
 /// llamador, que decide 503 o retry con backoff.
 #[worker::send]
-pub async fn call_do(env: worker::Env, repo: String, path_and_query: String) -> worker::Result<String> {
+pub async fn call_do(
+    env: worker::Env,
+    repo: String,
+    path_and_query: String,
+) -> worker::Result<String> {
     let stub = env
         .durable_object(DO_BINDING)?
         .id_from_name(&repo)?

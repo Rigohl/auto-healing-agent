@@ -17,7 +17,7 @@ use crate::runtime::{
     model,
     quota::QuotaConfig,
     security::{fnv1a64, urlencode},
-    MIN_CONFIDENCE, MAX_RISK,
+    MAX_RISK, MIN_CONFIDENCE,
 };
 
 pub const QUEUE_BINDING: &str = "REPAIR_QUEUE";
@@ -38,17 +38,28 @@ const RETRY_DELAY_SECONDS: u32 = 10;
 /// rompe el isolate.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct WebhookPayload {
-    #[serde(default)] pub id: String,
-    #[serde(default)] pub source: String,
-    #[serde(default)] pub error_code: String,
-    #[serde(default)] pub error_step: String,
-    #[serde(default)] pub command: String,
-    #[serde(default)] pub message: String,
-    #[serde(default)] pub project: String,
-    #[serde(default)] pub attempts: u32,
-    #[serde(default)] pub stack_hint: String,
-    #[serde(default)] pub language_hint: String,
-    #[serde(default)] pub framework_hint: String,
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub error_code: String,
+    #[serde(default)]
+    pub error_step: String,
+    #[serde(default)]
+    pub command: String,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub project: String,
+    #[serde(default)]
+    pub attempts: u32,
+    #[serde(default)]
+    pub stack_hint: String,
+    #[serde(default)]
+    pub language_hint: String,
+    #[serde(default)]
+    pub framework_hint: String,
 }
 
 impl WebhookPayload {
@@ -76,7 +87,11 @@ impl WebhookPayload {
     pub fn to_incident(&self) -> Incident {
         Incident {
             id: self.incident_id(),
-            source: if self.source.is_empty() { "webhook".to_string() } else { self.source.clone() },
+            source: if self.source.is_empty() {
+                "webhook".to_string()
+            } else {
+                self.source.clone()
+            },
             error_code: self.error_code.clone(),
             error_step: self.error_step.clone(),
             command: self.command.clone(),
@@ -184,7 +199,11 @@ async fn process(
     );
     let text = crate::runtime::call_do(env.clone(), task.repo.clone(), qs).await?;
     let verdict: serde_json::Value = serde_json::from_str(&text)?;
-    if !verdict.get("allowed").and_then(|a| a.as_bool()).unwrap_or(false) {
+    if !verdict
+        .get("allowed")
+        .and_then(|a| a.as_bool())
+        .unwrap_or(false)
+    {
         // Bloqueado por quota/anti-loop/hard-stop (ya registrado en el DO).
         return Ok(());
     }
@@ -205,7 +224,11 @@ async fn process(
     };
     let action = loaded.net.predict(&features);
     let gate_ok = gate(&action, MIN_CONFIDENCE, MAX_RISK).is_ok();
-    let decision = if gate_ok { "allow" } else { "blocked_by_policy" };
+    let decision = if gate_ok {
+        "allow"
+    } else {
+        "blocked_by_policy"
+    };
     let fingerprint = format!(
         "{:x}",
         fnv1a64(format!("{}|{}", action.repair_operator as u8, task.signature).as_bytes())
@@ -244,5 +267,7 @@ async fn record_poison(env: Env, task: QueueTask, queue_name: &str) -> Result<()
         urlencode(&task.incident_id),
         urlencode(queue_name)
     );
-    crate::runtime::call_do(env, task.repo, qs).await.map(|_| ())
+    crate::runtime::call_do(env, task.repo, qs)
+        .await
+        .map(|_| ())
 }
