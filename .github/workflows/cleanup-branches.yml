@@ -1,0 +1,49 @@
+name: Branch cleanup
+
+# Borra ramas residuales 100% mergeadas en main (el BRANCH_DRIFT del check
+# `verify` se pone verde cuando solo queda origin/main). Fail-closed: si
+# una rama NO es ancestro completo de main, el workflow falla sin borrar.
+# Se ejecuta SOLO bajo workflow_dispatch humano (Run workflow).
+on:
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: "Ramas a borrar (separadas por espacio)"
+        required: true
+        default: "feat/nn-train-v1 fix/deep-audit-2026-10-03 fix/deep-audit-2026-10-03-v2"
+
+concurrency:
+  group: branch-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verificar mergeadas y borrar
+        env:
+          BRANCHES: ${{ inputs.branches }}
+        run: |
+          set -euo pipefail
+          git fetch origin
+          for b in $BRANCHES; do
+            if ! git ls-remote --heads origin "refs/heads/$b" | grep -q .; then
+              echo "::notice::origin/$b ya no existe; se ignora"
+              continue
+            fi
+            if git merge-base --is-ancestor "origin/$b" origin/main; then
+              echo "borrando origin/$b (100% mergeada en main)"
+              git push origin --delete "$b"
+            else
+              echo "::error::origin/$b tiene commits fuera de main; NO se borra"
+              exit 1
+            fi
+          done
+          echo "ramas restantes:"
+          git ls-remote --heads origin | awk '{print $2}'
