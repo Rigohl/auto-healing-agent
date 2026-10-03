@@ -52,7 +52,8 @@ CRATE_FILES = [
 
 WORKER_FILES = [
     "worker/Cargo.toml",
-    "worker/src/lib.rs",
+    "worker
+/src/lib.rs",
     "worker/src/worker/mod.rs",
     "worker/src/worker/security.rs",
     "worker/src/worker/incident_state.rs",
@@ -123,7 +124,8 @@ def workflow_triggers(rel: str) -> set[str] | None:
     inside = False
     key_indent: int | None = None
     for line in lines:
-        if not inside:
+        if
+ not inside:
             if re.match(r"^on:\s*(#.*)?$", line):
                 inside = True
             continue
@@ -181,7 +183,8 @@ class Report:
         status: str,
         details: str = "",
         critical: bool = True,
-    ) -> None:
+    ) -> N
+one:
         status = status.upper()
         if status not in ("PASS", "FAIL", "UNKNOWN"):
             status = "UNKNOWN"
@@ -244,7 +247,8 @@ def check_files_exist(r: Report) -> None:
         ]
         + CRATE_FILES
         + WORKER_FILES
-        + WORKFLOWS
+   
+     + WORKFLOWS
         + DOCS
     )
     missing = [p for p in required if not os.path.exists(os.path.join(ROOT, p))]
@@ -297,7 +301,8 @@ def check_two_build_units(r: Report) -> None:
         and "worker-clippy:" in ci,
     )
     r.expect(
-        "WORKER_QUEUE_FEATURE",
+        "WORKE
+R_QUEUE_FEATURE",
         'worker/Cargo.toml conserva features = ["queue"] (PART3: Queues + DLQ)',
         '"queue"' in worker_manifest or "queue" in worker_manifest,
         "sin la feature queue no compila #[event(queue)] ni el consumidor asincrono",
@@ -348,7 +353,8 @@ def check_constant_time_auth(r: Report) -> None:
         "Sin WEBHOOK_SECRET el webhook responde 503 (nunca fail-open)",
         'Response::error("webhook_secret_not_configured", 503)' in lib,
     )
-    r.expect(
+    r.expec
+t(
         "AUTH_REJECTS_401",
         "Secret incorrecto responde 401",
         'Response::error("unauthorized", 401)' in lib,
@@ -399,7 +405,8 @@ def check_secrets_not_in_tree(r: Report) -> None:
         for name in filenames:
             if not name.endswith((".sh", ".rs", ".toml", ".yml", ".yaml", ".json", ".ts")):
                 continue
-            path = os.path.join(dirpath, name)
+            path = os.path.
+join(dirpath, name)
             try:
                 with open(path, "r", encoding="utf-8", errors="ignore") as fh:
                     body = fh.read()
@@ -452,7 +459,8 @@ def check_verify_authority(r: Report) -> None:
     """Actions es la autoridad de VERIFY; el Worker nunca declara PASS."""
     ci = read(".github/workflows/ci.yml")
     r.expect(
-        "CI_IS_VERIFY_AUTHORITY",
+        "CI_IS_
+VERIFY_AUTHORITY",
         "ci.yml ejecuta tests y clippy con -D warnings",
         "cargo test --workspace" in ci
         and "cargo clippy --workspace --all-targets -- -D warnings" in ci,
@@ -501,7 +509,8 @@ def check_weight_count(r: Report) -> None:
     r.expect(
         "SCHEMA_INPUT_DIM",
         "model/schema.json declara input_dim = 64, igual que FeatureVector::DIM",
-        '"input_dim": 64' in schema,
+        '"input_dim": 64'
+ in schema,
     )
     r.expect(
         "SCHEMA_OPERATOR_CLASSES",
@@ -549,7 +558,8 @@ def check_contract_module(r: Report) -> None:
     """El contrato GitHub<->Cloudflare debe seguir exportando su superficie."""
     lib = read("crates/repair_types/src/lib.rs")
     contract = read("crates/repair_types/src/contract.rs")
-    contract_path = os.path.join(ROOT, "crates/repair_types/src/contract.rs")
+    contract_path = os.path.join(ROOT, "crates/repair_t
+ypes/src/contract.rs")
     r.expect(
         "CONTRACT_MODULE_EXPORTED",
         "repair_types declara `pub mod contract` y el archivo existe",
@@ -601,7 +611,8 @@ def check_gate_to_pr(r: Report) -> None:
         "GATE_TO_PR_DIFF_GENERATOR",
         "repair_pr declara similar (diff unificado) y octocrab (PR)",
         "similar" in repair_pr_manifest and "octocrab" in repair_pr_manifest,
-        "sin similar/octocrab no hay diff real ni PR (item 71)",
+        "sin similar/o
+ctocrab no hay diff real ni PR (item 71)",
     )
     r.expect(
         "GATE_TO_PR_NO_INVENTED_DIFFS",
@@ -615,6 +626,31 @@ def check_gate_to_pr(r: Report) -> None:
         "sin token o con bundle vacio la apertura falla cerrada",
         "MissingToken" in github_rs and "Blocked" in github_rs,
         "fail-open abriria PRs sin autorizacion",
+    )
+
+
+def check_no_orphan_code(r: Report) -> None:
+    """Código huérfano: crates fuera del workspace, deps sin vigilancia."""
+    root_manifest = read("Cargo.toml")
+    crates_dir = os.path.join(ROOT, "crates")
+    orphans = sorted(
+        d
+        for d in os.listdir(crates_dir)
+        if os.path.isdir(os.path.join(crates_dir, d))
+        and f'"crates/{d}"' not in root_manifest
+    )
+    r.expect(
+        "NO_ORPHAN_CRATES",
+        "todo directorio de crates/ es miembro del workspace raíz",
+        not orphans,
+        f"crates huérfanos (fuera del workspace): {orphans}" if orphans else "",
+    )
+    ci = read(".github/workflows/ci.yml")
+    r.expect(
+        "NO_ORPHAN_DEPS_CI",
+        "ci.yml vigila deps sin uso (cargo machete + cargo shear)",
+        "cargo machete" in ci and "cargo shear" in ci,
+        "sin vigilancia, dependencias muertas se acumulan sin que CI lo vea",
     )
 
 
@@ -657,7 +693,8 @@ def check_branch_drift(r: Report) -> None:
             continue
         refname, _, symref = line.partition("\t")
         if symref:
-            continue  # puntero symbolic (origin/HEAD), no una rama
+            continue  # puntero symbolic (origin/HEAD), no 
+una rama
         short = refname.removeprefix("refs/remotes/")
         if short == "origin" or short.endswith("/HEAD"):
             continue
@@ -704,6 +741,7 @@ def check_branch_drift(r: Report) -> None:
         and b in (f"origin/{head_ref}", head_ref)
     ]
     persistent = sorted(b for b in branches if b not in ephemeral)
+
 
     r.expect(
         "BRANCH_DRIFT",
@@ -768,7 +806,9 @@ CHECKS = [
     check_encoder_invariants,
     check_contract_module,
     check_gate_to_pr,
+    check_no_orphan_code,
     check_branch_drift,
+
     check_workflow_permissions,
     check_smoke_test_reachable,
 ]
