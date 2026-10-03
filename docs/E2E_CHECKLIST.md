@@ -29,10 +29,10 @@ Marcado lo que existe hoy en `main`:
 | Deterministic operator → CandidatePatch | ⚠️ `apply()` con un brazo explícito por cada uno de los 13 operadores; genera `CandidatePatch` (files + steps), **no un diff**. AST real = fase posterior |
 | Worker: webhook → Incident → features → NN → gate | ✅ `worker/src/lib.rs` valida el secret, calcula `correlation_id`/`idem_key`, consulta al DO (`/ingest`) y encola; el consumidor corre features → NN → gate. Devuelve `status`/`correlation_id`/`preview` (no un `PipelineReport`). |
 | Worker: verificación de secret | ✅ **fail closed**: sin `WEBHOOK_SECRET` responde 503, no acepta tráfico |
-| Pesos reales | ❌ `model/*.json` con `weights: null`; sin `model/current`/`model/stable` en KV el Worker responde `blocked_no_model` (fail-closed, red de ceros prohibida). |
+| Pesos reales | ⚠️ `model/current.txt` = payload KV real (2863 `f32`) entrenado por `crates/repair_train` (V1, sin LLM) y validado en CI contra el `extract`/`predict` reales. Sin `model/current`/`model/stable` **en KV** el Worker sigue respondiendo `blocked_no_model` (fail-closed, red de ceros prohibida): la promoción es manual. |
 | PR efímera + Actions VERIFY | ❌ no implementado; la respuesta incluye `"pr": null` y lo dice |
 | RepairCase + TrainingExample on PASS | ❌ sin persistencia |
-| Offline train / export / promote R2-KV | ❌ diferido (λ sin fijar, ver `PART2_NEURAL_NETWORK.md`) |
+| Offline train / export / promote R2-KV | ⚠️ train + export implementados (`crates/repair_train`, λ fijada en 0.5, payload `model/current.txt`, bin `repair-train`); falta la promoción a KV/R2 (acción humana; R2 no habilitado en el plan Free). |
 | Edge carga pesos STABLE | ⚠️ lee `MODEL_KV:model/current` y, si falla, `model/stable`; `wrangler.toml` ya enlaza el namespace real (`73014a1b32b7446397461a8d438c8ab2`), pero las claves aún no tienen pesos. |
 
 **Full E2E no está verde.** No se declara PASS por confidence del modelo:

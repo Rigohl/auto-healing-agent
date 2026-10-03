@@ -1,0 +1,15 @@
+[package]
+name = "repair_train"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Offline trainer V1: entrena la MLP sobre el dataset sintetico y exporta el payload KV del worker"
+
+[dependencies]
+repair_types = { path = "../repair_types" }
+feature_engine = { path = "../feature_engine" }
+repair_nn_core = { path = "../repair_nn_core" }
+
+[[bin]]
+name = "repair-train"
+path = "src/main.rs"
