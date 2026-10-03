@@ -349,3 +349,36 @@ con Root directory = raíz del repo **o** `worker`. La recomendación se mantien
 - `Workers Builds`: rojo en 0s, antes de ejecutar build command = settings del
   dashboard (ítem 56), no del código.
 - `Kilo Code Review`: créditos de la cuenta (ítem 57).
+
+## Runbook: promocion de pesos a KV y limpieza de ramas (2026-10-03)
+
+### Promover model/current.txt a MODEL_KV (cerrar blocked_no_model)
+
+Setup unico (una vez): secrets de Actions `CLOUDFLARE_API_TOKEN` (permiso
+Account > Workers KV Storage > Edit) y `CLOUDFLARE_ACCOUNT_ID` en
+Settings > Secrets and variables > Actions. El namespace `MODEL_KV`
+(id `73014a1b32b7446397461a8d438c8ab2`, verificado con el conector
+Cloudflare) va pre-relleno en el input del workflow.
+
+1. Actions -> "Promote model to KV" -> Run workflow.
+2. Preflight fail-closed: valida 2863 tokens del payload y los secrets.
+3. Sube el payload a `model/current` y `model/stable` (inputs editables).
+4. Verificacion read-back: relee cada clave y exige 2863 tokens.
+
+Alternativa sin setup (sin token ni wrangler): dashboard de Cloudflare ->
+Workers & Pages -> KV -> MODEL_KV -> "Add entry", clave `model/current`,
+valor = contenido de `model/current.txt` (repetir con `model/stable`).
+
+Nota: esto NO es un deploy. El worker desplegado sigue siendo la version
+del 2026-10-01 (deploy verificado = pendiente, item 41); nada se declara
+DEPLOYED por esta via.
+
+### Limpiar ramas residuales (verify -> verde)
+
+Actions -> "Branch cleanup" -> Run workflow (pre-rellenadas
+`feat/nn-train-v1`, `fix/deep-audit-2026-10-03`,
+`fix/deep-audit-2026-10-03-v2`). Fail-closed: borra solo ramas cuyo head
+sea ancestro de main (`git merge-base --is-ancestor`); si alguna tiene
+commits sin mergear, falla sin borrar nada. Tras el borrado, el siguiente
+push (o re-run manual de Consistency) deja `BRANCH_DRIFT` en verde cuando
+`persistent == ["origin/main"]`.

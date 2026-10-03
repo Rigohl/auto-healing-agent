@@ -1,0 +1,83 @@
+name: Promote model to KV
+
+# GOVERNANCE.md: AUTO_DEPLOY=false, PRODUCTION_WRITE solo bajo dispatch
+# humano (Run workflow). Sube model/current.txt (payload KV, 2863 f32)
+# a MODEL_KV en las claves model/current y model/stable. Con esto el
+# Worker puede cargar la red (antes: blocked_no_model). Requiere los
+# secrets CLOUDFLARE_API_TOKEN (Workers KV Storage: Edit) y
+# CLOUDFLARE_ACCOUNT_ID. Alternativa sin setup: dashboard de Cloudflare
+# (KV -> MODEL_KV -> Add entry) pegando el contenido de model/current.txt.
+on:
+  workflow_dispatch:
+    inputs:
+      kv_namespace_id:
+        description: "Namespace ID de MODEL_KV"
+        required: true
+        default: "73014a1b32b7446397461a8d438c8ab2"
+      keys:
+        description: "Claves destino (separadas por espacio)"
+        required: true
+        default: "model/current model/stable"
+
+concurrency:
+  group: promote-model-kv
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preflight (artefacto)
+        run: |
+          set -euo pipefail
+          test -f model/current.txt
+          n=$(wc -w < model/current.txt)
+          if [ "$n" -ne 2863 ]; then
+            echo "::error::model/current.txt tiene $n tokens, se esperan 2863 (WEIGHT_COUNT)"
+            exit 1
+          fi
+
+      - name: Preflight (secrets)
+        run: |
+          set -euo pipefail
+          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::falta el secret $v (Settings > Secrets and variables > Actions)"
+              exit 1
+            fi
+          done
+
+      - name: Subir payload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NS: ${{ inputs.kv_namespace_id }}
+          KEYS: ${{ inputs.keys }}
+        run: |
+          set -euo pipefail
+          for key in $KEYS; do
+            echo "wrangler kv key put $key -> namespace $NS"
+            npx wrangler@latest kv key put "$key" --namespace-id "$NS" --path model/current.txt
+          done
+
+      - name: Verificacion (read-back)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NS: ${{ inputs.kv_namespace_id }}
+          KEYS: ${{ inputs.keys }}
+        run: |
+          set -euo pipefail
+          for key in $KEYS; do
+            n=$(npx wrangler@latest kv key get "$key" --namespace-id "$NS" 2>/dev/null | wc -w)
+            if [ "$n" -ne 2863 ]; then
+              echo "::error::la clave $key devolvio $n tokens, se esperan 2863"
+              exit 1
+            fi
+            echo "$key OK: 2863 tokens"
+          done
