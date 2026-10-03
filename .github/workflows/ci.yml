@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      # --workspace: los 5 crates del raiz, incluido repair_nn_wasm (que el
+      # --workspace: los 6 crates del raiz, incluido repair_nn_wasm (que el
       # listado -p anterior exclia). El worker NO es miembro: jobs worker-*.
       - run: cargo test --workspace
 

@@ -15,6 +15,7 @@ crates/feature_engine
 crates/repair_nn_core
 crates/repair_nn_wasm
 crates/repair_operators
+crates/repair_train   (trainer offline, bin repair-train)
 worker/   (CF, build con wrangler)
 ```
 
