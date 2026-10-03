@@ -343,8 +343,9 @@ con Root directory = raíz del repo **o** `worker`. La recomendación se mantien
 ### Estado de checks conocidos (no regresiones de este PR)
 
 - `verify` (Consistency): rojo por `BRANCH_DRIFT` mientras existan las ramas
-  residuales `fix/root-build-cd-worker` / `fix/worker-build-cwd` (ya mergeadas
-  en main; borrado manual del dueño + re-run).
+  residuales de los PRs #18–#20 (`feat/nn-train-v1`, `fix/deep-audit-2026-10-03`,
+  `-v2`, `devops/promote-model-kv`; todas 100% fusionadas; el workflow
+  `cleanup-branches.yml` las borra bajo dispatch humano).
 - `workspace-fmt`: advisory (deuda de formato, ítem 34).
 - `Workers Builds`: rojo en 0s, antes de ejecutar build command = settings del
   dashboard (ítem 56), no del código.

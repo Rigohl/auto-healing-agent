@@ -7,15 +7,16 @@
 
 ```
 auto-healing-agent/
-├── .github/workflows/   # ci, wasm, repair-validation, regression, security
+├── .github/workflows/   # ci, wasm, consistency, security, regression, repair-validation, auto-repair, deploy, deploy-staging, promote-model, cleanup-branches
 ├── crates/
 │   ├── repair_types/    # Incident, RepairAction, RepairCase, OperatorId
 │   ├── feature_engine/  # Incident → [f32; 64]
 │   ├── repair_nn_core/  # MLP no_std (64→32→16 + heads)
 │   ├── repair_nn_wasm/  # wasm-bindgen adapter
-│   └── repair_operators/# deterministic AST operators + gate
+│   ├── repair_operators/# deterministic AST operators + gate
+│   └── repair_train/    # trainer offline V1 (SGD determinista, bin repair-train)
 ├── worker/              # Cloudflare workers-rs (orchestrator only)
-├── model/               # schema.json, current.json, stable.json
+├── model/               # schema.json, current.json, stable.json, current.txt (payload KV real)
 ├── docs/                # ARCHITECTURE, GOVERNANCE, PART*, PROMPT_PAD…
 ├── legacy/              # archived TS/JS (not executed)
 ├── scripts/
@@ -41,6 +42,7 @@ auto-healing-agent/
 | repair_nn_core | Forward pass NN | Sí |
 | repair_nn_wasm | Adaptador wasm-bindgen | No |
 | repair_operators | Operadores deterministas + gate | Parcial |
+| repair_train | Entrenamiento offline V1 + export del payload | No (std, fuera del edge) |
 | worker | Orquestador CF | No |
 
 ## Fases Prompt Pad relacionadas

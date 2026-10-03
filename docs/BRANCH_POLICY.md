@@ -87,6 +87,15 @@ aún presentes, y por eso `verify_repo.py` fallaba `BRANCH_DRIFT`.
   llega a `main` directamente (commit `7dd891f`: auditoría a profundidad y
   reparación de errores reales del runtime, ver `DISCREPANCIES` 58–66).
 
+### Cuarta ola (2026-10-03, tarde): residuales de los PRs #18–#20
+
+Los merges del gap de entrenamiento (PR #18; PR #19 como supersede del #17;
+PR #20 devops) dejaron ramas efímeras ya 100% fusionadas: `feat/nn-train-v1`,
+`fix/deep-audit-2026-10-03`, `fix/deep-audit-2026-10-03-v2`,
+`devops/promote-model-kv`. `BRANCH_DRIFT` vuelve a rojo hasta borrarlas; el
+workflow `cleanup-branches.yml` (PR #20) lo hace bajo dispatch humano,
+fail-closed (`git merge-base --is-ancestor`).
+
 ## Reglas
 
 1. Cualquier rama que no sea `main` es **efímera**: se elimina tras merge o abandono.
