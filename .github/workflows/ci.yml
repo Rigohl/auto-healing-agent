@@ -100,8 +100,7 @@ jobs:
 
   worker-test:
     runs-on: ubuntu-latest
-    s
-teps:
+    steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --manifest-path worker/Cargo.toml
