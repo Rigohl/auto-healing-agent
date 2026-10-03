@@ -51,9 +51,8 @@ impl AntiLoopConfig {
                     cfg.max_same_fingerprint = value.parse().unwrap_or(cfg.max_same_fingerprint);
                 }
                 VAR_MAX_SAME_FAILING_VERIFICATION => {
-                    cfg.max_same_failing_verification = value
-                        .parse()
-                        .unwrap_or(cfg.max_same_failing_verification);
+                    cfg.max_same_failing_verification =
+                        value.parse().unwrap_or(cfg.max_same_failing_verification);
                 }
                 VAR_WINDOW_SECONDS => {
                     cfg.window_seconds = value.parse().unwrap_or(cfg.window_seconds);
@@ -139,21 +138,42 @@ mod tests {
     #[test]
     fn blocks_each_signal_independently() {
         assert_eq!(
-            evaluate(&cfg(), &LoopSignals { same_incident_recent: 3, ..none() }),
+            evaluate(
+                &cfg(),
+                &LoopSignals {
+                    same_incident_recent: 3,
+                    ..none()
+                }
+            ),
             LoopVerdict::Blocked("anti_loop_same_incident")
         );
         assert_eq!(
-            evaluate(&cfg(), &LoopSignals { same_signature_recent: 2, ..none() }),
+            evaluate(
+                &cfg(),
+                &LoopSignals {
+                    same_signature_recent: 2,
+                    ..none()
+                }
+            ),
             LoopVerdict::Blocked("anti_loop_same_signature")
         );
         assert_eq!(
-            evaluate(&cfg(), &LoopSignals { same_fingerprint_recent: 1, ..none() }),
+            evaluate(
+                &cfg(),
+                &LoopSignals {
+                    same_fingerprint_recent: 1,
+                    ..none()
+                }
+            ),
             LoopVerdict::Blocked("anti_loop_same_fingerprint")
         );
         assert_eq!(
             evaluate(
                 &cfg(),
-                &LoopSignals { same_failing_verification_recent: 2, ..none() }
+                &LoopSignals {
+                    same_failing_verification_recent: 2,
+                    ..none()
+                }
             ),
             LoopVerdict::Blocked("anti_loop_same_failing_verification")
         );

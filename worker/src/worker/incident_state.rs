@@ -140,61 +140,96 @@ impl DurableObject for IncidentState {
 // Todos los query params llegan como strings; se parsean explicitamente.
 #[derive(Debug, Default, Deserialize)]
 struct IngestQuery {
-    #[serde(default)] repo: String,
-    #[serde(default)] incident_id: String,
-    #[serde(default)] signature: String,
+    #[serde(default)]
+    repo: String,
+    #[serde(default)]
+    incident_id: String,
+    #[serde(default)]
+    signature: String,
     // Sin `delivery_id`: la deduplicacion va por `idem_key`, que el Worker
     // calcula con `repair_types::compute_idempotency_key` (FNV-1a
     // repo|incident|delivery|fingerprint, CONTRACT.md §5). Reenviarlo seria
     // mandar un parametro que nadie lee.
-    #[serde(default)] idem_key: String,
-    #[serde(default)] correlation_id: String,
-    #[serde(default)] max_attempts_per_incident: String,
-    #[serde(default)] max_repairs_per_repo: String,
-    #[serde(default)] max_open_repairs: String,
-    #[serde(default)] cooldown_seconds: String,
-    #[serde(default)] daily_budget: String,
-    #[serde(default)] max_same_incident: String,
-    #[serde(default)] max_same_signature: String,
-    #[serde(default)] max_same_fingerprint: String,
-    #[serde(default)] max_same_failing_verification: String,
-    #[serde(default)] window_seconds: String,
+    #[serde(default)]
+    idem_key: String,
+    #[serde(default)]
+    correlation_id: String,
+    #[serde(default)]
+    max_attempts_per_incident: String,
+    #[serde(default)]
+    max_repairs_per_repo: String,
+    #[serde(default)]
+    max_open_repairs: String,
+    #[serde(default)]
+    cooldown_seconds: String,
+    #[serde(default)]
+    daily_budget: String,
+    #[serde(default)]
+    max_same_incident: String,
+    #[serde(default)]
+    max_same_signature: String,
+    #[serde(default)]
+    max_same_fingerprint: String,
+    #[serde(default)]
+    max_same_failing_verification: String,
+    #[serde(default)]
+    window_seconds: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct AttemptQuery {
-    #[serde(default)] correlation_id: String,
-    #[serde(default)] incident_id: String,
-    #[serde(default)] signature: String,
-    #[serde(default)] max_attempts_per_incident: String,
-    #[serde(default)] max_same_signature: String,
-    #[serde(default)] max_same_fingerprint: String,
-    #[serde(default)] max_same_failing_verification: String,
-    #[serde(default)] window_seconds: String,
+    #[serde(default)]
+    correlation_id: String,
+    #[serde(default)]
+    incident_id: String,
+    #[serde(default)]
+    signature: String,
+    #[serde(default)]
+    max_attempts_per_incident: String,
+    #[serde(default)]
+    max_same_signature: String,
+    #[serde(default)]
+    max_same_fingerprint: String,
+    #[serde(default)]
+    max_same_failing_verification: String,
+    #[serde(default)]
+    window_seconds: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct ResultQuery {
-    #[serde(default)] correlation_id: String,
-    #[serde(default)] incident_id: String,
-    #[serde(default)] decision: String,
-    #[serde(default)] fingerprint: String,
-    #[serde(default)] verify_status: String,
-    #[serde(default)] evidence_ref: String,
-    #[serde(default)] reason: String,
+    #[serde(default)]
+    correlation_id: String,
+    #[serde(default)]
+    incident_id: String,
+    #[serde(default)]
+    decision: String,
+    #[serde(default)]
+    fingerprint: String,
+    #[serde(default)]
+    verify_status: String,
+    #[serde(default)]
+    evidence_ref: String,
+    #[serde(default)]
+    reason: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct PoisonQuery {
-    #[serde(default)] correlation_id: String,
-    #[serde(default)] incident_id: String,
-    #[serde(default)] queue: String,
+    #[serde(default)]
+    correlation_id: String,
+    #[serde(default)]
+    incident_id: String,
+    #[serde(default)]
+    queue: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct StateQuery {
-    #[serde(default)] incident_id: String,
-    #[serde(default)] correlation_id: String,
+    #[serde(default)]
+    incident_id: String,
+    #[serde(default)]
+    correlation_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -209,9 +244,12 @@ struct CountRow {
 /// columna ausente ni una fila parcial rompen el parseo.
 #[derive(Debug, Deserialize)]
 struct IncidentRow {
-    #[serde(default)] attempts: i64,
-    #[serde(default)] state: String,
-    #[serde(default)] last_fingerprint: String,
+    #[serde(default)]
+    attempts: i64,
+    #[serde(default)]
+    state: String,
+    #[serde(default)]
+    last_fingerprint: String,
 }
 
 /// Estado previo del incidente en `/ingest` (una sola query): intentos desde
@@ -220,8 +258,10 @@ struct IncidentRow {
 /// ultima huella de parche (senal anti-loop de "misma huella repetida").
 #[derive(Debug, Deserialize)]
 struct IncidentPriorRow {
-    #[serde(default)] attempts: i64,
-    #[serde(default)] last_fingerprint: String,
+    #[serde(default)]
+    attempts: i64,
+    #[serde(default)]
+    last_fingerprint: String,
 }
 
 /// Estado actual del incidente, usado como `from_state` real en las
@@ -229,7 +269,8 @@ struct IncidentPriorRow {
 /// cuando el incidente estaba en `queued`).
 #[derive(Debug, Deserialize)]
 struct StateRow {
-    #[serde(default)] state: String,
+    #[serde(default)]
+    state: String,
 }
 
 impl IncidentState {
@@ -392,8 +433,14 @@ impl IncidentState {
             )? as u32,
         };
         let anti_cfg = AntiLoopConfig {
-            max_same_incident: q.max_same_incident.parse().unwrap_or(anti_defaults.max_same_incident),
-            max_same_signature: q.max_same_signature.parse().unwrap_or(anti_defaults.max_same_signature),
+            max_same_incident: q
+                .max_same_incident
+                .parse()
+                .unwrap_or(anti_defaults.max_same_incident),
+            max_same_signature: q
+                .max_same_signature
+                .parse()
+                .unwrap_or(anti_defaults.max_same_signature),
             max_same_fingerprint: q
                 .max_same_fingerprint
                 .parse()
@@ -402,16 +449,30 @@ impl IncidentState {
                 .max_same_failing_verification
                 .parse()
                 .unwrap_or(anti_defaults.max_same_failing_verification),
-            window_seconds: q.window_seconds.parse().unwrap_or(anti_defaults.window_seconds),
+            window_seconds: q
+                .window_seconds
+                .parse()
+                .unwrap_or(anti_defaults.window_seconds),
         };
-        if let anti_loop::LoopVerdict::Blocked(reason) = anti_loop::evaluate(&anti_cfg, &loop_signals) {
-            let resp = self.blocked_response("blocked_anti_loop", reason, &q.incident_id, &q.correlation_id);
+        if let anti_loop::LoopVerdict::Blocked(reason) =
+            anti_loop::evaluate(&anti_cfg, &loop_signals)
+        {
+            let resp = self.blocked_response(
+                "blocked_anti_loop",
+                reason,
+                &q.incident_id,
+                &q.correlation_id,
+            );
             self.store_idempotency(&q.idem_key, &resp, now)?;
             return Response::ok(resp);
         }
 
         // 4. Quota (estado contable de este repositorio).
-        let cooldown_ms = q.cooldown_seconds.parse::<i64>().unwrap_or(defaults.cooldown_seconds) * 1000;
+        let cooldown_ms = q
+            .cooldown_seconds
+            .parse::<i64>()
+            .unwrap_or(defaults.cooldown_seconds)
+            * 1000;
         let day = (now / 86_400_000).to_string();
         let usage = QuotaUsage {
             // Intentos REALES del incidente (columna `attempts`, la incrementa
@@ -442,13 +503,23 @@ impl IncidentState {
                 .max_attempts_per_incident
                 .parse()
                 .unwrap_or(defaults.max_attempts_per_incident),
-            max_repairs_per_repo: q.max_repairs_per_repo.parse().unwrap_or(defaults.max_repairs_per_repo),
-            max_open_repairs: q.max_open_repairs.parse().unwrap_or(defaults.max_open_repairs),
-            cooldown_seconds: q.cooldown_seconds.parse().unwrap_or(defaults.cooldown_seconds),
+            max_repairs_per_repo: q
+                .max_repairs_per_repo
+                .parse()
+                .unwrap_or(defaults.max_repairs_per_repo),
+            max_open_repairs: q
+                .max_open_repairs
+                .parse()
+                .unwrap_or(defaults.max_open_repairs),
+            cooldown_seconds: q
+                .cooldown_seconds
+                .parse()
+                .unwrap_or(defaults.cooldown_seconds),
             daily_budget: q.daily_budget.parse().unwrap_or(defaults.daily_budget),
         };
         if let QuotaVerdict::Blocked(reason) = quota_cfg.evaluate(&usage) {
-            let resp = self.blocked_response("blocked_quota", reason, &q.incident_id, &q.correlation_id);
+            let resp =
+                self.blocked_response("blocked_quota", reason, &q.incident_id, &q.correlation_id);
             self.store_idempotency(&q.idem_key, &resp, now)?;
             return Response::ok(resp);
         }
@@ -539,7 +610,13 @@ impl IncidentState {
                     SqlStorageValue::from(q.correlation_id.as_str()),
                 ],
             )?;
-            self.insert_transition(&q.incident_id, &from_state, STATE_BLOCKED, &q.correlation_id, now)?;
+            self.insert_transition(
+                &q.incident_id,
+                &from_state,
+                STATE_BLOCKED,
+                &q.correlation_id,
+                now,
+            )?;
             return Response::ok(
                 serde_json::json!({
                     "allowed": false,
@@ -554,7 +631,11 @@ impl IncidentState {
         // Anti-loop completo en la puerta: la huella de ESTE intento no existe
         // todavia (el pipeline corre despues), asi que se mide la ultima
         // huella registrada del incidente y las verificaciones fallidas.
-        let window_ms = q.window_seconds.parse::<i64>().unwrap_or(anti_defaults.window_seconds) * 1000;
+        let window_ms = q
+            .window_seconds
+            .parse::<i64>()
+            .unwrap_or(anti_defaults.window_seconds)
+            * 1000;
         let same_signature_recent = self.count(
             "SELECT COUNT(*) AS count FROM signature_events WHERE signature = ? AND created_at > ?",
             vec![
@@ -581,7 +662,10 @@ impl IncidentState {
             ],
         )? as u32;
         let anti_cfg = AntiLoopConfig {
-            max_same_signature: q.max_same_signature.parse().unwrap_or(anti_defaults.max_same_signature),
+            max_same_signature: q
+                .max_same_signature
+                .parse()
+                .unwrap_or(anti_defaults.max_same_signature),
             max_same_fingerprint: q
                 .max_same_fingerprint
                 .parse()
@@ -609,7 +693,13 @@ impl IncidentState {
                     SqlStorageValue::from(q.correlation_id.as_str()),
                 ],
             )?;
-            self.insert_transition(&q.incident_id, &from_state, STATE_BLOCKED, &q.correlation_id, now)?;
+            self.insert_transition(
+                &q.incident_id,
+                &from_state,
+                STATE_BLOCKED,
+                &q.correlation_id,
+                now,
+            )?;
             return Response::ok(
                 serde_json::json!({
                     "allowed": false,
@@ -631,7 +721,13 @@ impl IncidentState {
                 SqlStorageValue::from(q.correlation_id.as_str()),
             ],
         )?;
-        self.insert_transition(&q.incident_id, &from_state, STATE_REPAIRING, &q.correlation_id, now)?;
+        self.insert_transition(
+            &q.incident_id,
+            &from_state,
+            STATE_REPAIRING,
+            &q.correlation_id,
+            now,
+        )?;
         Response::ok(
             serde_json::json!({
                 "allowed": true,
@@ -646,7 +742,11 @@ impl IncidentState {
     fn result(&self, req: &Request) -> Result<Response> {
         let q: ResultQuery = req.query()?;
         let now = now_ms();
-        let final_state = if q.decision == "allow" { STATE_DONE } else { STATE_BLOCKED };
+        let final_state = if q.decision == "allow" {
+            STATE_DONE
+        } else {
+            STATE_BLOCKED
+        };
         // Mismo guard que /attempt: si esta correlacion fue reemplazada por
         // una entrega nueva del incidente, el resultado es de un task
         // obsoleto y NO debe sobrescribir el estado ni la verification.
@@ -732,7 +832,13 @@ impl IncidentState {
         } else {
             guard.state
         };
-        self.insert_transition(&q.incident_id, &from_state, final_state, &q.correlation_id, now)?;
+        self.insert_transition(
+            &q.incident_id,
+            &from_state,
+            final_state,
+            &q.correlation_id,
+            now,
+        )?;
         Response::ok(serde_json::json!({ "ok": true }).to_string())
     }
 
@@ -785,15 +891,29 @@ impl IncidentState {
         } else {
             guard.state
         };
-        self.insert_transition(&q.incident_id, &from_state, STATE_DEAD_LETTER, &q.correlation_id, now)?;
+        self.insert_transition(
+            &q.incident_id,
+            &from_state,
+            STATE_DEAD_LETTER,
+            &q.correlation_id,
+            now,
+        )?;
         Response::ok(serde_json::json!({ "ok": true }).to_string())
     }
 
     /// GET /state: observabilidad del incidente.
     fn state(&self, req: &Request) -> Result<Response> {
         let q: StateQuery = req.query()?;
-        let where_clause = if q.correlation_id.is_empty() { "id = ?" } else { "correlation_id = ?" };
-        let value = if q.correlation_id.is_empty() { q.incident_id.clone() } else { q.correlation_id.clone() };
+        let where_clause = if q.correlation_id.is_empty() {
+            "id = ?"
+        } else {
+            "correlation_id = ?"
+        };
+        let value = if q.correlation_id.is_empty() {
+            q.incident_id.clone()
+        } else {
+            q.correlation_id.clone()
+        };
         let incidents: Vec<serde_json::Value> = self
             .sql
             .exec(
@@ -831,7 +951,8 @@ struct IdemRow {
     response: String,
     // Necesario para el TTL del contrato (CONTRACT.md §5): una respuesta
     // guardada expira a las IDEMPOTENCY_TTL_SECONDS.
-    #[serde(default)] created_at: i64,
+    #[serde(default)]
+    created_at: i64,
 }
 
 #[derive(Debug, Deserialize)]

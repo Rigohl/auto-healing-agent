@@ -32,6 +32,7 @@ verificaron contra la API de GitHub y que la rama habia borrado.
 | **ACTION → GATE** | Edge Worker | `repair_operators::gate` | `RepairAction` | allow / deny + `AgentStatus` | `PipelineReport` | minimo: sin escritura | `BLOCKED` + `NeedsHuman` |
 | **ACTION → PATCH** | Operadores deterministas | `repair_operators::apply` | `RepairAction` | `CandidatePatch` | allowlist de operadores | `contents: read` | escalar a humano (advisory) |
 | **INCIDENT → ESTADO** | Durable Object | `IncidentState` (SQLite) | repo + incidente | veredicto dedup/quota/anti-loop | estado transa
+
 ccional | binding `INCIDENT_STATE` | 503 `state_store_unavailable` |
 | **VERDICT → COLA** | Edge Worker | Queue `REPAIR_QUEUE` | veredicto `queued` | `QueueTask` | 202 + `correlation_id` | productor de la cola | 503 `queue_unavailable` |
 | **COLA → PATCH** | Consumidor asincrono | `queue_consumer` | `QueueTask` | decision + verificacion | `max_retries=3` + DLQ | consumidor | DLQ y registro en el DO |
@@ -64,6 +65,7 @@ La NN solo propone. Governance + CI/VERIFY deciden.
 Notas:
 - Valores hot-reloadables vía KV en el futuro.
 
+
 - Cada decisión se registra en RepairCase para auditoría.
 - Por qué no existe fallback a LLM: `docs/NO_LLM_POLICY.md`.
 - Qué está verde hoy en el flujo: `docs/E2E_CHECKLIST.md`.
@@ -78,7 +80,7 @@ GitHub Actions es la autoridad de VERIFY, concretamente los jobs de
 |-------|---------|---------------------|
 | `workspace-test` | `cargo test --workspace` | si |
 | `workspace-clippy` | `cargo clippy --workspace --all-targets -- -D warnings` | si |
-| `workspace-fmt` | `cargo fmt --all -- --check` | no aun: advisory hasta limpiar la deuda de formato (item 34 de DISCREPANCIES) |
+| `workspace-fmt` | `cargo fmt --all -- --check` | si (desde 2026-10-03: árbol formateado, item 34 cerrado) |
 | `worker-check` | `cargo check --manifest-path worker/Cargo.toml --all-targets` y `--target wasm32-unknown-unknown --release` | si |
 | `worker-test` | `cargo test --manifest-path worker/Cargo.toml` | si |
 | `worker-clippy` | `cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings` | si || `unused-deps` | `cargo machete` + `cargo shear` (deps declaradas sin uso / archivos sin enlazar) | si (nuevo 2026-10-03) |
@@ -98,7 +100,8 @@ workflows), `repair-validation.yml` (mismo gate de PR, mas explicito),
 - `AUTO_MERGE=false` (este archivo) es la fuente de verdad: ningun merge sin
   accion humana.
 - Mergify NO esta configurado (no existe `.mergify.yml`); no analizar ni
-  documentar como si existiera. No se introduce.
+ 
+ documentar como si existiera. No se introduce.
 - Branch protection de `main`: UNVERIFIABLE/ausente. Evidencia (2026-10-02):
   
 la API `branches/main/protection` responde 401 sin token admin;

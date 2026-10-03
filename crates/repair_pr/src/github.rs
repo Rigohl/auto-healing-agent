@@ -47,7 +47,10 @@ impl fmt::Display for PrError {
         match self {
             PrError::Blocked(msg) => write!(f, "BLOCKED: {msg}"),
             PrError::MissingToken => {
-                write!(f, "GITHUB_TOKEN is not set; refusing to run without credentials")
+                write!(
+                    f,
+                    "GITHUB_TOKEN is not set; refusing to run without credentials"
+                )
             }
             PrError::NotActionable(msg) => write!(f, "patch not actionable: {msg}"),
             PrError::Api(err) => write!(f, "GitHub API error: {err}"),
@@ -110,7 +113,11 @@ pub async fn open_pr(
     if let Some(pr) = existing.items.into_iter().next() {
         return Ok(PrOutcome {
             number: pr.number,
-            url: pr.html_url.as_ref().map(ToString::to_string).unwrap_or_default(),
+            url: pr
+                .html_url
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_default(),
             duplicate: true,
         });
     }
@@ -122,7 +129,11 @@ pub async fn open_pr(
         .await?;
     Ok(PrOutcome {
         number: pr.number,
-        url: pr.html_url.as_ref().map(ToString::to_string).unwrap_or_default(),
+        url: pr
+            .html_url
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default(),
         duplicate: false,
     })
 }

@@ -33,9 +33,7 @@ pub fn extract(incident: &Incident, signature: &FailureSignature) -> FeatureVect
     } else {
         0.0
     };
-    v.values[1] = if code.contains("module")
-        || code.contains("depend")
-        || code.contains("resolve")
+    v.values[1] = if code.contains("module") || code.contains("depend") || code.contains("resolve")
     {
         1.0
     } else {
@@ -47,9 +45,7 @@ pub fn extract(incident: &Incident, signature: &FailureSignature) -> FeatureVect
     } else {
         0.0
     };
-    v.values[3] = if code.contains("script")
-        || code.contains("command")
-        || code.contains("missing")
+    v.values[3] = if code.contains("script") || code.contains("command") || code.contains("missing")
     {
         1.0
     } else {
@@ -60,9 +56,7 @@ pub fn extract(incident: &Incident, signature: &FailureSignature) -> FeatureVect
     } else {
         0.0
     };
-    v.values[5] = if code.contains("lockfile")
-        || code.contains("peer")
-        || code.contains("eresolve")
+    v.values[5] = if code.contains("lockfile") || code.contains("peer") || code.contains("eresolve")
     {
         1.0
     } else {
@@ -126,14 +120,12 @@ pub fn extract(incident: &Incident, signature: &FailureSignature) -> FeatureVect
     } else {
         0.0
     };
-    v.values[16] = if signature.command_family == "other"
-        || cmd.contains("chmod")
-        || cmd.contains("node")
-    {
-        1.0
-    } else {
-        0.0
-    };
+    v.values[16] =
+        if signature.command_family == "other" || cmd.contains("chmod") || cmd.contains("node") {
+            1.0
+        } else {
+            0.0
+        };
 
     // --- Slots 17..20: Language & Framework One-Hot ---
     v.values[17] = if lang.contains("typescript") || lang == "ts" {
@@ -146,33 +138,17 @@ pub fn extract(incident: &Incident, signature: &FailureSignature) -> FeatureVect
     } else {
         0.0
     };
-    v.values[19] = if fw.contains("next") {
-        1.0
-    } else {
-        0.0
-    };
-    v.values[20] = if fw.contains("react") {
-        1.0
-    } else {
-        0.0
-    };
+    v.values[19] = if fw.contains("next") { 1.0 } else { 0.0 };
+    v.values[20] = if fw.contains("react") { 1.0 } else { 0.0 };
 
     // --- Slots 21..24: Source & Environment Flags ---
-    v.values[21] = if src.contains("vercel") {
-        1.0
-    } else {
-        0.0
-    };
+    v.values[21] = if src.contains("vercel") { 1.0 } else { 0.0 };
     v.values[22] = if src.contains("github") || src.contains("actions") {
         1.0
     } else {
         0.0
     };
-    v.values[23] = if incident.verified {
-        1.0
-    } else {
-        0.0
-    };
+    v.values[23] = if incident.verified { 1.0 } else { 0.0 };
     v.values[24] = if incident.status.contains("fail") {
         1.0
     } else {
@@ -181,11 +157,7 @@ pub fn extract(incident: &Incident, signature: &FailureSignature) -> FeatureVect
 
     // --- Slots 25..31: Numerical Bounded Signals ---
     v.values[25] = (incident.attempts as f32 / 10.0).min(1.0);
-    v.values[26] = if incident.attempts > 2 {
-        1.0
-    } else {
-        0.0
-    };
+    v.values[26] = if incident.attempts > 2 { 1.0 } else { 0.0 };
     v.values[27] = (incident.message.len() as f32 / 2000.0).min(1.0);
     v.values[28] = (incident.stack_hint.len() as f32 / 4000.0).min(1.0);
     v.values[29] = lang_score(&incident.language_hint);
@@ -194,21 +166,39 @@ pub fn extract(incident: &Incident, signature: &FailureSignature) -> FeatureVect
 
     // --- Slots 32..47: Semantic Keyword Matchers in Message & Stack ---
     v.values[32] = has(&msg, &["unexpected token", "syntaxerror", "unexpected end"]);
-    v.values[33] = has(&msg, &["cannot find module", "module not found", "can't resolve"]);
+    v.values[33] = has(
+        &msg,
+        &["cannot find module", "module not found", "can't resolve"],
+    );
     v.values[34] = has(&msg, &["tsconfig", "compileroptions", "invalid schema"]);
     v.values[35] = has(&msg, &["missing script", "npm err! missing script"]);
-    v.values[36] = has(&msg, &["missing required environment variable", "missing env"]);
+    v.values[36] = has(
+        &msg,
+        &["missing required environment variable", "missing env"],
+    );
     v.values[37] = has(&msg, &["package-lock.json is out of date", "lockfile"]);
     v.values[38] = has(&msg, &["not assignable to type", "type error", "type '"]);
-    v.values[39] = has(&msg, &["cannot resolve import path", "cannot resolve import"]);
-    v.values[40] = has(&msg, &["eresolve unable to resolve dependency tree", "peer dep"]);
+    v.values[39] = has(
+        &msg,
+        &["cannot resolve import path", "cannot resolve import"],
+    );
+    v.values[40] = has(
+        &msg,
+        &["eresolve unable to resolve dependency tree", "peer dep"],
+    );
     v.values[41] = has(&msg, &["failed to read build cache", "cache error"]);
     v.values[42] = has(&msg, &["expected 200", "fail src/", "jest", "vitest"]);
-    v.values[43] = has(&msg, &["cannot read property", "typeerror", "null", "undefined"]);
+    v.values[43] = has(
+        &msg,
+        &["cannot read property", "typeerror", "null", "undefined"],
+    );
     v.values[44] = has(&msg, &["permission denied", "eacces"]);
     v.values[45] = has(&msg, &["timeout", "oom", "heap limit", "out of memory"]);
     v.values[46] = has(&msg, &["eslint", "lint"]);
-    v.values[47] = has(&msg, &["webpack", "babel", "swc", "turbopack", "unresolved import"]);
+    v.values[47] = has(
+        &msg,
+        &["webpack", "babel", "swc", "turbopack", "unresolved import"],
+    );
 
     // --- Slots 48..62: hashing categorico sobre tokens ya normalizados ---
     // 15 buckets repartidos entre code, step, cmd, lang, fw y src. No entra el
