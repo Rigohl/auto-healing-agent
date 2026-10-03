@@ -122,7 +122,7 @@ fn cmd_pr(input_path: &str, rest: &[String]) -> Result<ExitCode, String> {
 
     // 5. Open the PR (octocrab). An open PR for the same head branch
     //    returns the existing one (CONTRACT.md §5).
-    let octocrab = client_from_env()?;
+    let octocrab = client_from_env().map_err(|e| e.to_string())?;
     let runtime = tokio::runtime::Runtime::new().map_err(|e| format!("tokio runtime: {e}"))?;
     let outcome = runtime
         .block_on(open_pr(&octocrab, owner, repo, &input.request, &bundle))
@@ -141,7 +141,7 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, String> {
     serde_json::from_str(&raw).map_err(|e| format!("invalid JSON in {path}: {e}"))
 }
 
-fn flag_value(args: &[String], name: &str) -> Result<Option<&str>, String> {
+fn flag_value<'a>(args: &'a [String], name: &str) -> Result<Option<&'a str>, String> {
     let mut it = args.iter();
     while let Some(arg) = it.next() {
         if arg == name {
