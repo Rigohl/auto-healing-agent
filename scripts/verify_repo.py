@@ -53,6 +53,7 @@ CRATE_FILES = [
 WORKER_FILES = [
     "worker/Cargo.toml",
     "worker
+
 /src/lib.rs",
     "worker/src/worker/mod.rs",
     "worker/src/worker/security.rs",
@@ -124,7 +125,8 @@ def workflow_triggers(rel: str) -> set[str] | None:
     inside = False
     key_indent: int | None = None
     for line in lines:
-        if
+        i
+f
  not inside:
             if re.match(r"^on:\s*(#.*)?$", line):
                 inside = True
@@ -183,7 +185,8 @@ class Report:
         status: str,
         details: str = "",
         critical: bool = True,
-    ) -> N
+    ) ->
+ N
 one:
         status = status.upper()
         if status not in ("PASS", "FAIL", "UNKNOWN"):
@@ -247,6 +250,7 @@ def check_files_exist(r: Report) -> None:
         ]
         + CRATE_FILES
         + WORKER_FILES
+
    
      + WORKFLOWS
         + DOCS
@@ -301,7 +305,8 @@ def check_two_build_units(r: Report) -> None:
         and "worker-clippy:" in ci,
     )
     r.expect(
-        "WORKE
+        "W
+ORKE
 R_QUEUE_FEATURE",
         'worker/Cargo.toml conserva features = ["queue"] (PART3: Queues + DLQ)',
         '"queue"' in worker_manifest or "queue" in worker_manifest,
@@ -353,7 +358,8 @@ def check_constant_time_auth(r: Report) -> None:
         "Sin WEBHOOK_SECRET el webhook responde 503 (nunca fail-open)",
         'Response::error("webhook_secret_not_configured", 503)' in lib,
     )
-    r.expec
+    r.
+expec
 t(
         "AUTH_REJECTS_401",
         "Secret incorrecto responde 401",
@@ -405,7 +411,8 @@ def check_secrets_not_in_tree(r: Report) -> None:
         for name in filenames:
             if not name.endswith((".sh", ".rs", ".toml", ".yml", ".yaml", ".json", ".ts")):
                 continue
-            path = os.path.
+            path = os
+.path.
 join(dirpath, name)
             try:
                 with open(path, "r", encoding="utf-8", errors="ignore") as fh:
@@ -459,7 +466,8 @@ def check_verify_authority(r: Report) -> None:
     """Actions es la autoridad de VERIFY; el Worker nunca declara PASS."""
     ci = read(".github/workflows/ci.yml")
     r.expect(
-        "CI_IS_
+        
+"CI_IS_
 VERIFY_AUTHORITY",
         "ci.yml ejecuta tests y clippy con -D warnings",
         "cargo test --workspace" in ci
@@ -509,7 +517,8 @@ def check_weight_count(r: Report) -> None:
     r.expect(
         "SCHEMA_INPUT_DIM",
         "model/schema.json declara input_dim = 64, igual que FeatureVector::DIM",
-        '"input_dim": 64'
+        '"input_d
+im": 64'
  in schema,
     )
     r.expect(
@@ -558,7 +567,8 @@ def check_contract_module(r: Report) -> None:
     """El contrato GitHub<->Cloudflare debe seguir exportando su superficie."""
     lib = read("crates/repair_types/src/lib.rs")
     contract = read("crates/repair_types/src/contract.rs")
-    contract_path = os.path.join(ROOT, "crates/repair_t
+    contract_path = os.path.join(ROOT, "crates
+/repair_t
 ypes/src/contract.rs")
     r.expect(
         "CONTRACT_MODULE_EXPORTED",
@@ -611,7 +621,8 @@ def check_gate_to_pr(r: Report) -> None:
         "GATE_TO_PR_DIFF_GENERATOR",
         "repair_pr declara similar (diff unificado) y octocrab (PR)",
         "similar" in repair_pr_manifest and "octocrab" in repair_pr_manifest,
-        "sin similar/o
+        "sin
+ similar/o
 ctocrab no hay diff real ni PR (item 71)",
     )
     r.expect(
@@ -654,6 +665,17 @@ def check_no_orphan_code(r: Report) -> None:
     )
 
 
+def check_fmt_blocking(r: Report) -> None:
+    """Item 34 cerrado: workspace-fmt es blocking, ningun job vuelve a advisory."""
+    ci = read(".github/workflows/ci.yml")
+    r.expect(
+        "FMT_BLOCKING",
+        "ci.yml ejecuta cargo fmt --check sin continue-on-error (item 34)",
+        "cargo fmt --all -- --check" in ci and "continue-on-error" not in ci,
+        "un fmt advisory deja entrar formato divergente sin que CI lo bloquee",
+    )
+
+
 # ---------------------------------------------------------------- git / drift
 
 
@@ -664,7 +686,8 @@ def check_branch_drift(r: Report) -> None:
         # `%(refname:short)` lo devuelve como `origin`, no como `origin/HEAD`.
         # Filtrarlo por sufijo "/HEAD" no lo caza y `origin` acaba contado como
         # si fuera una rama. Es lo que pasa en actions/checkout.
-        out = subprocess.run(
+        out =
+ subprocess.run(
             [
                 "git",
                 "for-each-ref",
@@ -717,7 +740,8 @@ una rama
     # La rama bajo revision no cuenta como persistencia: por definicion es
     # efimera (docs/BRANCH_POLICY.md, regla 1: se borra tras merge o abandono).
     # En CI es GITHUB_HEAD_REF; en local, la ramaChecked out. Asi el claim no
-    # puede pasar en verde por elodbjeto mismo que esta comprobando.
+    # puede pasar en verde
+ por elodbjeto mismo que esta comprobando.
     head_ref = os.environ.get("GITHUB_HEAD_REF", "")
     if not head_ref:
         try:
@@ -773,7 +797,8 @@ def check_workflow_permissions(r: Report) -> None:
 
 
 def check_smoke_test_reachable(r: Report) -> None:
-    """El smoke test de deploy depende de una variable que puede no existir."""
+    """El smoke test de deploy depende de una variable que puede no exi
+stir."""
     worker_url = os.environ.get("WORKER_URL", "")
     if not worker_url:
         r.add(
@@ -807,6 +832,7 @@ CHECKS = [
     check_contract_module,
     check_gate_to_pr,
     check_no_orphan_code,
+    check_fmt_blocking,
     check_branch_drift,
 
     check_workflow_permissions,
@@ -843,7 +869,8 @@ def main() -> int:
     print(
         f"claims={summary['total_claims']} pass={summary['pass']} "
         f"fail={summary['fail']} unknown={summary['unknown']} "
-        f"(criticos={summary['critical_unknown']}) "
+        f"(criticos={sum
+mary['critical_unknown']}) "
         f"coverage={summary['coverage_percentage']}%"
     )
     print(f"OVERALL: {summary['status']}")
