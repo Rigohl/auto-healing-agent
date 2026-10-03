@@ -34,7 +34,9 @@ Detalle y reglas: `docs/BRANCH_POLICY.md`.
     `thiserror` ni `wasm-bindgen` sin uso).
 - ~~kilo/bionic-owl-ok9~~ — 30 archivos / +7634. Absorbido **depurado**:
   `docs/REFERENCES.md` (enlaces oficiales + glosario corregido).
-  Descartados: `DOCUMENTATION.md` (afirma "MongoDB ✅ Conectado" sin driver,
+  Descartados: `DOCUMENTATION.md` 
+
+(afirma "MongoDB ✅ Conectado" sin driver,
   ítem 21) y `ACADEMIC_REFS.md` (citas académicas falsificadas, ítem 24).
 
 ## Árbol relevante (docs)
@@ -75,7 +77,9 @@ docs/
 | CI / test | ✅ `cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators` — 27 tests |
 | CI / worker | ✅ `cargo check --manifest-path worker/Cargo.toml --all-targets` (worker enlaza los 4 crates) |
 | CI / clippy | ✅ `-D warnings` |
-| WASM | ✅ `cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown` |
+| WASM | ✅ `cargo bu
+i
+ld -p repair_nn_wasm --release --target wasm32-unknown-unknown` |
 | Security | ✅ |
 
 El build WASM estaba roto desde antes de la unificación (`f32::exp()` en un
@@ -93,7 +97,9 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 | — | E2E completo no verde (ver `docs/E2E_CHECKLIST.md`). |
 | 7, 52 | Sin `Cargo.lock`, **por decisión** (ítem 52): las versiones resuelven en cada build de CI. Cuatro ramas pidieron versionarlos; se explica en DISCREPANCIES por qué no se adoptan tal cual. |
 | 34 | Parcial: clippy con `-D warnings` activo y **verde** (los seis checks de `ci.yml` pasan en el PR #13); falta `cargo fmt --check` bloqueante, que necesita toolchain local para aplicar el formato. |
-| 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`) y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están corregidos. |
+| 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`) y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están c
+or
+regidos. |
 | 41 | **Deploy bloqueado**: sin `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` y sin toolchain Rust en el entorno. `worker/wrangler.toml` ya enlaza el namespace real de `MODEL_KV` (el `REPLACE_WITH` fue reemplazado en la auditoría del 2026-10-03). **Nada desplegado.** Vía lista en `.github/workflows/deploy.yml` (manual + environment `production` + preflight + smoke test). |
 | 56 | Workers Builds rojo desde al menos `f7522c8`: falla en 0s, o sea configuracion del build en el dashboard de Cloudflare, no codigo. El build de GitHub Actions sobre `wasm32-unknown-unknown --release` pasa. Arreglo: accion humana en el dashboard. |
 | — | **λ fijadas (2026-10-03)**: λ_conf = λ_risk = 0.5 en `crates/repair_train`, implementadas (BCE sobre las cabezas de conf/risk) y testeadas. `reward` sigue sin calcularse en el repo (bucle online = fase posterior). |
@@ -118,7 +124,9 @@ Ningún success se declara por confidence del modelo: la autoridad es GitHub Act
   `from_state` real en auditoría, TTL de idempotencia + retención (24 h /
   7 días), `idem_key` canónica del contrato, cola real en `record_poison`.
   Detalle: `DISCREPANCIES` 58–66.
-- **Docs sincronizadas** (GOVERNANCE, CONTRACT §2, PART3 §8/§9/§10/§12/§13,
+- **Docs sincronizadas** (GOVERNANCE, CONTRACT §2, PAR
+T3 
+§8/§9/§10/§12/§13,
   E2E_CHECKLIST, ARCHITECTURE, PHASE_STATUS, BRANCH_POLICY) y
   `verify_repo.py` ahora cubre `deploy-staging.yml`.
 - Verificación: `cargo test --workspace`, clippy `-D warnings`, worker
@@ -155,7 +163,9 @@ Ningún success se declara por confidence del modelo: la autoridad es GitHub Act
 - **P2 de `CONTRACT.md` §3 cerrado como crate**: `crates/repair_pr` — generador
   de diff unificado real (`similar` 3.2.0) + apertura de PR (`octocrab` 0.54.2
   con `secrecy` 0.10.3; versiones verificadas contra crates.io). 7º miembro del
-  workspace; bin `repair-pr` (`diff` offline | `pr` desde rama efímera).
+  workspace; bin `repair-pr` (`diff`
+ off
+line | `pr` desde rama efímera).
 - **Fail-closed de extremo a extremo**: token solo de `GITHUB_TOKEN` (jamás
   adivinado ni logueado); bundle vacío ⇒ `Blocked` (NO INVENTED DIFFS); PR
   duplicado ⇒ `ReturnExisting` (CONTRACT §5); nunca declara PASS (§4: la
@@ -163,3 +173,39 @@ Ningún success se declara por confidence del modelo: la autoridad es GitHub Act
 - **Sin integración aún (honesto)**: el worker no invoca `repair_pr`; la
   conversión `ops::CandidatePatch` → `contract::CandidatePatch` corre por
   cuenta del caller; `repair_operators::apply()` no cambia.
+
+
+## Actualización 2026-10-03 (higiene de código huérfano — análisis a fondo)
+
+Análisis pedido por el dueño ("por qué hay py si todo es rust... evitar
+código huérfano o errores") usando GitHub, Context7, Sentry y Linear
+(PYH-34), contra main `142445ac`:
+
+- **Por qué hay Python**: `scripts/verify_repo.py` es el verificador
+  independiente fail-closed (45+ claims) de invariantes que ni cargo ni
+  clippy ven: archivos presentes, bits +x, permisos de workflows, secretos
+  en el árbol, deriva de docs, placeholders activos. Debe correr aunque el
+  código Rust NO compile (anti-auto-verificación); no es código de
+  producción, igual que los .yml de los workflows. Alternativa Rust: patrón
+  xtask — pendiente de decisión del dueño (DISCREPANCIES 72).
+- **Código huérfano: limpio.** 0 deps sin uso en los 7 crates (verificación
+  textual estilo cargo-machete); worker 8/8 deps usadas; 0 marcadores
+  `dead_code`/`todo!`/`unimplemented!`/`FIXME`; 7/7 dirs de crates/ en el
+  workspace; `mod.rs` del worker enlaza 6/6 submódulos con `#[path]`;
+  11/11 workflows reclamados por verify_repo.py.
+- **Riesgo cerrado**: nada vigilaba deps huérfanas → job `unused-deps`
+  nuevo en ci.yml (cargo-machete 0.9.2 + cargo-shear 1.14.0, verificados
+  contra docs.rs) + claims nuevos `NO_ORPHAN_CRATES` y
+  `NO_ORPHAN_DEPS_CI` en verify_repo.py.
+- `wrangler.toml` raíz: era un **symlink** a `worker/wrangler.toml` (el
+  raw de GitHub sirve el contenido del destino — por eso parecía texto
+  plano). La API disponible no recrea symlinks: queda como archivo de
+  solo-comentarios (fail-closed: un wrangler desde la raíz no despliega
+  NADA) y `validate-preflight.sh` valida ahora ambas formas; jamás acepta
+  una config activa divergente. Restaurar el symlink es opcional y humano
+  (`ln -sfn worker/wrangler.toml wrangler.toml` + commit).un archivo corrupto.
+- **Sentry**: org `pyhentretaiment` con 0 proyectos — sin monitoreo de
+  errores conectado (worker sin deploy verificado; observabilidad = PART4).
+- Orfanas conocidas que NO son código: 5 ramas residuales (BRANCH_DRIFT,
+  dispatch humano de `cleanup-branches.yml`) y `legacy/` (archivo V0
+  intencional).

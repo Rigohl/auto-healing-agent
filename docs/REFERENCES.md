@@ -37,7 +37,8 @@ No se repiten aquí para evitar dos fuentes de verdad.
 | serde-wasm-bindgen | https://github.com/wasm-bindgen/serde-wasm-bindgen |
 | wasm-opt (WABT) | https://github.com/WebAssembly/wabt |
 | cargo-bloat | https://github.com/RazrFalcon/cargo-bloat |
-| worker-build | https://github.com/cloudflare/workers-rs/tree/main/worker-build |
+| worker-build | https://github.com/cloudflare/workers-rs/
+tree/main/worker-build |
 
 Target fijado en `rust-toolchain.toml`: `wasm32-unknown-unknown`, toolchain `stable`.
 
@@ -84,7 +85,8 @@ de R2/D1/DO en el árbol: ver `docs/DISCREPANCIES.md` ítems 9, 10 y 21.
 | Context7 (repo) | https://github.com/upstash/context7 |
 
 Obligatorio antes de escribir código contra cualquier API/crate externo.
-Detalle en `docs/PART4_PERSISTENCE_TRANSVERSAL.md`.
+Detalle en `docs/PART4_PERSISTE
+NCE_TRANSVERSAL.md`.
 
 ## Glosario (corregido contra el código)
 
@@ -122,11 +124,19 @@ Donde la fuente absorbida discrepaba, se indica.
 | Tema | URL |
 |------|-----|
 | similar (diff unificado) | https://crates.io/crates/similar |
-| similar (docs.rs) | https://docs.rs/similar |
+| similar (docs.rs) | https://docs.rs/si
+milar |
 | octocrab (cliente GitHub / PR) | https://crates.io/crates/octocrab |
 | octocrab (docs.rs) | https://docs.rs/octocrab |
 
 Versiones ancladas en `crates/repair_pr/Cargo.toml` (verificadas contra crates.io, 2026-10-03): `similar = "3"` (3.2.0), `octocrab = "0.54"` (0.54.2), `secrecy = "0.10"` (0.10.3). Crates std fuera del edge: el Worker nunca abre PRs.
+
+### Código huérfano (deps sin uso / archivos sin enlazar)
+
+| Fuente | Uso en el repo | Verificado |
+|--------|----------------|------------|
+| cargo-machete 0.9.2 (github.com/bnjbvr/cargo-machete) | job `unused-deps` de ci.yml: dependencias declaradas que ningún crate usa (crates/ + worker/); exit != 0 con hallazgos | docs.rs / crates.io, 2026-10-03 |
+| cargo-shear 1.14.0 (github.com/Boshen/cargo-shear) | mismo job: deps del workspace sin usar + advertencias de archivos vacíos/sin enlazar | docs.rs / crates.io, 2026-10-03 |
 
 ### Runtime
 

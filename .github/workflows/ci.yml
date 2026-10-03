@@ -51,6 +51,7 @@ jobs:
   # Cuando `cargo fmt --all` se ejecute sobre el arbol: quitar
   # continue-on-error y anadir este check a los required checks de
   # GOVERNANCE.md. Nunca verde falso.
+
   workspace-fmt:
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -60,6 +61,28 @@ jobs:
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
+
+  # ---------------- código huérfano (deps sin uso) ----------------
+  # Ninguna tool de Rust ve una dependencia declarada que ningún crate usa:
+  # compila igual y queda huérfana. cargo-machete la detecta por texto
+  # (rápido; puede dar falsos positivos con macros: en ese caso iterar o
+  # documentar), cargo-shear además revisa deps del workspace y avisa de
+  # archivos vacíos/sin enlazar. Fail-closed: rojo = deuda real.
+  unused-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo-machete (deps declaradas sin uso en crates/ y worker/)
+        run: |
+          cargo install cargo-machete --locked
+          cargo machete --version
+          cargo machete
+      - name: cargo-shear (deps del workspace + archivos sin enlazar)
+        run: |
+          cargo install cargo-shear --locked
+          cargo shear
 
   # ---------------- worker (artefacto desplegable) ----------------
   worker-check:

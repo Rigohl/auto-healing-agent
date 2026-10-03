@@ -10,9 +10,9 @@
 #      caerse por un comentario.
 #   2. worker/build.sh ejecutable: sin el bit +x, Workers Builds falla con un
 #      error de permisos que no parece de permisos (PR #6, item 2).
-#   3. El arbol real de wrangler: el symlink de raiz y worker/wrangler.toml
-#      tienen que resolver al mismo archivo, o `wrangler deploy` desde raiz
-#      desplegaria una configuracion distinta a la de deploy.yml.
+#   3. El arbol real de wrangler: la raiz (symlink a worker/wrangler.toml,
+#      o archivo solo-comentarios desde 2026-10-03) y worker/wrangler.toml
+#      nunca representan configuraciones distintas.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -59,6 +59,7 @@ fi
 # 3. Un placeholder en una linea activa se detecta.
 TMP_ACTIVE="$(mktemp)"
 cat worker/wrangler.toml >"$TMP_ACTIVE"
+
 echo 'id = "REPLACE_WITH_KV_ID"' >>"$TMP_ACTIVE"
 if run_preflight "$TMP_ACTIVE"; then
   fail "un REPLACE_WITH en linea activa NO fue detectado"
@@ -85,11 +86,26 @@ else
   fail "worker/build.sh no tiene bit +x (Workers Builds fallara)"
 fi
 
-# 6. El symlink de raiz tiene que apuntar al archivo real, no a si mismo.
-if [ "$(readlink wrangler.toml)" = "worker/wrangler.toml" ]; then
-  pass "wrangler.toml -> worker/wrangler.toml"
+# 6. El arbol de wrangler: dos formas validas para la raiz, ambas fail-
+#    closed frente a una config divergente (2026-10-03: la API usada para
+#    editar el repo no puede recrear symlinks; lo que NUNCA se acepta es
+#    una config activa distinta de la de worker/wrangler.toml).
+if [ -L wrangler.toml ]; then
+  if [ "$(readlink wrangler.toml)" = "worker/wrangler.toml" ]; then
+    pass "wrangler.toml -> worker/wrangler.toml (symlink)"
+  else
+    fail "wrangler.toml (symlink) apunta a otra cosa"
+  fi
+elif [ -f wrangler.toml ]; then
+  # Archivo regular: solo sin config activa: un wrangler desde la raiz no
+  # despliega NADA (fail-closed), nunca una config divergente.
+  if [ -z "$(sed -e 's/#.*//' wrangler.toml | tr -d '[:space:]')" ]; then
+    pass "wrangler.toml raiz solo comentarios: nada desplegable (fail-closed)"
+  else
+    fail "wrangler.toml regular contiene config activa: divergiria de worker/wrangler.toml"
+  fi
 else
-  fail "wrangler.toml deberia ser symlink a worker/wrangler.toml"
+  fail "wrangler.toml no existe"
 fi
 
 if [ "$FAILED" -ne 0 ]; then
