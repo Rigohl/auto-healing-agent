@@ -453,7 +453,7 @@ impl IncidentState {
             return Response::ok(resp);
         }
 
-        // 4. Alta (upsert) + auditoria.
+        // 5. Alta (upsert) + auditoria.
         exec_write(
             &self.sql,
             "INSERT INTO incidents (id, repository, signature, state, attempts, correlation_id, created_at, updated_at)
