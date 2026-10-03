@@ -149,3 +149,17 @@ Ningún success se declara por confidence del modelo: la autoridad es GitHub Act
   DISCREPANCIES).
 - `verify_repo.py` ahora escanea también `promote-model.yml` y
   `cleanup-branches.yml` (`WORKFLOW_LEAST_PRIVILEGE`).
+
+## Actualización 2026-10-03 (GATE→PR V1)
+
+- **P2 de `CONTRACT.md` §3 cerrado como crate**: `crates/repair_pr` — generador
+  de diff unificado real (`similar` 3.2.0) + apertura de PR (`octocrab` 0.54.2
+  con `secrecy` 0.10.3; versiones verificadas contra crates.io). 7º miembro del
+  workspace; bin `repair-pr` (`diff` offline | `pr` desde rama efímera).
+- **Fail-closed de extremo a extremo**: token solo de `GITHUB_TOKEN` (jamás
+  adivinado ni logueado); bundle vacío ⇒ `Blocked` (NO INVENTED DIFFS); PR
+  duplicado ⇒ `ReturnExisting` (CONTRACT §5); nunca declara PASS (§4: la
+  autoridad de VERIFY es GitHub Actions).
+- **Sin integración aún (honesto)**: el worker no invoca `repair_pr`; la
+  conversión `ops::CandidatePatch` → `contract::CandidatePatch` corre por
+  cuenta del caller; `repair_operators::apply()` no cambia.
