@@ -56,10 +56,10 @@ docs/
 
 ## Código
 
-- `crates/` — 5 miembros: types, feature_engine, nn_core, nn_wasm, operators.
+- `crates/` — 6 miembros: types, feature_engine, nn_core, nn_wasm, operators, train.
 - `worker/` — runtime PART3 async (webhook fail-closed → DO → Queue → consumidor), **fuera** del workspace Cargo (paquete CF aparte,
   se compila con wrangler).
-- `model/` — placeholders. `current.json` y `stable.json` con `weights: null`.
+- `model/` — `current.txt` = payload KV real (2863 `f32`, pesos V1). `current.json` y `stable.json` siguen como placeholders de metadata (`weights: null`, nadie los consume).
 - `legacy/` — archivado, no ejecutable. Se conserva íntegro.
 - `FeatureVector::DIM = 64`, `WEIGHT_COUNT = 2863`, gate `0.55 / 0.45`,
   `OperatorId` 0–12 (`OPERATOR_COUNT = 13`).
@@ -84,7 +84,7 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 | 25 | **Parcialmente cerrado por el encoder V1**: los 64 slots llevan señal explícita y un test lo comprueba sobre 1000 muestras sintéticas. Lo que sigue faltando es la señal de AST/CFG, que sigue sin extraerse. |
 | — | El webhook ya corre `Incident → features → NN → gate` y falla cerrado sin secret. Falta: abrir PR efímera, persistir `RepairCase`, y `apply()` sigue sin generar diff real. |
 | 9, 10 | Sin bindings R2/D1/DO, sin driver Rust de MongoDB, sin conector Mem0. Diseñado, no implementado. |
-| 5, 6, 22 | Sin pesos reales: no hay `scripts/train` ni `scripts/export_weights`; training y promoción de checkpoint siguen diferidos. |
+| 5, 6, 22 | **Train + export cerrados (2026-10-03)**: `crates/repair_train` (trainer offline V1, sin LLM ni `rand`) + `model/current.txt` (payload KV validado en CI con el `extract`/`predict` reales). Pendiente: promoción **humana** a `MODEL_KV` (`model/current`/`model/stable`); un wrapper `scripts/train` sigue sin existir (el bin `repair-train` lo cubre). |
 | — | `apply()` tiene un brazo por operador y devuelve `CandidatePatch` (files + steps), pero no genera diff ni escribe ficheros. |
 | — | E2E completo no verde (ver `docs/E2E_CHECKLIST.md`). |
 | 7, 52 | Sin `Cargo.lock`, **por decisión** (ítem 52): las versiones resuelven en cada build de CI. Cuatro ramas pidieron versionarlos; se explica en DISCREPANCIES por qué no se adoptan tal cual. |
@@ -92,7 +92,7 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 | 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`) y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están corregidos. |
 | 41 | **Deploy bloqueado**: sin `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` y sin toolchain Rust en el entorno. `wrangler.toml` conserva `REPLACE_WITH_KV_NAMESPACE_ID`. **Nada desplegado.** Vía lista en `.github/workflows/deploy.yml` (manual + environment `production` + preflight + smoke test). |
 | 56 | Workers Builds rojo desde al menos `f7522c8`: falla en 0s, o sea configuracion del build en el dashboard de Cloudflare, no codigo. El build de GitHub Actions sobre `wasm32-unknown-unknown --release` pasa. Arreglo: accion humana en el dashboard. |
-| — | Objetivo de entrenamiento sin λ fijados: la fórmula loss/reward está documentada en PART2 pero no implementada, y nada calcula `reward` en el repo. |
+| — | **λ fijadas (2026-10-03)**: λ_conf = λ_risk = 0.5 en `crates/repair_train`, implementadas (BCE sobre las cabezas de conf/risk) y testeadas. `reward` sigue sin calcularse en el repo (bucle online = fase posterior). |
 
 ## Decisiones clave
 
@@ -119,3 +119,20 @@ Ningún success se declara por confidence del modelo: la autoridad es GitHub Act
   `verify_repo.py` ahora cubre `deploy-staging.yml`.
 - Verificación: `cargo test --workspace`, clippy `-D warnings`, worker
   host + `wasm32-unknown-unknown --release`, `verify_repo.py` OVERALL PASS.
+
+## Actualización 2026-10-03 (tarde): pesos V1 entrenados
+
+- **Entrenamiento offline V1 implementado**: `crates/repair_train` (SGD
+  determinista sobre el dataset sintético, sin `rand`; λ_conf = λ_risk = 0.5
+  **fijadas** — cierra el gap de λ) + bin `repair-train`
+  (`cargo run -p repair_train --release -- --out model/current.txt`).
+- **`model/current.txt`**: payload KV real (2863 `f32`, formato exacto del
+  loader del worker). Corrida V1 (dataset 1000/seed 42, 120 épocas, batch 16,
+  lr 0.1→0.03, init seed 7): accuracy 1.000 observada en train y holdout
+  (500, seed 43); CI revalida el artefacto con el `extract`/`predict` reales
+  (tests de `repair_train`).
+- **No promovido**: `MODEL_KV` sigue sin las claves `model/current`/
+  `model/stable` → el Worker responde `blocked_no_model`. Promoción =
+  acción humana; nada se declara PASS sin GitHub Actions.
+- Los placeholders `current.json`/`stable.json` se conservan (metadata, nadie
+  los consume).
