@@ -209,11 +209,12 @@ hardcodeado
 
 | 73 | Push del conector partiendo líneas al azar (5 archivos, 25 líneas, 2026-10-03) | Cada línea se corta en una columna arbitraria y se reanuda en la línea siguiente (a veces con una línea vacía intercalada). Rompió 2 archivos de código y 3 de docs: `ci.yml` (`s` + `teps:` → workflow **inválido**, ningún job `workspace-*`/`worker-*` llegó a correr); `verify_repo.py` (18 líneas: `"worker` + `/src/lib.rs"`, `i` + `f not inside:`, `) -> N` + `one:`, `r.expec` + `t(`…) → `SyntaxError`, el job `verify` moría **antes de comprobar nada** y su rojo se atribuyó a `BRANCH_DRIFT` (que era real, pero secundario); `DISCREPANCIES.md` ×3, `INVENTORY.md` ×2, `REFERENCES.md` ×1 (solo prosa partida: `cargo.toml`, `cleanup-branches.yml`, `ANTI_LOOP_MAX_SAME_FINGERPRINT`, `cargo build`, `diff offline`, `PART4_PERSISTENCE_TRANSVERSAL.md`) | **Corregido**: `ci.yml` en `06296cd`; `verify_repo.py` reconstruido desde `255168d` (sano) + las dos funciones nuevas; docs recompuestas; gate nuevo en `consistency.yml` que compila **todos** los `.py` versionados antes de ejecutar ninguno | Un `.py` corrupto no puede reportar su propia deriva: el detector de deriva era a la vez la víctima. El gate convierte el fallo opaco en un nombre de step explícito |
 
-Ramas: la auditoria dejó el repo en una sola línea, pero los PRs #18–#20 y #24
-(2026-10-03, tarde) dejaron de nuevo ramas residuales efímeras 100% fusionadas
-(`feat/nn-train-v1`, `fix/deep-audit-2026-10-03`, `-v2`, `devops/promote-model-kv`,
-`chore/rustfmt-tree`, `devops/orphan-code-hygiene`, `docs/sync-incomplete-2026-10-03`,
-`feat/gate-to-pr-v1`): `BRANCH_DRIFT` las reporta hasta que `cleanup-branches.yml`
-las borre bajo dispatch humano. `fix/deep-audit-2026-10-03` (sin sufijo) está
-**divergida**: tiene commits fuera de `main`, así que el fail-closed la rechaza y
-no debe entrar en el input.
+| 74 | Dead code de contrato y advisory huérfano (auditoría 2026-10-03, PYH-33) | `RepairCase`/`TrainingExample` (`repair_types`): structs `pub` sin consumidores en el workspace; `repair-validation.yml` mantenía `continue-on-error: true` en su rustfmt aunque `workspace-fmt` ya era blocking; `worker/` formateado en 57f83494 pero sin check propio | **Corregido/justificado** 2026-10-03: structs documentados en el código como contrato PART4 (persistencia Mongo, PYH-32) — se conservan a propósito; advisory retirado del espejo; `cargo fmt --manifest-path worker/Cargo.toml -- --check` añadido a `worker-check` | Un espejo advisory de un check blocking contradecía el item 34; borrar structs de contrato rompería el schema de la persistencia planeada. |
+| 75 | Limpieza de ramas 100% manual | 8 ramas residuales fusionadas + 1 divergida mantenían `BRANCH_DRIFT` rojo hasta un dispatch humano de `cleanup-branches.yml` | **Corregido** 2026-10-03 (34d5390): `cleanup-branches.yml` corre solo al push a `main` (fail-closed con `git merge-base --is-ancestor`), camino `superseded` con evidencia para `fix/deep-audit-2026-10-03` y re-dispatch de `consistency.yml` al terminar | El último rojo auto-reparable: tras el merge del PR el repo queda solo con `main` y `BRANCH_DRIFT` verde sin acción humana. |
+
+Ramas: la limpieza dejó de ser manual. Desde el merge de este PR,
+`cleanup-branches.yml` corre solo en cada push a `main`: borra las 9 ramas
+efímeras 100% fusionadas (incluida la del propio PR) y procesa
+`fix/deep-audit-2026-10-03` como superseded con evidencia (head divergido,
+contenido ya en `main`). `BRANCH_DRIFT` queda verde tras el re-dispatch
+automático de Consistency, sin acción humana.

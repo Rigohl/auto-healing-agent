@@ -3,14 +3,33 @@ name: Branch cleanup
 # Borra ramas residuales 100% mergeadas en main (el BRANCH_DRIFT del check
 # `verify` se pone verde cuando solo queda origin/main). Fail-closed: si
 # una rama NO es ancestro completo de main, el workflow falla sin borrar.
-# Se ejecuta SOLO bajo workflow_dispatch humano (Run workflow).
+#
+# Disparadores (cierre operativo, 2026-10-03):
+#   1. workflow_dispatch humano (Run workflow), igual que siempre.
+#   2. push a main: cada merge deja la rama efimera recien fusionada como
+#      residual. Este trigger la borra en el momento: ni el conector de
+#      GitHub ni ninguna API disponible pueden borrar refs o despachar
+#      workflows, asi que sin este trigger el BRANCH_DRIFT dependia de una
+#      accion humana en cada tanda de PRs.
+#
+# `superseded`: ramas con commits fuera de main cuyo contenido ya llego a
+# main por otra via. Se borran SIN check de ancestro, con la evidencia
+# registrada en el propio paso (DISCREPANCIES item 75). NO usar para
+# ramas con contenido no verificado: el check de ancestro existe para que
+# un error de juicio no borre trabajo.
 on:
   workflow_dispatch:
     inputs:
       branches:
-        description: "Ramas a borrar (separadas por espacio)"
-        required: true
-        default: "feat/nn-train-v1 fix/deep-audit-2026-10-03 fix/deep-audit-2026-10-03-v2"
+        description: "Ramas a borrar (separadas por espacio); vacio = lista por defecto"
+        required: false
+        default: ""
+      superseded:
+        description: "Ramas superseded (ver evidencia en el paso de borrado); vacio = default"
+        required: false
+        default: ""
+  push:
+    branches: [main]
 
 concurrency:
   group: branch-cleanup
@@ -21,6 +40,23 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
+    env:
+      # Lista por defecto (trigger push): SOLO ramas 100% fusionadas
+      # (compare ahead_by=0 contra main, verificado 2026-10-03).
+      DEFAULT_BRANCHES: >-
+        chore/cierre-operativo-2026-10-03
+        chore/rustfmt-tree
+        devops/orphan-code-hygiene
+        devops/promote-model-kv
+        docs/sync-incomplete-2026-10-03
+        feat/gate-to-pr-v1
+        feat/nn-train-v1
+        fix/deep-audit-2026-10-03-v2
+        kilo/rare-albatross-5ms
+      # Superseded con evidencia (ver el paso de borrado): commits unicos
+      # ya presentes en main via fix/deep-audit-2026-10-03-v2.
+      DEFAULT_SUPERSEDED: fix/deep-audit-2026-10-03
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,7 +64,8 @@ jobs:
 
       - name: Verificar mergeadas y borrar
         env:
-          BRANCHES: ${{ inputs.branches }}
+          BRANCHES: ${{ github.event_name == 'workflow_dispatch' && inputs.branches || env.DEFAULT_BRANCHES }}
+          SUPERSEDED: ${{ github.event_name == 'workflow_dispatch' && inputs.superseded || env.DEFAULT_SUPERSEDED }}
         run: |
           set -euo pipefail
           git fetch origin
@@ -45,5 +82,30 @@ jobs:
               exit 1
             fi
           done
+          for b in $SUPERSEDED; do
+            if ! git ls-remote --heads origin "refs/heads/$b" | grep -q .; then
+              echo "::notice::origin/$b ya no existe; se ignora"
+              continue
+            fi
+            echo "::warning::borrado SUPERSEDED de origin/$b (sin check de ancestro)"
+            echo "  evidencia (2026-10-03): 2 commits unicos (fix de"
+            echo "  set-github-secrets.sh + resolucion de conflicto) cuyo contenido"
+            echo "  ya llego a main via fix/deep-audit-2026-10-03-v2; compare"
+            echo "  main...rama = diverged (ahead 2 / behind 45)."
+            echo "  autorizacion del dueno 2026-10-03: las eliminemos a todas."
+            git push origin --delete "$b"
+          done
           echo "ramas restantes:"
           git ls-remote --heads origin | awk '{print $2}'
+
+      - name: Re-verificar main (BRANCH_DRIFT pasa a verde tras el borrado)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # El borrado de refs NO es un push a main: consistency no se
+          # dispara solo. Sin este dispatch, el HEAD de main quedaria con
+          # un verify rojo obsoleto (BRANCH_DRIFT ya resuelto) hasta el
+          # siguiente push. Los pushes hechos con github.token no
+          # disparan workflows: no hay bucle.
+          gh workflow run consistency.yml --ref main
