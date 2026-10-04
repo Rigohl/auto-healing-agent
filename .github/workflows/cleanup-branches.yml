@@ -45,15 +45,9 @@ jobs:
       # Lista por defecto (trigger push): SOLO ramas 100% fusionadas
       # (compare ahead_by=0 contra main, verificado 2026-10-03).
       DEFAULT_BRANCHES: >-
-        chore/cierre-operativo-2026-10-03
-        chore/rustfmt-tree
-        devops/orphan-code-hygiene
-        devops/promote-model-kv
-        docs/sync-incomplete-2026-10-03
-        feat/gate-to-pr-v1
-        feat/nn-train-v1
-        fix/deep-audit-2026-10-03-v2
-        kilo/rare-albatross-5ms
+        fix/do-sql-one-zero-rows
+        fix/pyh-30-staging-bindings
+        fix/smoke-test-unique-id
       # Superseded con evidencia (ver el paso de borrado): commits unicos
       # ya presentes en main via fix/deep-audit-2026-10-03-v2.
       DEFAULT_SUPERSEDED: fix/deep-audit-2026-10-03
