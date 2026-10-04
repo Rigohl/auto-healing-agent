@@ -118,3 +118,11 @@ fail-closed (`git merge-base --is-ancestor`).
 Pony (actor runtime nativo) está fuera de alcance y no se menciona como fase del
 proyecto: `docs/PHASE_STATUS.md` lo omite y `docs/AGENTS.md` lo excluye.
 `docs/DISCREPANCIES.md` ítem 23 conserva el histórico de la decisión.
+
+## Limpieza automática (2026-10-03)
+
+La regla 1 dejó de depender del operador: `cleanup-branches.yml` corre
+solo en cada push a `main`, fail-closed (`git merge-base --is-ancestor`),
+borra las ramas efímeras 100% fusionadas, procesa las superseded con
+evidencia y re-dispatcha `consistency.yml` para que `BRANCH_DRIFT`
+refleje el estado real sin dispatch humano.
