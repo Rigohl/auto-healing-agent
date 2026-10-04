@@ -97,6 +97,12 @@ jobs:
       # host no prueba el deploy; esto es lo que romperia el build de
       # Cloudflare en produccion.
       - run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
+      # Item 34, gap restante (2026-10-03): worker/ es una unidad de build
+      # propia y `cargo fmt --all` del raiz no la alcanza (DISCREPANCIES
+      # item 34). El arbol del worker se formateo con el mismo toolchain
+      # (workflow temporal del PR #24); este check impide que el formato
+      # vuelva a divergir en silencio.
+      - run: cargo fmt --manifest-path worker/Cargo.toml -- --check
 
   worker-test:
     runs-on: ubuntu-latest
