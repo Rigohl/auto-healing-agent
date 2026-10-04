@@ -109,3 +109,36 @@ max_batch_size = 10
 max_batch_timeout = 10
 max_retries = 1
 max_concurrency = 1
+
+# PYH-30 (docs DO environments): las bindings y vars NO se heredan del
+# entorno superior; [env.staging] debe declararlas por si mismo. Sin esto,
+# el deploy de staging cae sin INCIDENT_STATE, sin MODEL_KV y sin cuotas:
+# el webhook respondia 503 fail-closed en cada request.
+# El namespace de DO de staging es propio: Wrangler despliega un script
+# aparte (auto-healing-agent-staging), y las DO viven por script, asi que
+# el estado queda aislado de produccion sin configuracion extra.
+
+[env.staging.vars]
+QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
+QUOTA_MAX_REPAIRS_PER_REPO = "10"
+QUOTA_MAX_OPEN_REPAIRS = "3"
+QUOTA_COOLDOWN_SECONDS = "3600"
+QUOTA_DAILY_BUDGET = "50"
+ANTI_LOOP_MAX_SAME_INCIDENT = "3"
+ANTI_LOOP_MAX_SAME_SIGNATURE = "5"
+ANTI_LOOP_MAX_SAME_FINGERPRINT = "2"
+ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION = "3"
+ANTI_LOOP_WINDOW_SECONDS = "900"
+
+[[env.staging.kv_namespaces]]
+binding = "MODEL_KV"
+id = "73014a1b32b7446397461a8d438c8ab2"
+
+[env.staging.durable_objects]
+bindings = [
+  { name = "INCIDENT_STATE", class_name = "IncidentState" }
+]
+
+[[env.staging.migrations]]
+tag = "v1"
+new_sqlite_classes = ["IncidentState"]
