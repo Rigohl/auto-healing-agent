@@ -35,12 +35,11 @@ jobs:
       - name: Tests del workspace raiz
         run: cargo test --workspace
 
-      # Advisory, igual que `workspace-fmt` en ci.yml: el arbol arrastra deuda
-      # de formato (DISCREPANCIES item 34). Se ejecuta de verdad y se ve en
-      # rojo, pero no bloquea. Cuando `cargo fmt --all` este limpio, quitar
-      # continue-on-error aqui y en ci.yml a la vez. Nunca verde falso.
-      - name: rustfmt (advisory)
-        continue-on-error: true
+      # Item 34 cerrado (2026-10-03): el arbol esta formateado y este paso
+      # pasa a BLOCKING, espejo de workspace-fmt en ci.yml. El advisory
+      # quedo huerfano cuando ci.yml dejo de tener continue-on-error:
+      # nunca verde falso, nunca advisory en silencio.
+      - name: rustfmt (blocking, espejo de ci.yml)
         run: cargo fmt --all -- --check
 
       - name: Artefacto WASM de repair_nn_wasm
