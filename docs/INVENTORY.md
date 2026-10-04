@@ -222,3 +222,21 @@ código huérfano o errores") usando GitHub, Context7, Sentry y Linear
 - GOVERNANCE.md: fila `workspace-fmt` marcada requerida; DISCREPANCIES 34
   cerrado con gap honesto: el check solo vigila el workspace raíz (worker/
   formateado pero sin check propio).
+
+## Actualización 2026-10-03 (cierre operativo)
+
+- PR #25 (`56c288e0`): reparó ~15 líneas partidas de
+  `scripts/verify_repo.py` (el SyntaxError enmascaraba el rojo de verify
+  como BRANCH_DRIFT), añadió el gate `py_compile` de todos los `.py`
+  versionados en `consistency.yml` y recompuso 4 docs dañados
+  (DISCREPANCIES item 73).
+- `cleanup-branches.yml` corre solo al push a `main`: fail-closed
+  (`git merge-base --is-ancestor`), camino `superseded` con evidencia y
+  re-dispatch de `consistency.yml`. Objetivo: `BRANCH_DRIFT` verde sin
+  dispatch humano.
+- `worker-check` (ci.yml) también corre
+  `cargo fmt --manifest-path worker/Cargo.toml -- --check`: el árbol
+  completo, workspace y worker, queda bajo formato blocking.
+- `RepairCase`/`TrainingExample` (`repair_types`) documentados en el
+  código como contrato PART4 (persistencia Mongo, PYH-32): dead code a
+  propósito hasta que exista el consumidor de entrenamiento.
