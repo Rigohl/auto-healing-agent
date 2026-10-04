@@ -186,6 +186,12 @@ pub enum VerificationResult {
     Skipped,
 }
 
+/// Caso de reparacion persistible: incidente + firma + accion +
+/// verificacion + parche + reward. CONTRATO PART4: este struct es el
+/// schema de la persistencia Mongo (Atlas `auto_healing_agent`, PYH-32)
+/// y del ciclo de aprendizaje. Hoy no tiene consumidores en el
+/// workspace: es contrato versionado, no dead code accidental
+/// (auditoria 2026-10-03, DISCREPANCIES item 74). No eliminar.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepairCase {
     pub incident_id: String,
@@ -198,6 +204,11 @@ pub struct RepairCase {
     pub created_at_unix: u64,
 }
 
+/// Ejemplo de entrenamiento derivado de un caso real (features,
+/// operador, nodo, reward): fila de la coleccion `training_examples`
+/// en Mongo (PYH-32). CONTRATO PART4: `repair_train` y la promocion a
+/// MODEL_KV lo consumiran. Sin consumidores actuales por diseno
+/// (auditoria 2026-10-03, DISCREPANCIES item 74). No eliminar.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrainingExample {
     pub features: Vec<f32>,
