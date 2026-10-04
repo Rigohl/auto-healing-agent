@@ -64,11 +64,16 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     let env = ctx.env;
 
     // 1. Autorizacion fail-closed. Sin secret configurado el endpoint queda
-    //    cerrado (503); con secret, comparacion en tiempo constante.
+    //    cerrado (503); con secret, comparacion en tiempo constante. Un secret
+    //    VACIO cuenta como no configurado: con un secret "" el header vacio
+    //    `x-webhook-secret: ` pasaria la comparacion y abriria el endpoint.
     let secret = match env.secret("WEBHOOK_SECRET") {
         Ok(s) => s.to_string(),
         Err(_) => return Response::error("webhook_secret_not_configured", 503),
     };
+    if secret.is_empty() {
+        return Response::error("webhook_secret_not_configured", 503);
+    }
     let header = req.headers().get("x-webhook-secret")?;
     if !verify_webhook_secret(header.as_deref(), &secret) {
         return Response::error("unauthorized", 401);

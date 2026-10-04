@@ -16,6 +16,11 @@
 //! Regla del API SQLite de DO: una query no se considera completa hasta que
 //! su cursor se agota; un cursor abandonado puede CANCELAR la query. Todo
 //! write pasa por exec_write, que consume el cursor siempre.
+//!
+//! Regla de lectura: `cursor.one()` LANZA si el resultado tiene cero filas
+//! (docs de Durable Objects), asi que solo se usa donde hay exactamente una
+//! fila garantizada (`COUNT(*)`). Una lectura que puede no encontrar fila
+//! pasa por `one_opt`.
 
 use serde::Deserialize;
 use worker::*;
@@ -241,7 +246,9 @@ struct CountRow {
 /// `attempts`, la incrementa el propio `/attempt`), estado actual (para
 /// registrar la transicion de auditoria con su `from_state` verdadero) y la
 /// ultima huella de parche (senal anti-loop). `default` en todos: ni una
-/// columna ausente ni una fila parcial rompen el parseo.
+/// columna ausente ni una fila parcial rompen el parseo. La columna
+/// `last_fingerprint` es NULL hasta el primer `/result`: el SELECT la envuelve
+/// en COALESCE porque `default` cubre campos ausentes, no valores `null`.
 #[derive(Debug, Deserialize)]
 struct IncidentRow {
     #[serde(default)]
@@ -256,6 +263,7 @@ struct IncidentRow {
 /// la columna `attempts` (antes se usaba `COUNT(*) WHERE id = ?`, que es
 /// siempre 0 o 1 porque `id` es PK: no media ni intentos ni eventos) y la
 /// ultima huella de parche (senal anti-loop de "misma huella repetida").
+/// Misma regla de COALESCE que `IncidentRow`.
 #[derive(Debug, Deserialize)]
 struct IncidentPriorRow {
     #[serde(default)]
@@ -277,6 +285,21 @@ impl IncidentState {
     fn count(&self, query: &str, bindings: Vec<SqlStorageValue>) -> Result<i64> {
         let row: CountRow = self.sql.exec(query, bindings)?.one()?;
         Ok(row.count)
+    }
+
+    /// Lee CERO o UNA fila. `cursor.one()` lanza con cero filas, asi que una
+    /// busqueda que puede no encontrar nada (idempotencia, incidente previo,
+    /// guard de correlacion) usa `to_array` y toma el primer elemento.
+    fn one_opt<T>(&self, query: &str, bindings: Vec<SqlStorageValue>) -> Result<Option<T>>
+    where
+        T: for<'a> Deserialize<'a>,
+    {
+        Ok(self
+            .sql
+            .exec(query, bindings)?
+            .to_array::<T>()?
+            .into_iter()
+            .next())
     }
 
     fn insert_transition(
@@ -366,13 +389,10 @@ impl IncidentState {
         // 1. Idempotencia: misma entrega -> misma respuesta sin reprocesar.
         //    Con TTL: una decision guardada expira a las 24 h (CONTRACT.md §5)
         //    y la entrega se reprocesa; un bloqueo eterno no es idempotencia.
-        let existing: Option<IdemRow> = self
-            .sql
-            .exec(
-                "SELECT response, created_at FROM idempotency WHERE key = ?",
-                vec![SqlStorageValue::from(q.idem_key.as_str())],
-            )?
-            .one()?;
+        let existing: Option<IdemRow> = self.one_opt(
+            "SELECT response, created_at FROM idempotency WHERE key = ?",
+            vec![SqlStorageValue::from(q.idem_key.as_str())],
+        )?;
         if let Some(row) = existing {
             if row.created_at + ttl_ms > now {
                 return Response::ok(row.response);
@@ -383,13 +403,10 @@ impl IncidentState {
         //    ultima huella de parche. Antes el "intentos" venia de COUNT(*)
         //    sobre la PK (0 o 1: jamas bloqueaba) y las senales de huella y
         //    verificacion estaban hardcodeadas a 0 (config muerta).
-        let prior: Option<IncidentPriorRow> = self
-            .sql
-            .exec(
-                "SELECT attempts, last_fingerprint FROM incidents WHERE id = ?",
-                vec![SqlStorageValue::from(q.incident_id.as_str())],
-            )?
-            .one()?;
+        let prior: Option<IncidentPriorRow> = self.one_opt(
+            "SELECT attempts, COALESCE(last_fingerprint, '') AS last_fingerprint FROM incidents WHERE id = ?",
+            vec![SqlStorageValue::from(q.incident_id.as_str())],
+        )?;
         let same_fingerprint_recent = match &prior {
             Some(p) if !p.last_fingerprint.is_empty() => self.count(
                 "SELECT COUNT(*) AS count FROM fingerprints WHERE fingerprint = ? AND created_at > ?",
@@ -572,13 +589,10 @@ impl IncidentState {
         // este task es obsoleto: se deniega en vez de leer attempts=0
         // invisiblemente y seguir ejecutando el pipeline para después
         // sobrescribir la verification ajena por incident_id.
-        let row: Option<IncidentRow> = self
-            .sql
-            .exec(
-                "SELECT attempts, state, last_fingerprint FROM incidents WHERE correlation_id = ?",
-                vec![SqlStorageValue::from(q.correlation_id.as_str())],
-            )?
-            .one()?;
+        let row: Option<IncidentRow> = self.one_opt(
+            "SELECT attempts, state, COALESCE(last_fingerprint, '') AS last_fingerprint FROM incidents WHERE correlation_id = ?",
+            vec![SqlStorageValue::from(q.correlation_id.as_str())],
+        )?;
         let Some(row) = row else {
             return Response::ok(
                 serde_json::json!({
@@ -750,13 +764,10 @@ impl IncidentState {
         // Mismo guard que /attempt: si esta correlacion fue reemplazada por
         // una entrega nueva del incidente, el resultado es de un task
         // obsoleto y NO debe sobrescribir el estado ni la verification.
-        let guard: Option<StateRow> = self
-            .sql
-            .exec(
-                "SELECT state FROM incidents WHERE correlation_id = ?",
-                vec![SqlStorageValue::from(q.correlation_id.as_str())],
-            )?
-            .one()?;
+        let guard: Option<StateRow> = self.one_opt(
+            "SELECT state FROM incidents WHERE correlation_id = ?",
+            vec![SqlStorageValue::from(q.correlation_id.as_str())],
+        )?;
         let Some(guard) = guard else {
             return Response::ok(
                 serde_json::json!({
@@ -848,13 +859,10 @@ impl IncidentState {
         let now = now_ms();
         // Mismo guard: un veneno de una correlacion reemplazada no debe
         // marcar dead_letter a la entrega vigente del incidente.
-        let guard: Option<StateRow> = self
-            .sql
-            .exec(
-                "SELECT state FROM incidents WHERE correlation_id = ?",
-                vec![SqlStorageValue::from(q.correlation_id.as_str())],
-            )?
-            .one()?;
+        let guard: Option<StateRow> = self.one_opt(
+            "SELECT state FROM incidents WHERE correlation_id = ?",
+            vec![SqlStorageValue::from(q.correlation_id.as_str())],
+        )?;
         let Some(guard) = guard else {
             return Response::ok(
                 serde_json::json!({
