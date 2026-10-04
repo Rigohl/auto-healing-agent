@@ -85,8 +85,7 @@ de R2/D1/DO en el árbol: ver `docs/DISCREPANCIES.md` ítems 9, 10 y 21.
 | Context7 (repo) | https://github.com/upstash/context7 |
 
 Obligatorio antes de escribir código contra cualquier API/crate externo.
-Detalle en `docs/PART4_PERSISTE
-NCE_TRANSVERSAL.md`.
+Detalle en `docs/PART4_PERSISTENCE_TRANSVERSAL.md`.
 
 ## Glosario (corregido contra el código)
 

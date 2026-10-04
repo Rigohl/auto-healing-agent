@@ -39,6 +39,18 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Gate de sintaxis Python (fail-closed)
+        run: |
+          set -euo pipefail
+          # Un .py corrupto no puede reportar su propia deriva: si el verificador
+          # no compila, el claim que lo detects tampoco existe y el rojo se lee
+          # como otra cosa. Se compilan TODOS los .py versionados antes de
+          # ejecutar ninguno (incidente 2026-10-03: verify_repo.py partido por
+          # el push del conector, 15 lineas; el rojo se atribuyo a BRANCH_DRIFT).
+          mapfile -t pys < <(git ls-files '*.py')
+          echo "py versionados: ${#pys[@]}"
+          python3 -m py_compile "${pys[@]}"
+
       - name: Comprobacion de consistencia y deriva
         run: python3 scripts/verify_repo.py --out verification_evidence.json
 
