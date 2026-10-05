@@ -334,30 +334,20 @@ impl<'a> Parser<'a> {
 
     fn parse_expr(&mut self) -> Result<Ast, String> {
         let mut left = self.parse_and()?;
-        loop {
-            match self.peek() {
-                Some(Tok::Or) => {
-                    self.pos += 1;
-                    let right = self.parse_and()?;
-                    left = Ast::Or(Box::new(left), Box::new(right));
-                }
-                _ => break,
-            }
+        while let Some(Tok::Or) = self.peek() {
+            self.pos += 1;
+            let right = self.parse_and()?;
+            left = Ast::Or(Box::new(left), Box::new(right));
         }
         Ok(left)
     }
 
     fn parse_and(&mut self) -> Result<Ast, String> {
         let mut left = self.parse_not()?;
-        loop {
-            match self.peek() {
-                Some(Tok::And) => {
-                    self.pos += 1;
-                    let right = self.parse_not()?;
-                    left = Ast::And(Box::new(left), Box::new(right));
-                }
-                _ => break,
-            }
+        while let Some(Tok::And) = self.peek() {
+            self.pos += 1;
+            let right = self.parse_not()?;
+            left = Ast::And(Box::new(left), Box::new(right));
         }
         Ok(left)
     }
@@ -396,7 +386,10 @@ impl<'a> Parser<'a> {
             Tok::Int(n) => Ok(Operand::Int(n)),
             Tok::True => Ok(Operand::Bool(true)),
             Tok::False => Ok(Operand::Bool(false)),
-            other => Err(format!("regla {}: token inesperado {:?}", self.rule_id, other)),
+            other => Err(format!(
+                "regla {}: token inesperado {:?}",
+                self.rule_id, other
+            )),
         }
     }
 
@@ -416,11 +409,7 @@ impl<'a> Parser<'a> {
                 match self.next() {
                     Some(Tok::Op(op)) => {
                         let right = self.parse_operand()?;
-                        Ok(Ast::Cmp {
-                            left,
-                            op,
-                            right,
-                        })
+                        Ok(Ast::Cmp { left, op, right })
                     }
                     Some(Tok::Contains) => {
                         let right = self.parse_operand()?;
@@ -471,11 +460,21 @@ fn validate(ast: &Ast, rule_id: &str) -> Result<(), String> {
         Ast::Cmp { left, op, right } => {
             let lk = match left.kind() {
                 Some(k) => k,
-                None => return Err(format!("regla {}: campo desconocido en la comparacion", rule_id)),
+                None => {
+                    return Err(format!(
+                        "regla {}: campo desconocido en la comparacion",
+                        rule_id
+                    ))
+                }
             };
             let rk = match right.kind() {
                 Some(k) => k,
-                None => return Err(format!("regla {}: valor invalido en la comparacion", rule_id)),
+                None => {
+                    return Err(format!(
+                        "regla {}: valor invalido en la comparacion",
+                        rule_id
+                    ))
+                }
             };
             match op {
                 CmpOp::Eq | CmpOp::Ne => {
@@ -657,9 +656,7 @@ impl Ruleset {
     pub fn from_json(raw: &str) -> Result<Ruleset, String> {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
-            return Ok(Ruleset {
-                rules: Vec::new(),
-            });
+            return Ok(Ruleset { rules: Vec::new() });
         }
         let rules: Vec<Rule> = serde_json::from_str(trimmed)
             .map_err(|e| format!("REPAIR_RULES no es JSON valido: {}", e))?;
@@ -714,9 +711,7 @@ impl Ruleset {
 pub fn load(env: &worker::Env) -> Result<Ruleset, String> {
     match env.var(VAR_REPAIR_RULES) {
         Ok(v) => Ruleset::from_json(&v.to_string()),
-        Err(_) => Ok(Ruleset {
-            rules: Vec::new(),
-        }),
+        Err(_) => Ok(Ruleset { rules: Vec::new() }),
     }
 }
 
@@ -727,7 +722,10 @@ mod tests {
     fn ctx() -> RuleContext {
         let mut c = RuleContext::new();
         c.set(F_REPO, Value::Str("acme/api".to_string()));
-        c.set(F_SIGNATURE, Value::Str("E500|build|cargo build".to_string()));
+        c.set(
+            F_SIGNATURE,
+            Value::Str("E500|build|cargo build".to_string()),
+        );
         c.set(F_ERROR_CODE, Value::Str("E500".to_string()));
         c.set(F_ERROR_STEP, Value::Str("build".to_string()));
         c.set(F_SOURCE, Value::Str("webhook".to_string()));
@@ -751,7 +749,11 @@ mod tests {
     }
 
     fn rejected(raw: &str) {
-        assert!(Ruleset::from_json(raw).is_err(), "debia ser rechazado: {}", raw);
+        assert!(
+            Ruleset::from_json(raw).is_err(),
+            "debia ser rechazado: {}",
+            raw
+        );
     }
 
     #[test]
@@ -774,16 +776,22 @@ mod tests {
     #[test]
     fn and_binds_tighter_than_or() {
         // or(and(x, y), z): falso and verdadero-or-falso => falso
-        assert!(!blocks("repo eq \"x\" or repo eq \"acme/api\" and attempts eq 99"));
+        assert!(!blocks(
+            "repo eq \"x\" or repo eq \"acme/api\" and attempts eq 99"
+        ));
         // and(or(x, y), z): verdadero => verdadero
-        assert!(blocks("(repo eq \"x\" or repo eq \"acme/api\") and attempts eq 2"));
+        assert!(blocks(
+            "(repo eq \"x\" or repo eq \"acme/api\") and attempts eq 2"
+        ));
     }
 
     #[test]
     fn not_and_symbol_operators() {
         assert!(!blocks("not (repo eq \"acme/api\")"));
         assert!(!blocks("!(repo eq \"acme/api\")"));
-        assert!(blocks("repo eq \"acme/api\" && attempts eq 2 || risk gt 1.0"));
+        assert!(blocks(
+            "repo eq \"acme/api\" && attempts eq 2 || risk gt 1.0"
+        ));
     }
 
     #[test]
@@ -824,7 +832,7 @@ mod tests {
         // int vs float
         rejected("[{\"id\":\"r\",\"expression\":\"attempts eq 2.0\",\"action\":\"block\"}]");
         // orden entre strings
-        rejected("[{\"id\":\"r\",\"expression\":\"repo gt \\\"a\\\"\",\"action\":\"block\"}]");
+        rejected("[{\"id\":\"r\",\"expression\":\"repo gt \\\"a\\\",\"action\":\"block\"}]");
         // sintaxis: tokens sobrantes
         rejected("[{\"id\":\"r\",\"expression\":\"repo eq \\\"a\\\" foo\",\"action\":\"block\"}]");
         // sintaxis: string sin cerrar
@@ -867,7 +875,10 @@ mod tests {
         assert_eq!(c.get(F_ERROR_CODE), Some(&Value::Str("E1".to_string())));
         assert_eq!(c.get(F_ERROR_STEP), Some(&Value::Str("test".to_string())));
         assert_eq!(c.get(F_SOURCE), Some(&Value::Str("ci".to_string())));
-        assert_eq!(c.get(F_OPERATOR), Some(&Value::Str("pin_dependency".to_string())));
+        assert_eq!(
+            c.get(F_OPERATOR),
+            Some(&Value::Str("pin_dependency".to_string()))
+        );
         assert_eq!(c.get(F_CONFIDENCE), Some(&Value::Num(0.75)));
         assert_eq!(c.get(F_RISK), Some(&Value::Num(0.3f32 as f64)));
         assert_eq!(c.get(F_ATTEMPTS), Some(&Value::Int(3)));
