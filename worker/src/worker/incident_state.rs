@@ -44,6 +44,10 @@ pub const STATE_DONE: &str = "done";
 pub const STATE_BLOCKED: &str = "blocked";
 pub const STATE_DEAD_LETTER: &str = "dead_letter";
 
+/// P2: intervalo del alarm de retencion (24 h). ScheduledTime implementa
+/// From<i64> interpretando milisegundos como offset desde ahora.
+const ALARM_RETENTION_INTERVAL_MS: i64 = 24 * 60 * 60 * 1000;
+
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS incidents (
     id TEXT PRIMARY KEY,
@@ -101,7 +105,9 @@ CREATE INDEX IF NOT EXISTS idx_repair_events ON repair_events (repository, day, 
 /// DO de estado por repositorio. Solo guarda el handle SQL (Send+Sync).
 #[durable_object]
 pub struct IncidentState {
-    sql: SqlStorage,
+sql: SqlStorage,
+    // P2: handle del estado para set_alarm/get_alarm (Storage del DO).
+    state: State,
 }
 
 /// Ejecuta una query sin filas esperadas (DDL/DML) y AGOTA el cursor: el
@@ -124,7 +130,7 @@ impl DurableObject for IncidentState {
                 exec_write(&sql, stmt, Vec::new()).expect("incident_state schema");
             }
         }
-        Self { sql }
+Self { sql, state }
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
@@ -132,7 +138,13 @@ impl DurableObject for IncidentState {
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         match parts.as_slice() {
             ["health"] => Response::ok("ok"),
-            ["ingest"] => self.ingest(&req),
+["ingest"] => {
+                let resp = self.ingest(&req);
+                // P2: con actividad real, garantiza retencion proxima por
+                // alarm aunque el cron no dispare. Idempotente (get_alarm).
+                self.arm_alarm_if_needed().await;
+                resp
+            }
             ["attempt"] => self.attempt(&req),
             ["result"] => self.result(&req),
             ["poison"] => self.poison(&req),
@@ -280,6 +292,33 @@ struct IncidentPriorRow {
 struct StateRow {
     #[serde(default)]
     state: String,
+
+    /// P2 (docs/WORKERS_BEST_PRACTICES.md): retencion dirigida por DO alarm
+    /// en vez de depender solo del cron horario. Corre la misma retencion
+    /// que /sweep y se rearma solo si quedan incidentes vivos (queued o
+    /// repairing). El cron de MONITOR_REPOS se mantiene como red de
+    /// seguridad: la retencion es idempotente (DELETE por cutoff temporal).
+    async fn alarm(&self) -> Result<Response> {
+        let resp = self.run_retention()?;
+        let open = self.count(
+            "SELECT COUNT(*) AS count FROM incidents WHERE state IN (?, ?)",
+            vec![
+                SqlStorageValue::from(STATE_QUEUED),
+                SqlStorageValue::from(STATE_REPAIRING),
+            ],
+        )? as i64;
+        if open > 0 {
+            if let Err(e) = self
+                .state
+                .storage()
+                .set_alarm(ALARM_RETENTION_INTERVAL_MS)
+                .await
+            {
+                console_error!("incident_state alarm re-arm failed: {}", e);
+            }
+        }
+        resp
+    }
 }
 
 impl IncidentState {
@@ -362,7 +401,14 @@ impl IncidentState {
     /// Misma semantica que /ingest paso 0: TTL de idempotencia del contrato
     /// y 7 dias para los eventos de ventana. `transitions` es auditoria:
     /// no se purga. Solo OBSERVA: nunca cambia el estado de un incidente.
+    /// GET /sweep: retencion manual (cron MONITOR). Delega en run_retention.
     fn sweep(&self, _req: &Request) -> Result<Response> {
+        self.run_retention()
+    }
+
+    /// P2: retencion canonica compartida por /sweep (cron) y alarm(). La doble
+    /// ejecucion es idempotente: todo es DELETE por cutoff temporal.
+    fn run_retention(&self) -> Result<Response> {
         let now = now_ms();
         let ttl_ms = IDEMPOTENCY_TTL_SECONDS as i64 * 1000;
         let retention_ms = 7 * 86_400_000;
@@ -403,6 +449,27 @@ impl IncidentState {
 
     /// POST /ingest: retencion -> idempotencia (con TTL) -> anti-loop (4
     /// señales reales) -> quota -> alta.
+    /// P2: arma el alarm de retencion solo si no hay ya uno programado.
+    /// Se invoca desde fetch() en /ingest (actividad real del repositorio):
+    /// un DO sin incidentes nunca programa alarms ni paga retencion.
+    pub async fn arm_alarm_if_needed(&self) {
+        match self.state.storage().get_alarm().await {
+            Ok(None) => {
+                if let Err(e) = self
+                    .state
+                    .storage()
+                    .set_alarm(ALARM_RETENTION_INTERVAL_MS)
+                    .await
+                {
+                    console_error!("incident_state alarm arm failed: {}", e);
+                }
+            }
+            Ok(Some(_)) => {}
+            Err(e) => console_error!("incident_state get_alarm failed: {}", e),
+        }
+    }
+
+
     fn ingest(&self, req: &Request) -> Result<Response> {
         let q: IngestQuery = req.query()?;
         let now = now_ms();
