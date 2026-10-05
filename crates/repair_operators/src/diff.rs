@@ -46,7 +46,8 @@ pub enum DiffError {
     FileUnavailable(String),
     /// File exceeds MAX_FILE_BYTES: refuse, never truncate silently.
     FileTooLarge(String),
-    /// The pattern to replace does not exist in the file.
+    /// The pa
+ttern to replace does not exist in the file.
     PatternNotFound(&'static str),
     /// Version bump would cross a major boundary.
     MajorBump {
@@ -109,7 +110,8 @@ pub fn unified_diff(edit: &FileEdit) -> String {
         out.push('\n');
     }
     for line in new_mid {
-        out.push('+');
+    
+    out.push('+');
         out.push_str(line);
         out.push('\n');
     }
@@ -121,12 +123,11 @@ pub fn unified_diff(edit: &FileEdit) -> String {
     out
 }
 
-/// Deterministic diff for one allowlisted RepairAction.
+/// Deterministic bounded edit for one allowlisted RepairAction.
 ///
 /// fetch supplies the CURRENT content of a repo-relative path (the worker
-/// reads it from GitHub; this crate stays I/O-free). Returns Ok("") when
-/// the bounded edit is a textual no-op.
-pub fn generate_diff<F>(
+/// reads it from GitHub; this crate stays I/O-free).
+pub fn generate_edit<F>(
     action: &RepairAction,
     _incident: &Incident,
     fetch: F,
@@ -148,14 +149,11 @@ where
             let before = fetch_file(fetch, "package.json")?;
             let exact_pin = action.repair_operator == OperatorId::VersionPin;
             let after = version_bump(&before, &dep, &version, exact_pin)?;
-            if after == before {
-                return Ok(String::new());
-            }
-            Ok(unified_diff(&FileEdit {
+            Ok(FileEdit {
                 path: String::from("package.json"),
                 before,
                 after,
-            }))
+            })
         }
 
         // Bounded deterministic edit inside one allowlisted node: the
@@ -166,7 +164,8 @@ where
         | OperatorId::ImportPathFix
         | OperatorId::TypeAnnotationFix
         | OperatorId::TestRepair
-        | OperatorId::SourceRepair => {
+        | OperatorId::Sour
+ceRepair => {
             let path = param(action, "file")?;
             let from = param(action, "from")?;
             let to = param(action, "to")?;
@@ -178,9 +177,23 @@ where
                 return Err(DiffError::PatternNotFound("from"));
             }
             let after = before.replace(&from, &to);
-            Ok(unified_diff(&FileEdit { path, before, after }))
+            Ok(FileEdit { path, before, after })
         }
     }
+}
+
+/// Unified diff for one allowlisted RepairAction.
+///
+/// Ok("") = textual no-op: the caller must escalate instead of opening a PR.
+pub fn generate_diff<F>(
+    action: &RepairAction,
+    incident: &Incident,
+    fetch: F,
+) -> Result<String, DiffError>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    generate_edit(action, incident, fetch).map(|edit| unified_diff(&edit))
 }
 
 fn fetch_file<F>(fetch: F, path: &str) -> Result<String, DiffError>
@@ -226,7 +239,8 @@ fn version_bump(
     let raw_old = &before[vstart..vend];
 
     let old_clean = raw_old.trim_start_matches(|c: char| !c.is_ascii_digit());
-    let old_major = major_of(old_clean).ok_or(DiffError::PatternNotFound("version"))?;
+    let old_major = major_of(old_clean).ok_or(DiffError::Pat
+ternNotFound("version"))?;
     let new_major = major_of(new_version).ok_or(DiffError::MissingParam("version"))?;
     if new_major > old_major {
         return Err(DiffError::MajorBump {
@@ -293,7 +307,8 @@ mod tests {
     fn fetch_map(files: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> + '_ {
         move |path| {
             files
-                .iter()
+         
+       .iter()
                 .find(|(p, _)| *p == path)
                 .map(|(_, c)| c.to_string())
         }
@@ -352,7 +367,8 @@ mod tests {
 
     #[test]
     fn version_pin_drops_range_prefix() {
-        let a = action(
+        let a = actio
+n(
             OperatorId::VersionPin,
             &[("dependency", "left-pad"), ("version", "1.3.0")],
         );
@@ -414,6 +430,7 @@ mod tests {
 
     #[test]
     fn oversized_file_is_refused() {
+
         let big = "x".repeat(MAX_FILE_BYTES + 1);
         let a = action(
             OperatorId::SourceRepair,

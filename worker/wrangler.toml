@@ -10,6 +10,9 @@
 #        npx wrangler queues create auto-healing-repairs-dlq
 #        npx wrangler queues create auto-healing-repairs-staging
 #        npx wrangler queues create auto-healing-repairs-dlq-staging
+#   6. Secret del Worker: GITHUB_TOKEN (PAT con Contents:RW y PullRequests:RW).
+#      npx wrangler secret put GITHUB_TOKEN. Sin el, la reparacion es
+#      fail-closed: blocked github_token_not_configured (nunca 500).
 #   5. Workers Builds NO honra el [build] de este archivo (docs de Cloudflare)
 #      y su imagen no lista Rust: en el dashboard (Settings > Build) usar
 #        Build command:  bash build.sh
@@ -40,7 +43,8 @@ enabled = true
 # Registro en configuracion (separacion config/estado): vacio = no-op con log.
 MONITOR_REPOS = "Rigohl/auto-healing-agent"
 # REGLAS DECLARATIVAS (P1): JSON de {id, expression, action}. "[]" o
-# sin var = sin reglas (no-op). Config invalida = fail-closed (bloquea).
+# sin var =
+ sin reglas (no-op). Config invalida = fail-closed (bloquea).
 # Sintaxis y esquema: worker/src/worker/rules.rs.
 REPAIR_RULES = "[]"
 QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
@@ -63,6 +67,12 @@ crons = ["0 * * * *"]
 [[kv_namespaces]]
 binding = "MODEL_KV"
 id = "73014a1b32b7446397461a8d438c8ab2"
+
+# PASO 3: RepairCases persistentes en KV (sin Mongo: no hay driver WASM).
+# Namespace real de la cuenta (verificado via API de Cloudflare 2026-10-05).
+[[kv_namespaces]]
+binding = "REPAIR_CASES_KV"
+id = "996211a015f14c54b85ea4b47e79fdf9"
 
 # Estado transaccional por repositorio (SQLite). Disponible en Workers Free.
 [durable_objects]
@@ -101,7 +111,8 @@ max_concurrency = 1
 # Despliega un Worker aparte (auto-healing-agent-staging) con sus propias
 # colas y su propio namespace de Durable Objects (estado de staging aislado
 # del de produccion). Comparte MODEL_KV (pesos de modelo, solo lectura).
-[env.staging]
+[env.stagi
+ng]
 name = "auto-healing-agent-staging"
 
 [[env.staging.queues.producers]]
@@ -148,6 +159,10 @@ ANTI_LOOP_WINDOW_SECONDS = "900"
 [[env.staging.kv_namespaces]]
 binding = "MODEL_KV"
 id = "73014a1b32b7446397461a8d438c8ab2"
+
+[[env.staging.kv_namespaces]]
+binding = "REPAIR_CASES_KV"
+id = "996211a015f14c54b85ea4b47e79fdf9"
 
 [env.staging.durable_objects]
 bindings = [

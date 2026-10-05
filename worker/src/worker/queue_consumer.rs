@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use worker::*;
 
 use feature_engine::extract;
-use repair_operators::gate;
-use repair_types::{FailureSignature, Incident};
+use repair_operators::{diff, gate};
+use repair_types::{FailureSignature, Incident, OperatorId, RepairAction, RepairCase, VerificationResult};
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
@@ -26,6 +26,9 @@ pub const QUEUE_PROD: &str = "auto-healing-repairs";
 pub const QUEUE_STAGING: &str = "auto-healing-repairs-staging";
 pub const DLQ_PROD: &str = "auto-healing-repairs-dlq";
 pub const DLQ_STAGING: &str = "auto-healing-repairs-dlq-staging";
+
+/// Binding KV de RepairCases (PASO 3; ver worker/wrangler.toml).
+pub const REPAIR_CASES_KV: &str = "REPAIR_CASES_KV";
 
 /// Delay fijo de reintento. Antes habia un "contador propio" (MAX_QUEUE_ATTEMPTS)
 /// que era inalcanzable: Cloudflare reentrega el MISMO body al reintentar, asi
@@ -53,7 +56,8 @@ pub struct WebhookPayload {
     pub message: String,
     #[serde(default)]
     pub project: String,
-    #[serde(default)]
+    #[serde(defau
+lt)]
     pub attempts: u32,
     #[serde(default)]
     pub stack_hint: String,
@@ -117,7 +121,8 @@ impl WebhookPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueTask {
     pub correlation_id: String,
-    pub incident_id: String,
+    pub incident_id:
+ String,
     pub repo: String,
     pub signature: String,
     pub payload: WebhookPayload,
@@ -166,7 +171,8 @@ pub async fn consume(batch: MessageBatch<QueueTask>, env: Env) -> Result<()> {
                     task.correlation_id,
                     RETRY_DELAY_SECONDS,
                     err
-                );
+         
+       );
                 message.retry_with_options(
                     &QueueRetryOptionsBuilder::new()
                         .with_delay_seconds(RETRY_DELAY_SECONDS)
@@ -219,7 +225,8 @@ async fn process(
     // sin var o "[]" => sin reglas (no-op). Esquema y sintaxis: rules.rs.
     let ruleset = match rules::load(&env) {
         Ok(r) => r,
-        Err(e) => {
+        Err(e
+) => {
             console_error!("rules config invalid: {}", e);
             let rqs = blocked_result_qs(&task, "blocked_rules", "rules_invalid_config");
             crate::runtime::call_do(env, task.repo.clone(), rqs).await?;
@@ -268,7 +275,8 @@ async fn process(
         }
         Err(e) => {
             // No deberia ocurrir (compile valida campos y tipos); el
-            // path sigue fail-closed: nunca unwrap().
+            // path sigue fail-closed: nun
+ca unwrap().
             console_error!("rules eval error: {}", e);
             let rqs = blocked_result_qs(&task, "blocked_rules", "rules_eval_error");
             crate::runtime::call_do(env, task.repo, rqs).await?;
@@ -276,26 +284,42 @@ async fn process(
         }
     }
 
-    let decision = if gate_ok {
-        "allow"
-    } else {
-        "blocked_by_policy"
-    };
     let fingerprint = format!(
         "{:x}",
         fnv1a64(format!("{}|{}", action.repair_operator as u8, task.signature).as_bytes())
     );
 
-    // 3. Registrar decision + verificacion (pending_ci: VERIFY = Actions).
-    let verify_status = if gate_ok { "pending_ci" } else { "blocked" };
+    // 3. PASO 2+3: reparacion real cuando el gate permite. Edit acotado ->
+    //    rama -> commit -> PR abierto -> RepairCase en KV. VERIFY nunca
+    //    se declara aqui: GitHub Actions reporta a /github/callback.
+    let (decision, verify_status, evidence_ref, reason) = if gate_ok {
+        match attempt_repair(&env, &task, &action, &incident).await? {
+            RepairOutcome::Repaired { pr_url } => {
+                ("allow", "pending_ci", pr_url, String::new())
+            }
+            RepairOutcome::Blocked { reason } => {
+                ("blocked_by_policy", "blocked", String::new(), reason)
+            }
+        }
+    } else {
+        (
+            "blocked_by_policy",
+            "blocked",
+            String::new(),
+            String::from("gate_denied"),
+        )
+    };
+
+    // 4. Registrar decision + verificacion en el DO.
     let rqs = format!(
-        "/result?correlation_id={}&incident_id={}&decision={}&fingerprint={}&verify_status={}&evidence_ref={}&reason=",
+        "/result?correlation_id={}&incident_id={}&decision={}&fingerprint={}&verify_status={}&evidence_ref={}&reason={}",
         urlencode(&task.correlation_id),
         urlencode(&task.incident_id),
         decision,
         urlencode(&fingerprint),
         verify_status,
-        "github_actions"
+        urlencode(&evidence_ref),
+        urlencode(&reason)
     );
     crate::runtime::call_do(env, task.repo, rqs).await?;
     Ok(())
@@ -322,4 +346,181 @@ async fn record_poison(env: Env, task: QueueTask, queue_name: &str) -> Result<()
     crate::runtime::call_do(env, task.repo, qs)
         .await
         .map(|_| ())
+}
+
+/// Resultado de un intento de reparacion (PASO 2+3 del roadmap).
+enum RepairOutcome {
+    /// PR abierto; VERIFY queda pending_ci hasta el callback de Actions.
+    Repaired { pr_url: String },
+    /// Fail-closed permanente: bloqueado con razon, sin retry.
+    Blocked { reason: String },
+}
+
+/// PASO 2 (GitHub API) + PASO 3 (KV) del roadmap: edit acotado -> rama ->
+/// commit -> PR -> RepairCase en KV. Los errores transitorios suben como
+/// Err para que la cola reintente (max_retries=3 -> DLQ); los permanentes
+/// se reportan como Blocked (fail-closed, nunca retry infinito).
+#[worker::send]
+async fn attempt_repair(
+    env: &worker::Env,
+    task: &QueueTask,
+    action: &RepairAction,
+    incident: &Incident,
+) -> worker::Result<RepairOutcome> {
+    use crate::runtime::github_client::{GitHubClient, GitHubError};
+
+    // Fail-closed: sin token no hay camino de escritura.
+    let client = match GitHubClient::from_env(env) {
+        Ok(c) => c.for_repo(&task.repo),
+        Err(_) => {
+            return Ok(RepairOutcome::Blocked {
+                reason: String::from("github_token_not_configured"),
+            })
+        }
+    };
+
+    // Target file del edit acotado (paso 1): package.json para operadores de
+    // dependencias; el resto lo nombra el parametro `file` de la accion.
+    let target_path = match action.repair_operator {
+        OperatorId::DependencyRepair | OperatorId::VersionPin => String::from("package.json"),
+        _ => match action.parameters.get("file") {
+            Some(f) if !f.is_empty() => f.clone(),
+            _ => {
+                return Ok(RepairOutcome::Blocked {
+                    reason: String::from("no_bounded_target_file"),
+                })
+            }
+        },
+    };
+
+    // Contenido actual (todo el I/O vive aqui, no en el crate no_std).
+    let before = match client.get_file(&target_path).await {
+        Ok(Some(c)) => c,
+        Ok(None) => {
+            return Ok(RepairOutcome::Blocked {
+                reason: format!("file_unavailable:{}", target_path),
+            })
+        }
+        Err(GitHubError::Transient(e)) => return Err(e),
+        Err(GitHubError::Permanent(reason)) => return Ok(RepairOutcome::Blocked { reason }),
+    };
+
+    // Edit acotado + diff unificado (crates/repair_operators/src/diff.rs).
+    let edit = match diff::generate_edit(action, incident, |p: &str| {
+        if p == target_path {
+            Some(before.clone())
+        } else {
+            None
+        }
+    }) {
+        Ok(e) => e,
+        Err(e) => {
+            return Ok(RepairOutcome::Blocked {
+                reason: diff_blocked_reason(&e),
+            })
+        }
+    };
+    let patch = diff::unified_diff(&edit);
+    if patch.is_empty() {
+        return Ok(RepairOutcome::Blocked {
+            reason: String::from("no_textual_change"),
+        });
+    }
+
+    let title = format!(
+        "auto-heal: {} [{}]",
+        action.repair_operator.as_str(),
+        task.incident_id
+    );
+    let commit_message = format!(
+        "auto-heal: {} ({})",
+        action.repair_operator.as_str(),
+        task.correlation_id
+    );
+    let pr_body = format!(
+        "## Auto-repair (bounded, deterministic)\n\n- operator: `{}`\n- correlation_id: `{}`\n- incident: `{}`\n- confidence: `{:.3}` risk: `{:.3}`\n\n```diff\n{}\n```\n\nVERIFY authority = GitHub Actions. CI results post to `/github/callback`. This PR is never auto-approved or auto-merged.",
+        action.repair_operator.as_str(),
+        task.correlation_id,
+        task.incident_id,
+        action.confidence,
+        action.risk,
+        patch
+    );
+
+    let pr_url = match client
+        .open_repair_pr(
+            &task.correlation_id,
+            &edit.path,
+            &edit.after,
+            &title,
+            &pr_body,
+            &commit_message,
+        )
+        .await
+    {
+        Ok(u) => u,
+        Err(GitHubError::Transient(e)) => return Err(e),
+        Err(GitHubError::Permanent(reason)) => return Ok(RepairOutcome::Blocked { reason }),
+    };
+
+    // PASO 3: RepairCase persistible en KV (alternativa sin Mongo).
+    persist_case(env, task, incident, action, &pr_url).await;
+
+    console_log!("repair pr opened: {} {}", task.correlation_id, pr_url);
+    Ok(RepairOutcome::Repaired { pr_url })
+}
+
+/// Razon estable (auditable en el DO) por cada DiffError.
+fn diff_blocked_reason(e: &diff::DiffError) -> String {
+    match e {
+        diff::DiffError::UnsupportedOperator(_) => String::from("operator_never_emits_diff"),
+        diff::DiffError::MissingParam(k) => format!("missing_param:{}", k.replace(' ', "_")),
+        diff::DiffError::FileUnavailable(_) => String::from("file_unavailable"),
+        diff::DiffError::FileTooLarge(_) => String::from("file_too_large"),
+        diff::DiffError::PatternNotFound(_) => String::from("pattern_not_found"),
+        diff::DiffError::MajorBump { .. } => String::from("major_bump_refused"),
+    }
+}
+
+/// PASO 3: RepairCase en REPAIR_CASES_KV, clave repair_case:{correlation_id}.
+/// Best-effort: un fallo de KV no revierte la reparacion (el DO ya registro
+/// decision + verificacion); solo se loguea.
+#[worker::send]
+async fn persist_case(
+    env: &worker::Env,
+    task: &QueueTask,
+    incident: &Incident,
+    action: &RepairAction,
+    pr_url: &str,
+) {
+    let case = RepairCase {
+        incident_id: task.incident_id.clone(),
+        signature: FailureSignature::from_incident(incident),
+        action: action.clone(),
+        // Pendiente de VERIFY: Skipped = aun sin verificacion (PASS/FAIL
+        // llega por /github/callback; el reward se computa al verificar).
+        verification: VerificationResult::Skipped,
+        patch_summary: format!("{} pr={}", action.repair_operator.as_str(), pr_url),
+        pr_url: Some(pr_url.to_string()),
+        reward: 0.0,
+        created_at_unix: crate::runtime::now_ms() as u64,
+    };
+    let key = format!("repair_case:{}", task.correlation_id);
+    let Ok(serialized) = serde_json::to_string(&case) else {
+        console_error!("repair_case serialize failed: {}", task.correlation_id);
+        return;
+    };
+    match env.kv(REPAIR_CASES_KV) {
+        Ok(kv) => match kv.put(&key, serialized) {
+            Ok(builder) => {
+                if let Err(e) = builder.execute().await {
+                    console_error!("repair_case kv put failed: {}", e);
+                } else {
+                    console_log!("repair_case stored: {}", key);
+                }
+            }
+            Err(e) => console_error!("repair_case kv builder failed: {}", e),
+        },
+        Err(e) => console_error!("REPAIR_CASES_KV unavailable: {}", e),
+    }
 }

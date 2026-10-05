@@ -48,6 +48,7 @@ async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             |_, ctx| async move { model::report(&ctx.env).await },
         )
         .post_async("/webhook", handle_webhook)
+        .post_async("/github/callback", handle_github_callback)
         .run(req, env)
         .await
 }
@@ -94,7 +95,8 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     // 2. Body. Un payload corrupto no debe tumbar el isolate.
     let body = match req.text().await {
         Ok(text) => text,
-        Err(_) => return Response::error("invalid_body", 400),
+        Err(_) => return
+ Response::error("invalid_body", 400),
     };
     if body.trim().is_empty() {
         return Response::error("empty_body", 400);
@@ -182,7 +184,8 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
                 "operator_id": action.repair_operator as u8,
                 "operator": action.repair_operator.as_str(),
                 "confidence": action.confidence,
-                "risk": action.risk,
+                "ris
+k": action.risk,
                 "gate": if gate_ok { "allow" } else { "blocked_by_policy" },
                 "weights": loaded.source,
             })
@@ -227,6 +230,86 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     )
 }
 
+/// POST /github/callback (PASO 4): GitHub Actions reporta el resultado
+/// de VERIFY (CI del PR de reparacion) y el DO asienta la verificacion.
+/// Este endpoint NUNCA declara PASS por si mismo: solo registra lo que CI
+/// envia. Misma autorizacion fail-closed que /webhook.
+#[worker::send]
+async fn handle_github_callback(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let env = ctx.env;
+
+    let secret = match env.secret("WEBHOOK_SECRET") {
+        Ok(s) => s.to_string(),
+        Err(_) => return Response::error("webhook_secret_not_configured", 503),
+    };
+    if secret.is_empty() {
+        return Response::error("webhook_secret_not_configured", 503);
+    }
+    let header = req.headers().get("x-webhook-secret")?;
+    if !verify_webhook_secret(header.as_deref(), &secret) {
+        return Response::error("unauthorized", 401);
+    }
+
+    let body = match req.text().await {
+        Ok(t) => t,
+        Err(_) => return Response::error("invalid_body", 400),
+    };
+    let payload: serde_json::Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(_) => return Response::error("invalid_json", 400),
+    };
+    let get_str = |k: &str| -> String {
+        payload
+            .get(k)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+
+    let correlation_id = get_str("correlation_id");
+    if correlation_id.is_empty() {
+        return Response::error("missing_correlation_id", 400);
+    }
+    let incident_id = get_str("incident_id");
+    let repo = get_str("repo");
+    let evidence_ref = get_str("evidence_ref");
+    let fingerprint = get_str("fingerprint");
+
+    // verify_status: pass | fail | blocked (autoridad: GitHub Actions).
+    let verify_status = match get_str("verify_status").to_lowercase().as_str() {
+        "pass" => "pass",
+        "fail" => "fail",
+        "blocked" => "blocked",
+        _ => return Response::error("invalid_verify_status", 400),
+    };
+    // El DO marca done solo si CI pasa; fail deja el incidente bloqueado
+    // con la evidencia para auditoria.
+    let decision = if verify_status == "pass" { "allow" } else { "ci_failed" };
+
+    let qs = format!(
+        "/result?correlation_id={}&incident_id={}&decision={}&fingerprint={}&verify_status={}&evidence_ref={}&reason=github_actions_verify",
+        urlencode(&correlation_id),
+        urlencode(&incident_id),
+        decision,
+        urlencode(&fingerprint),
+        verify_status,
+        urlencode(&evidence_ref)
+    );
+    let do_text = match crate::runtime::call_do(env, repo, qs).await {
+        Ok(t) => t,
+        Err(_) => return Response::error("state_store_unavailable", 503),
+    };
+    Response::ok(
+        serde_json::json!({
+            "status": "recorded",
+            "correlation_id": correlation_id,
+            "verify_status": verify_status,
+            "state_store": do_text,
+        })
+        .to_string(),
+    )
+}
+
 /// MONITOR (cron scheduled): retencion del DO + salud del registro de
 /// modelo (worker/src/worker/monitor.rs). Observabilidad y limpieza:
 /// nunca repara, nunca encola, nunca toca la autoridad de VERIFY
@@ -234,7 +317,8 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
 ///
 /// Devuelve () a proposito: el glue de #[event(scheduled)] en workers-rs
 /// descarta el Result del handler, y devolver Result<()> activaria
-/// unused_must_use bajo `clippy -D warnings`. El error solo se loguea.
+/// un
+used_must_use bajo `clippy -D warnings`. El error solo se loguea.
 #[event(scheduled)]
 pub async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     console_error_panic_hook::set_once();

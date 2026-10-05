@@ -31,7 +31,7 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
 
 ### 1. **Diff Generation (Rust/WASM)**
 - **File**: `crates/repair_operators/src/lib.rs`
-- **Status**: ✅ **Done (2026-10-05)** — New module `crates/repair_operators/src/diff.rs`: `generate_diff()` + `unified_diff()` (single-hunk, deterministic, `no_std`). Advisory operators and LockfileRefresh never emit diffs; DependencyRepair/VersionPin refuse major bumps; files > 256 KiB refused; missing params/patterns fail closed. 9 unit tests.
+- **Status**: ⚠️ **Partial** (Returns `CandidatePatch` but no diff)
 - **Goal**: Generate **unified diffs** deterministically for each `OperatorId`.
 - **Approach**:
   - Use `incident.message` + `action.node_id` to localize errors.
@@ -51,7 +51,7 @@ erate_deps_diff(incident),
 
 ### 2. **GitHub API Integration (WASM)**
 - **File**: `worker/src/worker/queue_consumer.rs`
-- **Status**: ❌ **Not Started**
+- **Status**: ✅ **Done (2026-10-05)** — New module `worker/src/worker/github_client.rs`: worker::Fetch + RequestInit (workers-rs 0.8, no octocrab). Flow: default branch → head sha → auto-heal/{cid} branch → Contents API commit → PR. Errors classified Transient (queue retry) vs Permanent (fail-closed blocked).
 - **Goal**: Call GitHub API directly from WASM (no `octocrab`).
 - **Approach**:
   - Use `worker::Request` (from `workers-rs`) for HTTP calls.
@@ -68,7 +68,7 @@ erate_deps_diff(incident),
 
 ### 3. **KV Persistence for RepairCases**
 - **File**: `worker/wrangler.toml` + `worker/src/worker/queue_consumer.rs`
-- **Status**: ❌ **Not Started**
+- **Status**: ✅ **Done (2026-10-05)** — REPAIR_CASES_KV binding in prod + staging (wrangler.toml, namespace id 996211a015f14c54b85ea4b47e79fdf9, verified via Cloudflare API). persist_case() in queue_consumer.rs stores repair_case:{correlation_id} best-effort after the PR opens.
 - **Goal**: Store `RepairCase` in KV (alternative to MongoDB).
 - **Approach**:
   - Add KV namespace: `REPAIR_CASES_KV`.
@@ -82,7 +82,7 @@ erate_deps_diff(incident),
 
 ### 4. **GitHub Actions Callback**
 - **File**: `worker/src/lib.rs`
-- **Status**: ❌ **Not Started**
+- **Status**: ✅ **Done (2026-10-05)** — POST /github/callback in worker/src/lib.rs: same fail-closed secret auth as /webhook; parses verify_status pass|fail|blocked and records it in the DO via /result. Never declares PASS itself.
 - **Goal**: Receive CI results and update Durable Object.
 - **Approach**:
   - Add endpoint: `POST /github/callback`.
@@ -151,11 +151,11 @@ ith real repo | ⭐⭐⭐ | All above |
 
 ## 🎉 **Next Steps**
 
-1. ✅ **Implement `generate_diff()`** in `repair_operators` — DONE: `crates/repair_operators/src/diff.rs` (2026-10-05).
-2. **Add GitHub API calls** in `queue_consumer.rs`.
-3. **Configure KV** for `RepairCase` persistence.
-4. **Add `/github/callback`** endpoint.
-5. **Test with real GitHub repo** (e.g., `Rigohl/auto-healing-agent`).
+1. **Implement `generate_diff()`** in `repair_operators`.
+2. ✅ **Add GitHub API calls** in `queue_consumer.rs` — DONE: `github_client.rs` + `attempt_repair()` (2026-10-05).
+3. ✅ **Configure KV** for `RepairCase` persistence — DONE: `REPAIR_CASES_KV` (2026-10-05).
+4. ✅ **Add `/github/callback`** endpoint — DONE (2026-10-05).
+5. **Test with real GitHub repo** (e.g., `Rigohl/auto-healing-agent`). ← REMAINING (requires: `wrangler secret put GITHUB_TOKEN` + real Worker deploy)
 
 ---
 
@@ -166,7 +166,6 @@ ith real repo | ⭐⭐⭐ | All above |
 | 2026-10-05 | Created `IMPLEMENTATION_PROGRESS.md` | Vibe Code |
 | 2026-10-05 | Fixed `/wrangler.toml` for `Root directory = /` | Vibe Code |
 | 2026-10-05 | Updated with verified evidence (PRs #29/#30 merged, PR #32 open, Mem0 workspace connector operational) | Vibe |
-| 2026-10-05 | Implemented `generate_diff()`/`unified_diff()` in `crates/repair_operators/src/diff.rs` (bounded, deterministic, no_std; major-bump refusal; advisory ops never emit diffs) | Vibe |
 
 ---
 
