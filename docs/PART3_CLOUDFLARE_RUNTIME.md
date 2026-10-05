@@ -463,3 +463,87 @@ Docs actualizados en el mismo commit: README.md, ROOT_LAYOUT.md,
 INVENTORY.md, INDEX.md, PROMPT_PAD.md, PART1_REPOSITORY.md,
 ARCHITECTURE.md, NO_LLM_POLICY.md, GOVERNANCE.md, DISCREPANCIES.md
 (item 50), scripts/set-github-secrets.sh y esta seccion 22.
+
+## 23. Cron real vs deploy: evidencia y runbook; panic=unwind (2026-10-05)
+
+### 23.1 El worker desplegado NO es este worker
+
+Verificado en vivo contra la cuenta Cloudflare (2026-10-05, conector de
+desarrolladores): el script desplegado `auto-healing-agent` (id
+`7c6b8ec9534b4e97bafa2e2fa79de066`, modified_on 2026-10-01) contiene
+exactamente un placeholder de 275 bytes:
+
+```js
+export default {
+  async fetch(request, env) {
+    return new Response("Hello world")
+  }
+}
+```
+
+Sin handler `scheduled`, sin rutas reales (/webhook, /model, /sweep), sin
+Durable Object, sin colas, sin KV. Conclusion verificada: el cron MONITOR
+(`[triggers] crons = ["0 * * * *"]` en worker/wrangler.toml, mas
+`#[event(scheduled)]` en lib.rs y la var MONITOR_REPOS) existe SOLO en el
+repositorio. En Cloudflare NO hay un cron operative de este pipeline
+mientras este worker no se despliegue: el placeholder responde
+"Hello world" en TODAS las rutas. Ningun deploy ha ocurrido nunca y no se
+declara DEPLOYED sin evidencia (regla operativa del proyecto).
+
+### 23.2 Runbook: llevar el cron real a produccion (accion humana)
+
+Precondiciones (ninguna existe hoy, 2026-10-05):
+1. Colas: `npx wrangler queues create auto-healing-repairs` y
+   `npx wrangler queues create auto-healing-repairs-dlq` (el deploy falla si
+   faltan: los consumers las referencian por nombre). Staging: variantes
+   `-staging` (PYH-30).
+2. Secret del Worker WEBHOOK_SECRET (sin el, /webhook responde 503
+   fail-closed por diseno).
+3. GitHub secrets CLOUDFLARE_API_TOKEN (permisos Workers Scripts:Edit) y
+   CLOUDFLARE_ACCOUNT_ID para deploy.yml, o wrangler autenticado local.
+4. Subir la var MONITOR_REPOS (ya esta en [vars] del wrangler.toml: se sube
+   con el deploy normal; vacia = cron no-op con log).
+
+Caminos:
+- A (recomendado): Actions -> "Deploy Worker" -> Run workflow (deploy.yml,
+  workflow_dispatch).
+- B: local: `cd worker && npx wrangler deploy`.
+- C: arreglar Workers Builds (item 56: Root directory `worker`, Build
+  command `bash build.sh`, Deploy command `npx wrangler deploy`, y leer
+  el log del build 933934d8).
+
+Verificacion post-deploy (evidencia, no suposicion):
+- `npx wrangler deployments list`: version nueva con fecha de hoy.
+- GET /health: responde `ok` (el placeholder responde "Hello world": ese
+  es el diferenciador inmediato).
+- Cron: dashboard (Settings -> Trigger Events -> Cron Triggers) debe listar
+  `0 * * * *`; el conector disponible no expone el endpoint de schedules
+  (23 funciones, ninguna de builds/schedules).
+- `npx wrangler tail` a la hora en punto: logs "MONITOR sweep repo=..."
+  (o "MONITOR: MONITOR_REPOS sin configurar" si la var no subio).
+- Dashboard -> Queues: auto-healing-repairs y -dlq con consumers.
+
+### 23.3 panic=unwind (P1 del roadmap, aplicado en build.sh)
+
+`worker-build --release --panic-unwind` (worker-build 0.8.7, publicada en
+crates.io):
+- Compila con nightly (auto-instalada por rustup si falta) y
+  `-Zbuild-std=std,panic_unwind`: recompila std con soporte de unwinding;
+  rust-src y el target se instalan solos.
+- wasm-bindgen atrapa panics en la frontera Rust->JS: excepciones
+  PanicError. La request que paniquea falla; las hermanas siguen vivas.
+- `schedule_reinit()` para aborts duros (OOM, stack overflow): el modulo
+  se reinicializa de forma transparente (DO recreado) en la siguiente
+  request.
+- Costo: build mas lento (recompila std) y nightly en el PASO de build;
+  el resto del repo sigue en stable (rust-toolchain.toml, raiz).
+- Seguridad de unwind: las macros del crate worker envuelven los handlers
+  con AssertUnwindSafe; este worker no usa Closure::new (verificado).
+- Fuentes: README de cloudflare/workers-rs ("Panic Recovery with
+  --panic-unwind"), blog de Cloudflare "Making Rust Workers reliable"
+  (2026-10) y changelog 2025-09-19 (recuperacion automatica desde 0.6.5:
+  estado PREVIO que ya protege a este worker con reinit).
+- Nota de verificacion: ningun job de CI compila el worker WASM real
+  (wasm.yml compila solo repair_nn_wasm); la bandera se verifica en el
+  primer deploy (runbook 23.2). CI si verifica worker-check/test/clippy
+  en host, guards (exec bit de build.sh) y gitleaks sobre el cambio.
