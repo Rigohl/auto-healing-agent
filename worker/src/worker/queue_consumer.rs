@@ -10,7 +10,9 @@ use worker::*;
 
 use feature_engine::extract;
 use repair_operators::{diff, gate};
-use repair_types::{FailureSignature, Incident, OperatorId, RepairAction, RepairCase, VerificationResult};
+use repair_types::{
+    FailureSignature, Incident, OperatorId, RepairAction, RepairCase, VerificationResult,
+};
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,

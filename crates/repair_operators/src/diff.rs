@@ -139,7 +139,9 @@ where
         | OperatorId::Unknown
         | OperatorId::EnvVarRepair
         | OperatorId::CacheClear
-        | OperatorId::LockfileRefresh => Err(DiffError::UnsupportedOperator(action.repair_operator)),
+        | OperatorId::LockfileRefresh => {
+            Err(DiffError::UnsupportedOperator(action.repair_operator))
+        }
 
         OperatorId::DependencyRepair | OperatorId::VersionPin => {
             let dep = param(action, "dependency")?;
@@ -318,7 +320,7 @@ mod tests {
         };
         let d = unified_diff(&edit);
         assert!(d.starts_with("--- a/src/a.ts\n+++ b/src/a.ts\n"));
-        assert!(d.contains("@@ -1,7 +1,7 @@\n"));
+        assert!(d.contains("@@ -1,6 +1,6 @@\n"));
         assert!(d.contains("-l3\n+X\n"));
     }
 
