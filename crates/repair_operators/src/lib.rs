@@ -261,7 +261,7 @@ mod tests {
             assert_eq!(p.operator, op, "operator {raw} must round-trip");
             if op == OperatorId::NoOp || op == OperatorId::Unknown {
                 assert!(p.advisory, "{op:?} must stay advisory");
-        }
+            }
         }
     }
 

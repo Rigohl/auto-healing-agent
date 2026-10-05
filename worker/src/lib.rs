@@ -282,7 +282,11 @@ async fn handle_github_callback(mut req: Request, ctx: RouteContext<()>) -> Resu
     };
     // El DO marca done solo si CI pasa; fail deja el incidente bloqueado
     // con la evidencia para auditoria.
-    let decision = if verify_status == "pass" { "allow" } else { "ci_failed" };
+    let decision = if verify_status == "pass" {
+        "allow"
+    } else {
+        "ci_failed"
+    };
 
     let qs = format!(
         "/result?correlation_id={}&incident_id={}&decision={}&fingerprint={}&verify_status={}&evidence_ref={}&reason=github_actions_verify",

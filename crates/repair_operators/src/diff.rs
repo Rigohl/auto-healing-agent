@@ -14,8 +14,6 @@
 //! - DependencyRepair / VersionPin never cross a major-version boundary.
 //! - Output is a single-hunk unified diff, deterministic (no timestamps).
 
-#![cfg_attr(not(feature = "std"), no_std)]
-
 extern crate alloc;
 
 use alloc::format;
@@ -176,7 +174,11 @@ where
                 return Err(DiffError::PatternNotFound("from"));
             }
             let after = before.replace(&from, &to);
-            Ok(FileEdit { path, before, after })
+            Ok(FileEdit {
+                path,
+                before,
+                after,
+            })
         }
     }
 }
@@ -300,9 +302,10 @@ mod tests {
         }
     }
 
-    const PKG: &str = "{\n  \"name\": \"demo\",\n  \"dependencies\": {\n    \"left-pad\": \"^1.3.0\"\n  }\n}\n";
+    const PKG: &str =
+        "{\n  \"name\": \"demo\",\n  \"dependencies\": {\n    \"left-pad\": \"^1.3.0\"\n  }\n}\n";
 
-    fn fetch_map(files: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> + '_ {
+    fn fetch_map<'a>(files: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
         move |path| {
             files
                 .iter()
@@ -356,8 +359,12 @@ mod tests {
             OperatorId::DependencyRepair,
             &[("dependency", "left-pad"), ("version", "1.4.2")],
         );
-        let d = generate_diff(&a, &Incident::default(), fetch_map(&[("package.json", PKG)]))
-            .unwrap();
+        let d = generate_diff(
+            &a,
+            &Incident::default(),
+            fetch_map(&[("package.json", PKG)]),
+        )
+        .unwrap();
         assert!(d.contains("-    \"left-pad\": \"^1.3.0\""));
         assert!(d.contains("+    \"left-pad\": \"^1.4.2\""));
     }
@@ -368,8 +375,12 @@ mod tests {
             OperatorId::VersionPin,
             &[("dependency", "left-pad"), ("version", "1.3.0")],
         );
-        let d = generate_diff(&a, &Incident::default(), fetch_map(&[("package.json", PKG)]))
-            .unwrap();
+        let d = generate_diff(
+            &a,
+            &Incident::default(),
+            fetch_map(&[("package.json", PKG)]),
+        )
+        .unwrap();
         assert!(d.contains("+    \"left-pad\": \"1.3.0\""));
     }
 
@@ -411,16 +422,16 @@ mod tests {
     #[test]
     fn missing_param_and_missing_pattern_fail_closed() {
         let a = action(OperatorId::ImportPathFix, &[("file", "src/a.ts")]);
-        let err = generate_diff(&a, &Incident::default(), fetch_map(&[("src/a.ts", "x\n")]))
-            .unwrap_err();
+        let err =
+            generate_diff(&a, &Incident::default(), fetch_map(&[("src/a.ts", "x\n")])).unwrap_err();
         assert_eq!(err, DiffError::MissingParam("from"));
 
         let a = action(
             OperatorId::ImportPathFix,
             &[("file", "src/a.ts"), ("from", "nope"), ("to", "yes")],
         );
-        let err = generate_diff(&a, &Incident::default(), fetch_map(&[("src/a.ts", "x\n")]))
-            .unwrap_err();
+        let err =
+            generate_diff(&a, &Incident::default(), fetch_map(&[("src/a.ts", "x\n")])).unwrap_err();
         assert_eq!(err, DiffError::PatternNotFound("from"));
     }
 
@@ -431,8 +442,12 @@ mod tests {
             OperatorId::SourceRepair,
             &[("file", "big.txt"), ("from", "x"), ("to", "y")],
         );
-        let err = generate_diff(&a, &Incident::default(), fetch_map(&[("big.txt", big.as_str())]))
-            .unwrap_err();
+        let err = generate_diff(
+            &a,
+            &Incident::default(),
+            fetch_map(&[("big.txt", big.as_str())]),
+        )
+        .unwrap_err();
         assert!(matches!(err, DiffError::FileTooLarge(_)));
     }
 }

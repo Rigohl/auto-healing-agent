@@ -122,8 +122,7 @@ impl WebhookPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueTask {
     pub correlation_id: String,
-    pub incident_id:
- String,
+    pub incident_id: String,
     pub repo: String,
     pub signature: String,
     pub payload: WebhookPayload,
@@ -225,8 +224,7 @@ async fn process(
     // sin var o "[]" => sin reglas (no-op). Esquema y sintaxis: rules.rs.
     let ruleset = match rules::load(&env) {
         Ok(r) => r,
-        Err(e
-) => {
+        Err(e) => {
             console_error!("rules config invalid: {}", e);
             let rqs = blocked_result_qs(&task, "blocked_rules", "rules_invalid_config");
             crate::runtime::call_do(env, task.repo.clone(), rqs).await?;
@@ -293,9 +291,7 @@ async fn process(
     //    se declara aqui: GitHub Actions reporta a /github/callback.
     let (decision, verify_status, evidence_ref, reason) = if gate_ok {
         match attempt_repair(&env, &task, &action, &incident).await? {
-            RepairOutcome::Repaired { pr_url } => {
-                ("allow", "pending_ci", pr_url, String::new())
-            }
+            RepairOutcome::Repaired { pr_url } => ("allow", "pending_ci", pr_url, String::new()),
             RepairOutcome::Blocked { reason } => {
                 ("blocked_by_policy", "blocked", String::new(), reason)
             }

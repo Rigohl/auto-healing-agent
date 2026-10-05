@@ -13,14 +13,14 @@
 
 #[path = "anti_loop.rs"]
 pub mod anti_loop;
+#[path = "github_client.rs"]
+pub mod github_client;
 #[path = "incident_state.rs"]
 pub mod incident_state;
 #[path = "model.rs"]
 pub mod model;
 #[path = "monitor.rs"]
 pub mod monitor;
-#[path = "github_client.rs"]
-pub mod github_client;
 #[path = "queue_consumer.rs"]
 pub mod queue_consumer;
 #[path = "quota.rs"]

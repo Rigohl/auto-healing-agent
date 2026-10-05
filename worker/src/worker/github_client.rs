@@ -46,9 +46,7 @@ impl GitHubClient {
     pub fn from_env(env: &worker::Env) -> worker::Result<Self> {
         let token = env.secret(TOKEN_SECRET)?.to_string();
         if token.is_empty() {
-            return Err(worker::Error::RustError(
-                "GITHUB_TOKEN empty".to_string(),
-            ));
+            return Err(worker::Error::RustError("GITHUB_TOKEN empty".to_string()));
         }
         Ok(Self {
             token,
@@ -81,7 +79,7 @@ impl GitHubClient {
         body: Option<String>,
     ) -> Result<(u16, String), GitHubError> {
         let url = format!("{}{}", API_BASE, path);
-        let mut headers = Headers::new();
+        let headers = Headers::new();
         headers
             .set("Authorization", &format!("Bearer {}", self.token))
             .map_err(GitHubError::Transient)?;
@@ -147,10 +145,7 @@ impl GitHubClient {
         let p = format!("/repos/{}/contents/{}", self.repo, path);
         let (status, value) = self.request_json(Method::Get, &p, None).await?;
         match status {
-            200 => Ok(value
-                .get("sha")
-                .and_then(|s| s.as_str())
-                .map(String::from)),
+            200 => Ok(value.get("sha").and_then(|s| s.as_str()).map(String::from)),
             404 => Ok(None),
             s => Err(Self::classify(s, "get_file_sha")),
         }
