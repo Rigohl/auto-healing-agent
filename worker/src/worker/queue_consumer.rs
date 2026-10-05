@@ -17,7 +17,6 @@ use repair_types::{
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
     model,
-    param_derive,
     quota::QuotaConfig,
     rules,
     security::{fnv1a64, urlencode},
@@ -389,15 +388,6 @@ async fn attempt_repair(
         },
     };
 
-    // La NN clasifica el OPERADOR pero V0 no emite parametros (no tiene
-    // cabezas para ellos): sin derivarlos, todo intento con el gate en
-    // verde terminaba bloqueado con missing_param aunque el diagnostico
-    // fuera correcto (auditoria de codigo 2026-10-05). Derivacion textual
-    // acotada y determinista (param_derive); lo no derivable sigue
-    // bloqueado (fail-closed: nunca se inventa un valor).
-    let mut action = action.clone();
-    param_derive::ensure_params(&mut action, incident);
-
     // Contenido actual (todo el I/O vive aqui, no en el crate no_std).
     let before = match client.get_file(&target_path).await {
         Ok(Some(c)) => c,
@@ -411,7 +401,7 @@ async fn attempt_repair(
     };
 
     // Edit acotado + diff unificado (crates/repair_operators/src/diff.rs).
-    let edit = match diff::generate_edit(&action, incident, |p: &str| {
+    let edit = match diff::generate_edit(action, incident, |p: &str| {
         if p == target_path {
             Some(before.clone())
         } else {
@@ -469,7 +459,7 @@ async fn attempt_repair(
     };
 
     // PASO 3: RepairCase persistible en KV (alternativa sin Mongo).
-    persist_case(env, task, incident, &action, &pr_url).await;
+    persist_case(env, task, incident, action, &pr_url).await;
 
     console_log!("repair pr opened: {} {}", task.correlation_id, pr_url);
     Ok(RepairOutcome::Repaired { pr_url })
