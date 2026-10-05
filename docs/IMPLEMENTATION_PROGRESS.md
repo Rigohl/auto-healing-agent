@@ -31,7 +31,7 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
 
 ### 1. **Diff Generation (Rust/WASM)**
 - **File**: `crates/repair_operators/src/lib.rs`
-- **Status**: ⚠️ **Partial** (Returns `CandidatePatch` but no diff)
+- **Status**: ✅ **Done (2026-10-05)** — New module `crates/repair_operators/src/diff.rs`: `generate_diff()` + `unified_diff()` (single-hunk, deterministic, `no_std`). Advisory operators and LockfileRefresh never emit diffs; DependencyRepair/VersionPin refuse major bumps; files > 256 KiB refused; missing params/patterns fail closed. 9 unit tests.
 - **Goal**: Generate **unified diffs** deterministically for each `OperatorId`.
 - **Approach**:
   - Use `incident.message` + `action.node_id` to localize errors.
@@ -42,7 +42,8 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
   pub fn generate_diff(incident: &Incident, action: &RepairAction) -> Option<String> {
       match action.repair_operator {
           OperatorId::SyntaxFix => generate_syntax_diff(incident, action),
-          OperatorId::DependencyRepair => generate_deps_diff(incident),
+          OperatorId::DependencyRepair => gen
+erate_deps_diff(incident),
           // ...
       }
   }
@@ -99,7 +100,8 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
 | Add GitHub API calls in `queue_consumer.rs` | ⭐⭐⭐⭐⭐ | `GITHUB_TOKEN` |
 | Configure `REPAIR_CASES_KV` in `wrangler.toml` | ⭐⭐⭐ | KV namespace |
 | Add `/github/callback` endpoint | ⭐⭐⭐ | None |
-| Test end-to-end with real repo | ⭐⭐⭐ | All above |
+| Test end-to-end w
+ith real repo | ⭐⭐⭐ | All above |
 
 ---
 
@@ -146,9 +148,10 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
 
 ---
 
+
 ## 🎉 **Next Steps**
 
-1. **Implement `generate_diff()`** in `repair_operators`.
+1. ✅ **Implement `generate_diff()`** in `repair_operators` — DONE: `crates/repair_operators/src/diff.rs` (2026-10-05).
 2. **Add GitHub API calls** in `queue_consumer.rs`.
 3. **Configure KV** for `RepairCase` persistence.
 4. **Add `/github/callback`** endpoint.
@@ -163,6 +166,7 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
 | 2026-10-05 | Created `IMPLEMENTATION_PROGRESS.md` | Vibe Code |
 | 2026-10-05 | Fixed `/wrangler.toml` for `Root directory = /` | Vibe Code |
 | 2026-10-05 | Updated with verified evidence (PRs #29/#30 merged, PR #32 open, Mem0 workspace connector operational) | Vibe |
+| 2026-10-05 | Implemented `generate_diff()`/`unified_diff()` in `crates/repair_operators/src/diff.rs` (bounded, deterministic, no_std; major-bump refusal; advisory ops never emit diffs) | Vibe |
 
 ---
 
