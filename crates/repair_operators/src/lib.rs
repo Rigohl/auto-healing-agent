@@ -51,8 +51,7 @@ pub fn apply(action: &RepairAction, incident: &Incident) -> CandidatePatch {
         OperatorId::ConfigRepair => CandidatePatch {
             operator: OperatorId::ConfigRepair,
             summary: String::from("config repair"),
-            files: allo
-c::vec![String::from("tsconfig.json"), String::from("vercel.json")],
+            files: alloc::vec![String::from("tsconfig.json"), String::from("vercel.json")],
             steps: alloc::vec![String::from("safe documented defaults only")],
             advisory: false,
         },
@@ -93,8 +92,7 @@ c::vec![String::from("tsconfig.json"), String::from("vercel.json")],
         },
         OperatorId::TestRepair => CandidatePatch {
             operator: OperatorId::TestRepair,
-            summary: String::from
-("test repair"),
+            summary: String::from("test repair"),
             files: Vec::new(),
             steps: alloc::vec![String::from(
                 "fix test fixture or assertion, never the intent"
@@ -217,8 +215,7 @@ mod tests {
     #[test]
     fn gate_reports_blocked_by_policy_for_a_real_operator() {
         let a = action(OperatorId::SyntaxFix, 0.10, 0.10);
-        let err = gate(&a, MIN_C, MAX_R).expect_err("low confidence m
-ust block");
+        let err = gate(&a, MIN_C, MAX_R).expect_err("low confidence must block");
         assert_eq!(err.status, AgentStatus::BlockedByPolicy);
         assert_eq!(err.operator_id, Some(OperatorId::SyntaxFix as u8));
         assert!(matches!(
@@ -325,8 +322,7 @@ ust block");
     fn gate_allows_env_operator_that_apply_keeps_advisory() {
         // Documented intent, not a contradiction: env/secret and cache operators
         // clear governance but must never mutate anything. The gate authorises
-        // the decision to be consider
-ed; apply() still refuses to write.
+        // the decision to be considered; apply() still refuses to write.
         let inc = Incident::default();
         for op in [OperatorId::EnvVarRepair, OperatorId::CacheClear] {
             let a = action(op, 0.9, 0.1);

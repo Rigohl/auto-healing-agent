@@ -46,8 +46,7 @@ pub enum DiffError {
     FileUnavailable(String),
     /// File exceeds MAX_FILE_BYTES: refuse, never truncate silently.
     FileTooLarge(String),
-    /// The pa
-ttern to replace does not exist in the file.
+    /// The pattern to replace does not exist in the file.
     PatternNotFound(&'static str),
     /// Version bump would cross a major boundary.
     MajorBump {
@@ -164,8 +163,7 @@ where
         | OperatorId::ImportPathFix
         | OperatorId::TypeAnnotationFix
         | OperatorId::TestRepair
-        | OperatorId::Sour
-ceRepair => {
+        | OperatorId::SourceRepair => {
             let path = param(action, "file")?;
             let from = param(action, "from")?;
             let to = param(action, "to")?;
@@ -239,8 +237,7 @@ fn version_bump(
     let raw_old = &before[vstart..vend];
 
     let old_clean = raw_old.trim_start_matches(|c: char| !c.is_ascii_digit());
-    let old_major = major_of(old_clean).ok_or(DiffError::Pat
-ternNotFound("version"))?;
+    let old_major = major_of(old_clean).ok_or(DiffError::PatternNotFound("version"))?;
     let new_major = major_of(new_version).ok_or(DiffError::MissingParam("version"))?;
     if new_major > old_major {
         return Err(DiffError::MajorBump {
@@ -367,8 +364,7 @@ mod tests {
 
     #[test]
     fn version_pin_drops_range_prefix() {
-        let a = actio
-n(
+        let a = action(
             OperatorId::VersionPin,
             &[("dependency", "left-pad"), ("version", "1.3.0")],
         );

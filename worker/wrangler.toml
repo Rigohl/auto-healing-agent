@@ -111,8 +111,7 @@ max_concurrency = 1
 # Despliega un Worker aparte (auto-healing-agent-staging) con sus propias
 # colas y su propio namespace de Durable Objects (estado de staging aislado
 # del de produccion). Comparte MODEL_KV (pesos de modelo, solo lectura).
-[env.stagi
-ng]
+[env.staging]
 name = "auto-healing-agent-staging"
 
 [[env.staging.queues.producers]]

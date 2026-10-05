@@ -184,8 +184,7 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
                 "operator_id": action.repair_operator as u8,
                 "operator": action.repair_operator.as_str(),
                 "confidence": action.confidence,
-                "ris
-k": action.risk,
+                "risk": action.risk,
                 "gate": if gate_ok { "allow" } else { "blocked_by_policy" },
                 "weights": loaded.source,
             })
@@ -317,8 +316,7 @@ async fn handle_github_callback(mut req: Request, ctx: RouteContext<()>) -> Resu
 ///
 /// Devuelve () a proposito: el glue de #[event(scheduled)] en workers-rs
 /// descarta el Result del handler, y devolver Result<()> activaria
-/// un
-used_must_use bajo `clippy -D warnings`. El error solo se loguea.
+/// unused_must_use bajo `clippy -D warnings`. El error solo se loguea.
 #[event(scheduled)]
 pub async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     console_error_panic_hook::set_once();

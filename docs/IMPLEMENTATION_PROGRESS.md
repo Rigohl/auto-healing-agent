@@ -42,8 +42,7 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
   pub fn generate_diff(incident: &Incident, action: &RepairAction) -> Option<String> {
       match action.repair_operator {
           OperatorId::SyntaxFix => generate_syntax_diff(incident, action),
-          OperatorId::DependencyRepair => gen
-erate_deps_diff(incident),
+          OperatorId::DependencyRepair => generate_deps_diff(incident),
           // ...
       }
   }
@@ -100,8 +99,7 @@ erate_deps_diff(incident),
 | Add GitHub API calls in `queue_consumer.rs` | ⭐⭐⭐⭐⭐ | `GITHUB_TOKEN` |
 | Configure `REPAIR_CASES_KV` in `wrangler.toml` | ⭐⭐⭐ | KV namespace |
 | Add `/github/callback` endpoint | ⭐⭐⭐ | None |
-| Test end-to-end w
-ith real repo | ⭐⭐⭐ | All above |
+| Test end-to-end with real repo | ⭐⭐⭐ | All above |
 
 ---
 

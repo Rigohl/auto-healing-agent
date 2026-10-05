@@ -56,8 +56,7 @@ pub struct WebhookPayload {
     pub message: String,
     #[serde(default)]
     pub project: String,
-    #[serde(defau
-lt)]
+    #[serde(default)]
     pub attempts: u32,
     #[serde(default)]
     pub stack_hint: String,
@@ -275,8 +274,7 @@ async fn process(
         }
         Err(e) => {
             // No deberia ocurrir (compile valida campos y tipos); el
-            // path sigue fail-closed: nun
-ca unwrap().
+            // path sigue fail-closed: nunca unwrap().
             console_error!("rules eval error: {}", e);
             let rqs = blocked_result_qs(&task, "blocked_rules", "rules_eval_error");
             crate::runtime::call_do(env, task.repo, rqs).await?;
