@@ -68,7 +68,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git fetch origin 2>&1 | tee /tmp/cleanup.log
+          exec > >(tee /tmp/cleanup.log) 2>&1
+          git fetch origin
           AUTO=0
           if [ -z "${BRANCHES:-}" ]; then
             AUTO=1
