@@ -4,7 +4,8 @@
 #
 # La imagen de Workers Builds no lista Rust entre sus herramientas: si falta
 # `cargo`, se instala rustup en modo minimal. El toolchain exacto lo fija
-# ../rust-toolchain.toml (stable + wasm32-unknown-unknown).
+# ../rust-toolchain.toml (stable + wasm32-unknown-unknown); --panic-unwind
+# usa ademas nightly (rustup la instala sola si falta) para recompilar std.
 #
 # worker-build --release (y cargo) buscan Cargo.toml en el directorio actual.
 # Este script tiene invocadores con CWD distintos: worker/ (wrangler [build] y
@@ -32,4 +33,18 @@ if ! command -v worker-build >/dev/null 2>&1; then
   cargo install -q worker-build
 fi
 
-worker-build --release
+# P1 (roadmap Cloudflare+Rust, Notion "Cloudflare + Rust - Links"): panic =
+# unwind. El target wasm32-unknown-unknown compila con panic=abort por
+# defecto: un panic en una request termina el isolate (RuntimeError) y
+# envenena las requests hermanas. Con --panic-unwind (worker-build 0.8.7,
+# publicada en crates.io): std se recompila con -Zbuild-std=std,panic_unwind
+# y -Cpanic=unwind (nightly + rust-src + target se instalan solos si
+# faltan), wasm-bindgen atrapa los panics en la frontera Rust->JS
+# (excepciones PanicError) y registra schedule_reinit() para aborts duros
+# (OOM, stack overflow): la request que paniquea falla, las siguientes
+# siguen vivas y el DO se recrea de forma transparente. La seguridad de
+# unwind la cubren las macros del crate worker (AssertUnwindSafe);
+# este worker no usa Closure::new. Fuentes: README de cloudflare/workers-rs
+# ("Panic Recovery with --panic-unwind") y blog de Cloudflare "Making Rust
+# Workers reliable" (2026-10).
+worker-build --release --panic-unwind
