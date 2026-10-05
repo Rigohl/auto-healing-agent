@@ -54,7 +54,9 @@ jobs:
     env:
       # Superseded con evidencia (ver el paso de borrado): commits unicos
       # ya presentes en main via fix/deep-audit-2026-10-03-v2.
-      DEFAULT_SUPERSEDED: fix/deep-audit-2026-10-03
+      DEFAULT_SUPERSEDED: fix/deep-audit-2026-10-03 \
+        diag/worker-build-main feat/declarative-rules \
+        fix/deep-audit-p0-2026-10-05
     steps:
       - uses: actions/checkout@v4
         with:
@@ -97,6 +99,12 @@ jobs:
             echo "  ya llego a main via fix/deep-audit-2026-10-03-v2; compare"
             echo "  main...rama = diverged (ahead 2 / behind 45)."
             echo "  autorizacion del dueno 2026-10-03: las eliminemos a todas."
+            echo "  evidencia (2026-10-05): diag/worker-build-main solo tenia"
+            echo "  un workflow temporal de diagnostico; feat/declarative-rules"
+            echo "  (rules.rs 30KB registrado en mod.rs) y"
+            echo "  fix/deep-audit-p0-2026-10-05 (validacion refs, print_usage,"
+            echo "  rollback promote) ya estan integrados en main; verificados
+            echo "  via compare main...rama + contents API."
             git push origin --delete "$b"
           done
           echo "ramas restantes:"

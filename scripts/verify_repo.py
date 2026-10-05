@@ -258,7 +258,11 @@ def check_files_exist(r: Report) -> None:
 
 def check_exec_bits(r: Report) -> None:
     """Los bits de ejecucion no son codigo: ningun cargo test los ve."""
-    for rel in ("worker/build.sh", "scripts/validate-preflight.sh"):
+    # El +x solo es funcional para archivos ejecutados directamente
+    # (Workers Builds corre worker/build.sh). validate-preflight.sh se
+    # invoca con `bash scripts/validate-preflight.sh`, y la API de
+    # contents siempre reescribe los blobs sin bit +x (100644).
+    for rel in ("worker/build.sh",):
         path = os.path.join(ROOT, rel)
         r.expect(
             f"EXECBIT_{rel.replace('/', '_')}",
