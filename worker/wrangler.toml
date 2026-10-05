@@ -33,13 +33,17 @@ command = "bash ./build.sh"
 # Workers Logs: invocaciones y errores consultables con `wrangler tail`.
 [observability]
 enabled = true
+# Muestreo de logs invocaciones: 1 = 100% (volumen actual bajo; bajar si
+# crece el trafego para controlar facturacion de Workers Logs).
+head_sampling_rate = 1
 
 # Quotas y anti-loop: configuracion separada del estado (el estado vive en el
 # Durable Object). Cambiar valores NO requiere tocar el esquema SQL.
 [vars]
 # MONITOR: repos que el cron scheduled barre (worker/src/work
 er/monitor.rs).
-# Registro en configuracion (separacion config/estado): vacio = no-op con log.
+# Registro en configuracion (separacion config/estado): vacio = no-op c
+on log.
 MONITOR_REPOS = "Rigohl/auto-healing-agent"
 # REGLAS DECLARATIVAS (P1): JSON de {id, expression, action}. "[]" o
 # sin var =
@@ -102,7 +106,8 @@ dead_letter_queue = "auto-healing-repairs-dlq"
 rable Object y lo observa.
 [[queues.consumers]]
 queue = "auto-healing-repairs-dlq"
-max_batch_size = 10
+max
+_batch_size = 10
 max_batch_timeout = 10
 max_retries = 1
 max_concurrency = 1
@@ -164,7 +169,8 @@ bin
 ding = "REPAIR_CASES_KV"
 id = "996211a015f14c54b85ea4b47e79fdf9"
 
-[env.staging.durable_objects]
+[env.staging.durabl
+e_objects]
 bindings = [
   { name = "INCIDENT_STATE", class_name = "IncidentState" }
 ]
