@@ -1,5 +1,6 @@
-# PUNTERO — NO es configuración válida a propósito.
-# La configuración real del Worker vive en worker/wrangler.toml
-# (Workers Builds: Root directory = worker; ver PYH-31).
-# Un wrangler ejecutado desde la raíz NO encuentra config aquí: ese es el
-# stop deseado, no un error a corregir.
+name = "auto-healing-agent"
+main = "worker/build/worker/shim.mjs"
+compatibility_date = "2024-09-23"
+
+[build]
+command = "cd worker && bash build.sh"
