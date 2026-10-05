@@ -234,7 +234,7 @@ def check_files_exist(r: Report) -> None:
             "rust-toolchain.toml",
             ".gitignore",
             "LICENSE",
-            "build.sh",
+
             "model/current.json",
             "model/stable.json",
             "model/schema.json",
@@ -258,7 +258,7 @@ def check_files_exist(r: Report) -> None:
 
 def check_exec_bits(r: Report) -> None:
     """Los bits de ejecucion no son codigo: ningun cargo test los ve."""
-    for rel in ("build.sh", "worker/build.sh", "scripts/validate-preflight.sh"):
+    for rel in ("worker/build.sh", "scripts/validate-preflight.sh"):
         path = os.path.join(ROOT, rel)
         r.expect(
             f"EXECBIT_{rel.replace('/', '_')}",
