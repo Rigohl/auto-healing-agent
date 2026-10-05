@@ -58,7 +58,8 @@ pub async fn call_do(
         .id_from_name(&repo)?
         .get_stub()?;
     // Response::text() requiere &mut self (workers-rs 0.8): consumir el
-    // cuerpo muta el Response. Sin `mut` esto no compila (E0596).
+    // cuerpo muta el Response. Sin `mut` es
+to no compila (E0596).
     let mut resp = stub
         .fetch_with_str(&format!("https://incident-state{}", path_and_query))
         .await?;
