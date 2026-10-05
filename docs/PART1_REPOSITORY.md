@@ -19,7 +19,6 @@ auto-healing-agent/
 ├── worker/              # Cloudflare workers-rs (orchestrator only)
 ├── model/               # schema.json, current.json, stable.json, current.txt (payload KV real)
 ├── docs/                # ARCHITECTURE, GOVERNANCE, PART*, PROMPT_PAD…
-├── legacy/              # archived TS/JS (not executed)
 ├── scripts/
 ├── Cargo.toml
 ├── rust-toolchain.toml

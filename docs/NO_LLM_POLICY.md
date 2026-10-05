@@ -26,7 +26,7 @@ El texto de diseño que seguimos es explícito:
 | Decisión | `repair_nn_core` (WASM) | Clasifica → `operator_id`, confidence, risk |
 | Ejecución | `repair_operators` | Transformación **determinista** acotada |
 | Autoridad | Policy → CI → VERIFY | Allow/deny + PASS/FAIL |
-| Legacy V0 | `legacy/agent.ts` (HF) | Solo archivo histórico. **No es el target**, no se ejecuta |
+| Legacy V0 | eliminado del repo el 2026-10-05 | Era `legacy/agent.ts` (HF), archivo V0; ruta borrada por decisión del dueño |
 
 Si confidence/risk no pasan el gate → `blocked_by_policy` o `needs_human`,
 **no** invocar generación libre de código.

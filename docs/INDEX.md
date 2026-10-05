@@ -34,7 +34,7 @@
 - worker → runtime PART3 async: webhook fail-closed → DO (dedup, quota, anti-loop) → Queue → 202
 - model/ → `current.txt` = payload KV real (2863 `f32`, entrenado por `repair_train`); `current.json`/`stable.json` siguen como placeholders de metadata
 - docs/verification_evidence.json → artefacto de CI, no versionado
-- legacy/ → archivado (no ejecutar)
+- legacy/ → eliminado del repo el 2026-10-05 (archivo V0 no ejecutable, decisión del dueño)
 - Mem0 → pendiente de conector
 
 ## Comprobaciones ejecutables

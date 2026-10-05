@@ -442,3 +442,24 @@ Rust — Links") y Mem0. Aplicado y diferido:
   soporte wasm32 documentado) para el cockpit; DSL declarativo
   (`wirefilter`/`bel`) para repair_rules — toca `crates/**`, fuera
   del alcance PART3 salvo dependencia declarada.
+
+## 22. Eliminacion de legacy/ (2026-10-05)
+
+El directorio `legacy/` (V0: agent.ts, worker.js, CONFIG.md, SECRETS.md,
+mongodb-setup.sh, README.md) fue ELIMINADO del repositorio el 2026-10-05
+por instruccion explicita del dueno. Esta instruccion sustituye la regla
+de PROMPT_03 que pedia conservarlo intacto.
+
+Verificacion previa a borrar: ninguna dependencia operativa. Ni
+`.github/workflows/ci.yml`, ni `deploy.yml`, ni `verify_repo.py`, ni el
+worker ni `set-github-secrets.sh` referencian `legacy/`; solo los docs
+lo mencionaban como archivo historico (search_code + lectura).
+
+Accion humana PENDIENTE (no automatizable desde el repo): rotar/revocar
+el `VERCEL_ORG_ID` que estaba en `legacy/CONFIG.md`; el valor persiste
+en el historial git aunque el archivo ya no exista.
+
+Docs actualizados en el mismo commit: README.md, ROOT_LAYOUT.md,
+INVENTORY.md, INDEX.md, PROMPT_PAD.md, PART1_REPOSITORY.md,
+ARCHITECTURE.md, NO_LLM_POLICY.md, GOVERNANCE.md, DISCREPANCIES.md
+(item 50), scripts/set-github-secrets.sh y esta seccion 22.
