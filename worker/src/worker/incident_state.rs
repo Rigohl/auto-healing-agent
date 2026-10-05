@@ -105,7 +105,7 @@ CREATE INDEX IF NOT EXISTS idx_repair_events ON repair_events (repository, day, 
 /// DO de estado por repositorio. Solo guarda el handle SQL (Send+Sync).
 #[durable_object]
 pub struct IncidentState {
-sql: SqlStorage,
+    sql: SqlStorage,
     // P2: handle del estado para set_alarm/get_alarm (Storage del DO).
     state: State,
 }
@@ -130,7 +130,7 @@ impl DurableObject for IncidentState {
                 exec_write(&sql, stmt, Vec::new()).expect("incident_state schema");
             }
         }
-Self { sql, state }
+        Self { sql, state }
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
@@ -152,6 +152,33 @@ Self { sql, state }
             ["state"] => self.state(&req),
             _ => Response::error("not_found", 404),
         }
+    }
+
+    /// P2 (docs/WORKERS_BEST_PRACTICES.md): retencion dirigida por DO alarm
+    /// en vez de depender solo del cron horario. Corre la misma retencion
+    /// que /sweep y se rearma solo si quedan incidentes vivos (queued o
+    /// repairing). El cron de MONITOR_REPOS se mantiene como red de
+    /// seguridad: la retencion es idempotente (DELETE por cutoff temporal).
+    async fn alarm(&self) -> Result<Response> {
+        let resp = self.run_retention()?;
+        let open = self.count(
+            "SELECT COUNT(*) AS count FROM incidents WHERE state IN (?, ?)",
+            vec![
+                SqlStorageValue::from(STATE_QUEUED),
+                SqlStorageValue::from(STATE_REPAIRING),
+            ],
+        )? as i64;
+        if open > 0 {
+            if let Err(e) = self
+                .state
+                .storage()
+                .set_alarm(ALARM_RETENTION_INTERVAL_MS)
+                .await
+            {
+                console_error!("incident_state alarm re-arm failed: {}", e);
+            }
+        }
+        resp
     }
 }
 
@@ -292,33 +319,6 @@ struct IncidentPriorRow {
 struct StateRow {
     #[serde(default)]
     state: String,
-
-    /// P2 (docs/WORKERS_BEST_PRACTICES.md): retencion dirigida por DO alarm
-    /// en vez de depender solo del cron horario. Corre la misma retencion
-    /// que /sweep y se rearma solo si quedan incidentes vivos (queued o
-    /// repairing). El cron de MONITOR_REPOS se mantiene como red de
-    /// seguridad: la retencion es idempotente (DELETE por cutoff temporal).
-    async fn alarm(&self) -> Result<Response> {
-        let resp = self.run_retention()?;
-        let open = self.count(
-            "SELECT COUNT(*) AS count FROM incidents WHERE state IN (?, ?)",
-            vec![
-                SqlStorageValue::from(STATE_QUEUED),
-                SqlStorageValue::from(STATE_REPAIRING),
-            ],
-        )? as i64;
-        if open > 0 {
-            if let Err(e) = self
-                .state
-                .storage()
-                .set_alarm(ALARM_RETENTION_INTERVAL_MS)
-                .await
-            {
-                console_error!("incident_state alarm re-arm failed: {}", e);
-            }
-        }
-        resp
-    }
 }
 
 impl IncidentState {
@@ -468,7 +468,6 @@ impl IncidentState {
             Err(e) => console_error!("incident_state get_alarm failed: {}", e),
         }
     }
-
 
     fn ingest(&self, req: &Request) -> Result<Response> {
         let q: IngestQuery = req.query()?;
