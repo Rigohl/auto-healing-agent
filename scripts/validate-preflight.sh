@@ -49,11 +49,17 @@ else
   fail "worker/wrangler.toml real tiene un REPLACE_WITH activo"
 fi
 
-# 2. Un symlink de raiz que se resuelve al mismo archivo tambien pasa.
-if run_preflight wrangler.toml; then
-  pass "wrangler.toml (raiz) pasa el preflight"
+# 2. La raiz puede no tener wrangler.toml (Root directory = / en Workers
+#    Builds, decision del dueno 2026-10-05): nada desplegable desde la
+#    raiz, fail-closed. Si existe (symlink o archivo), debe pasar.
+if [ -e wrangler.toml ] || [ -L wrangler.toml ]; then
+  if run_preflight wrangler.toml; then
+    pass "wrangler.toml (raiz) pasa el preflight"
+  else
+    fail "wrangler.toml (raiz) tiene un REPLACE_WITH activo"
+  fi
 else
-  fail "wrangler.toml (raiz) tiene un REPLACE_WITH activo"
+  pass "sin wrangler.toml raiz (Root directory = /, fail-closed)"
 fi
 
 # 3. Un placeholder en una linea activa se detecta.
@@ -118,7 +124,7 @@ elif [ -f wrangler.toml ]; then
     fi
   fi
 else
-  fail "wrangler.toml no existe"
+  pass "sin wrangler.toml raiz (Root directory = /, fail-closed)"
 fi
 
 if [ "$FAILED" -ne 0 ]; then

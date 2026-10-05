@@ -1,0 +1,49 @@
+name: Diag verify output (temporal)
+
+# TEMPORAL: publica la salida de verify_repo.py en un issue.
+# Borrar cuando el arbol este verde.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: diag-verify-output
+  cancel-in-progress: true
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: consistency verify
+        run: |
+          git fetch --depth=0 origin +refs/heads/*:refs/remotes/origin/* \
+            || true
+          python3 scripts/verify_repo.py > /tmp/v.log 2>&1 || true
+      - name: assemble and post
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat > /tmp/mkbody.py <<"PYEOF"
+          parts = []
+          with open("/tmp/v.log") as fh:
+              t = fh.read()
+          parts.append("## consistency-verify")
+          parts.append("~~~")
+          parts.append(t[-20000:])
+          parts.append("~~~")
+          body = "\n\n".join(parts)[:60000]
+          with open("/tmp/body.md", "w") as fh:
+              fh.write(body)
+          PYEOF
+          python3 /tmp/mkbody.py
+          gh issue create \
+            --title "diag-verify ${GITHUB_SHA:0:7}" \
+            --body-file /tmp/body.md
