@@ -1,0 +1,47 @@
+name: Diag worker check (temporal)
+
+# TEMPORAL: publica la salida de cargo check/fmt del worker en un issue.
+# Borrar cuando el arbol este verde (mismo patron que diag-verify-output).
+on:
+  push:
+    branches: [fix/restore-incident-state-812f3bb]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: diag-worker-check
+  cancel-in-progress: true
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo check capture
+        run: |
+          cargo check --manifest-path worker/Cargo.toml --all-targets > /tmp/c.log 2>&1 || true
+          cargo fmt --manifest-path worker/Cargo.toml --check >> /tmp/c.log 2>&1 || true
+      - name: assemble and post
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat > /tmp/mkbody.py <<"PYEOF"
+          parts = []
+          with open("/tmp/c.log") as fh:
+              t = fh.read()
+          parts.append("## diag-worker-check")
+          parts.append("~~~")
+          parts.append(t[-20000:])
+          parts.append("~~~")
+          body = "\n\n".join(parts)[:60000]
+          with open("/tmp/body.md", "w") as fh:
+              fh.write(body)
+          PYEOF
+          python3 /tmp/mkbody.py
+          gh issue create \
+            --title "diag-worker-check ${GITHUB_SHA:0:7}" \
+            --body-file /tmp/body.md
