@@ -580,13 +580,11 @@ wasm32-unknown-unknown al ser Rust puro):
   (strings); confidence, risk (numericos); attempts (entero). Campos y
   compatibilidad de tipos validados en COMPILE time: eval no puede
   fallar por tipos (y el path sigue fail-closed de todos modos).
-- Sintaxis soportada: eq ne gt ge lt le, contains, in {a b c} (coma o
+- Sintaxis soportada: eq ne gt ge lt le, contains, in {"a" "b" "c"} (coma o
   espacio), and / &&, or / ||, not / !, parentesis, literales "string",
-  1, 1.5, true, false. Ejemplo:
-    REPAIR_RULES = [
-      {"id":"no-high-risk","expression":"risk gt 0.9","action":"block"},
-      {"id":"watch-repo","expression":"repo contains \"auto-healing\"","action":"observe"}
-    ]
+  1, 1.5, true, false. Ejemplo de var en wrangler.toml (string basico
+  de TOML: en el fuente \\\" produce la comilla escapada \" del JSON):
+    REPAIR_RULES = "[{\"id\":\"no-high-risk\",\"expression\":\"risk gt 0.9\",\"action\":\"block\"},{\"id\":\"watch-repo\",\"expression\":\"repo contains \\\"auto-healing\\\",\"action\":\"observe\"}]"
 - Acciones enum tipadas: block (la PRIMERA que coincide bloquea) u
   observe (solo log). NO EXISTE allow: las reglas NUNCA pueden saltarse
   el gate determinista (repair_operators::gate) ni la autoridad VERIFY
