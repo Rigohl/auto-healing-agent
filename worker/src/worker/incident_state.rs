@@ -379,14 +379,14 @@ impl IncidentState {
             )?;
         }
         let open_repairs = self.count(
-            "SELECT COUNT(*) FROM incidents WHERE state IN (?, ?)",
+            "SELECT COUNT(*) AS count FROM incidents WHERE state IN (?, ?)",
             vec![
                 SqlStorageValue::from(STATE_QUEUED),
                 SqlStorageValue::from(STATE_REPAIRING),
             ],
         )?;
         let blocked_incidents = self.count(
-            "SELECT COUNT(*) FROM incidents WHERE state = ?",
+            "SELECT COUNT(*) AS count FROM incidents WHERE state = ?",
             vec![SqlStorageValue::from(STATE_BLOCKED)],
         )?;
         Response::ok(
