@@ -97,12 +97,25 @@ if [ -L wrangler.toml ]; then
     fail "wrangler.toml (symlink) apunta a otra cosa"
   fi
 elif [ -f wrangler.toml ]; then
-  # Archivo regular: solo sin config activa: un wrangler desde la raiz no
-  # despliega NADA (fail-closed), nunca una config divergente.
-  if [ -z "$(sed -e 's/#.*//' wrangler.toml | tr -d '[:space:]')" ]; then
+  # Dos formas validas para la raiz (decision del dueno 2026-10-05, commit
+  # 37c3fd5a: Root directory = / en Workers Builds):
+  #   (a) solo comentarios: nada desplegable (fail-closed), o
+  #   (b) config "puntero": SOLO name/main/compatibility_date/[build], con
+  #       main apuntando al arbol de worker/ (worker/build/...) y command
+  #       ejecutando build.sh. Cualquier OTRA config activa (bindings, colas,
+  #       DO, vars) divergiria de worker/wrangler.toml y debe fallar.
+  ACTIVE="$(sed -e 's/#.*//' wrangler.toml | tr -d '[:space:]')"
+  if [ -z "$ACTIVE" ]; then
     pass "wrangler.toml raiz solo comentarios: nada desplegable (fail-closed)"
   else
-    fail "wrangler.toml regular contiene config activa: divergiria de worker/wrangler.toml"
+    MAIN_OK="$(grep -E '^[[:space:]]*main[[:space:]]*=' wrangler.toml | grep -c 'worker/build/')"
+    BUILD_OK="$(grep -E '^[[:space:]]*command[[:space:]]*=' wrangler.toml | grep -c 'build.sh')"
+    EXTRA_KEYS="$(sed -e 's/#.*//' wrangler.toml | grep -E '^[[:space:]]*[a-zA-Z_]' | grep -vE '^[[:space:]]*(name|main|compatibility_date|command)[[:space:]]*=' | wc -l)"
+    if [ "$MAIN_OK" -ge 1 ] && [ "$BUILD_OK" -ge 1 ] && [ "$EXTRA_KEYS" -eq 0 ]; then
+      pass "wrangler.toml raiz = config puntero a worker/ (Root directory = /, commit 37c3fd5a)"
+    else
+      fail "wrangler.toml regular diverge de worker/wrangler.toml (main no apunta a worker/build/, build sin build.sh, o keys activos de mas)"
+    fi
   fi
 else
   fail "wrangler.toml no existe"
