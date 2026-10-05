@@ -54,9 +54,7 @@ jobs:
     env:
       # Superseded con evidencia (ver el paso de borrado): commits unicos
       # ya presentes en main via fix/deep-audit-2026-10-03-v2.
-      DEFAULT_SUPERSEDED: fix/deep-audit-2026-10-03 \
-        diag/worker-build-main feat/declarative-rules \
-        fix/deep-audit-p0-2026-10-05
+      DEFAULT_SUPERSEDED: fix/deep-audit-2026-10-03 diag/worker-build-main feat/declarative-rules fix/deep-audit-p0-2026-10-05
     steps:
       - uses: actions/checkout@v4
         with:
