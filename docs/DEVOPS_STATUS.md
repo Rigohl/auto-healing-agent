@@ -52,9 +52,3 @@ Los hallazgos P1-P3 de la auditoria estan registrados como issues PYH-36 a PYH-4
 ## Historial de este documento
 
 - 2026-10-05: creado con estado verificado en vivo (GitHub + Cloudflare). Corrige "DO sin uso" en REFERENCES/PHASE_STATUS/INVENTORY/ARCHITECTURE.
-
-## Auditoria de codigo (2026-10-05)
-
-Revision archivo por archivo del workspace y el worker (lectura exacta via API, verificada contra los blob SHA). Hallazgo funcional principal: RepairNet::predict nunca rellena "parameters" (solo schema=v2), asi que diff::generate_edit siempre fallaba con missing_param aunque el gate estuviera en verde: ningun incidente podia llegar a PR. Reparado con worker/src/worker/param_derive.rs: derivacion determinista de dependency/version desde el mensaje del incidente (patrones module-not-found y ERESOLVE peer); lo no derivable sigue bloqueado (fail-closed, nunca se inventa). Tambien: compatibility_date 2024-09-23 -> 2026-10-01 (PYH-43) y comentario de colas corregido (Wrangler 4 las auto-provisiona en el deploy).
-
-Deudas que quedan trazadas en Linear: .expect() en el constructor del DO (PYH-37), umbrales del gate duplicados entre crates (PYH-47), retencion duplicada /ingest vs /sweep (PYH-44). El pipeline GATE->PR sigue limitado a operadores de dependencias: los editores textuales exigirian file/from/to con una fuente real de localizacion (fabricarlos seria generacion libre de parches, prohibida por NO_LLM_POLICY).

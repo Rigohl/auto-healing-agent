@@ -42,8 +42,11 @@ pub const STATE_QUEUED: &str = "queued";
 pub const STATE_REPAIRING: &str = "repairing";
 pub const STATE_DONE: &str = "done";
 pub const STATE_BLOCKED: &str = "blocked";
-pub c
-onst STATE_DEAD_LETTER: &str = "dead_letter";
+pub const STATE_DEAD_LETTER: &str = "dead_letter";
+
+/// P2: intervalo del alarm de retencion (24 h). ScheduledTime implementa
+/// From<i64> interpretando milisegundos como offset desde ahora.
+const ALARM_RETENTION_INTERVAL_MS: i64 = 24 * 60 * 60 * 1000;
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS incidents (
@@ -103,10 +106,13 @@ CREATE INDEX IF NOT EXISTS idx_repair_events ON repair_events (repository, day, 
 #[durable_object]
 pub struct IncidentState {
     sql: SqlStorage,
+    // P2: handle del estado para set_alarm/get_alarm (Storage del DO).
+    // NOTA: el nombre NO es `state`; eso tapiaria el metodo handler del
+    // endpoint GET /state (E0615: un campo no es callable).
+    do_state: State,
 }
 
-/// Ejecuta una query 
-sin filas esperadas (DDL/DML) y AGOTA el cursor: el
+/// Ejecuta una query sin filas esperadas (DDL/DML) y AGOTA el cursor: el
 /// API SQLite de DO puede cancelar una query cuyo cursor no se consume, y
 /// un INSERT "olvidado" no se garantiza que se complete.
 fn exec_write(sql: &SqlStorage, query: &str, bindings: Vec<SqlStorageValue>) -> Result<()> {
@@ -123,16 +129,13 @@ impl DurableObject for IncidentState {
         for stmt in SCHEMA.split(';') {
             let stmt = stmt.trim();
             if !stmt.is_empty() {
-                // PYH-37: sin expect(). Un panic en el constructor del DO tumbaria
-            // cada request del repositorio. Un fallo de esquema se loguea;
-            // las queries posteriores fallaran cerrado (503) igual, pero el
-            // isolate sobrevive y el error es observable en los logs.
-            if let Err(e) = exec_write(&sql, stmt, Vec::new()) {
-                console_error!("incident_state schema stmt failed: {}", e);
-            }
+                exec_write(&sql, stmt, Vec::new()).expect("incident_state schema");
             }
         }
-        Self { sql }
+        Self {
+            sql,
+            do_state: state,
+        }
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
@@ -140,7 +143,13 @@ impl DurableObject for IncidentState {
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         match parts.as_slice() {
             ["health"] => Response::ok("ok"),
-            ["ingest"] => self.ingest(&req),
+            ["ingest"] => {
+                let resp = self.ingest(&req);
+                // P2: con actividad real, garantiza retencion proxima por
+                // alarm aunque el cron no dispare. Idempotente (get_alarm).
+                self.arm_alarm_if_needed().await;
+                resp
+            }
             ["attempt"] => self.attempt(&req),
             ["result"] => self.result(&req),
             ["poison"] => self.poison(&req),
@@ -148,6 +157,33 @@ impl DurableObject for IncidentState {
             ["state"] => self.state(&req),
             _ => Response::error("not_found", 404),
         }
+    }
+
+    /// P2 (docs/WORKERS_BEST_PRACTICES.md): retencion dirigida por DO alarm
+    /// en vez de depender solo del cron horario. Corre la misma retencion
+    /// que /sweep y se rearma solo si quedan incidentes vivos (queued o
+    /// repairing). El cron de MONITOR_REPOS se mantiene como red de
+    /// seguridad: la retencion es idempotente (DELETE por cutoff temporal).
+    async fn alarm(&self) -> Result<Response> {
+        let resp = self.run_retention()?;
+        let open = self.count(
+            "SELECT COUNT(*) AS count FROM incidents WHERE state IN (?, ?)",
+            vec![
+                SqlStorageValue::from(STATE_QUEUED),
+                SqlStorageValue::from(STATE_REPAIRING),
+            ],
+        )? as i64;
+        if open > 0 {
+            if let Err(e) = self
+                .do_state
+                .storage()
+                .set_alarm(ALARM_RETENTION_INTERVAL_MS)
+                .await
+            {
+                console_error!("incident_state alarm re-arm failed: {}", e);
+            }
+        }
+        Ok(resp)
     }
 }
 
@@ -163,8 +199,7 @@ struct IngestQuery {
     // Sin `delivery_id`: la deduplicacion va por `idem_key`, que el Worker
     // calcula con `repair_types::compute_idempotency_key` (FNV-1a
     // repo|incident|delivery|fingerprint, CONTRACT.md §5). Reenviarlo seria
-    // mandar
- un parametro que nadie lee.
+    // mandar un parametro que nadie lee.
     #[serde(default)]
     idem_key: String,
     #[serde(default)]
@@ -252,8 +287,7 @@ struct CountRow {
     count: i64,
 }
 
-/// Fila del incid
-ente vista por `/attempt`: intentos REALES (columna
+/// Fila del incidente vista por `/attempt`: intentos REALES (columna
 /// `attempts`, la incrementa el propio `/attempt`), estado actual (para
 /// registrar la transicion de auditoria con su `from_state` verdadero) y la
 /// ultima huella de parche (senal anti-loop). `default` en todos: ni una
@@ -303,7 +337,6 @@ impl IncidentState {
     /// guard de correlacion) usa `to_array` y toma el primer elemento.
     fn one_opt<T>(&self, query: &str, bindings: Vec<SqlStorageValue>) -> Result<Option<T>>
     where
-
         T: for<'a> Deserialize<'a>,
     {
         Ok(self
@@ -369,12 +402,18 @@ impl IncidentState {
     ///
     /// Hasta ahora la retencion solo corria dentro de /ingest: un repo sin
     /// incidentes nuevos nunca purgaba y el DO crecia sin bound. El cron
-
     /// llama este endpoint por repo (var MONITOR_REPOS del Worker).
     /// Misma semantica que /ingest paso 0: TTL de idempotencia del contrato
     /// y 7 dias para los eventos de ventana. `transitions` es auditoria:
     /// no se purga. Solo OBSERVA: nunca cambia el estado de un incidente.
+    /// GET /sweep: retencion manual (cron MONITOR). Delega en run_retention.
     fn sweep(&self, _req: &Request) -> Result<Response> {
+        self.run_retention()
+    }
+
+    /// P2: retencion canonica compartida por /sweep (cron) y alarm(). La doble
+    /// ejecucion es idempotente: todo es DELETE por cutoff temporal.
+    fn run_retention(&self) -> Result<Response> {
         let now = now_ms();
         let ttl_ms = IDEMPOTENCY_TTL_SECONDS as i64 * 1000;
         let retention_ms = 7 * 86_400_000;
@@ -415,10 +454,29 @@ impl IncidentState {
 
     /// POST /ingest: retencion -> idempotencia (con TTL) -> anti-loop (4
     /// señales reales) -> quota -> alta.
+    /// P2: arma el alarm de retencion solo si no hay ya uno programado.
+    /// Se invoca desde fetch() en /ingest (actividad real del repositorio):
+    /// un DO sin incidentes nunca programa alarms ni paga retencion.
+    pub async fn arm_alarm_if_needed(&self) {
+        match self.do_state.storage().get_alarm().await {
+            Ok(None) => {
+                if let Err(e) = self
+                    .do_state
+                    .storage()
+                    .set_alarm(ALARM_RETENTION_INTERVAL_MS)
+                    .await
+                {
+                    console_error!("incident_state alarm arm failed: {}", e);
+                }
+            }
+            Ok(Some(_)) => {}
+            Err(e) => console_error!("incident_state get_alarm failed: {}", e),
+        }
+    }
+
     fn ingest(&self, req: &Request) -> Result<Response> {
         let q: IngestQuery = req.query()?;
         let now = now_ms();
-
         let defaults = QuotaConfig::default();
         let anti_defaults = AntiLoopConfig::default();
         let window_ms = q
@@ -462,8 +520,7 @@ impl IncidentState {
 
         // 2. Estado previo del incidente (una sola query): intentos REALES y
         //    ultima huella de parche. Antes el "intentos" venia de COUNT(*)
-        //    sobre la PK (0 o 1: jamas bloqueaba) y las senales de huella 
-y
+        //    sobre la PK (0 o 1: jamas bloqueaba) y las senales de huella y
         //    verificacion estaban hardcodeadas a 0 (config muerta).
         let prior: Option<IncidentPriorRow> = self.one_opt(
             "SELECT attempts, COALESCE(last_fingerprint, '') AS last_fingerprint FROM incidents WHERE id = ?",
@@ -501,8 +558,7 @@ y
             )? as u32,
             // La huella de ESTA entrega no existe todavia (el pipeline corre
             // despues): se mide la ultima huella del incidente. Si el mismo
-            // parche ya se propuso N veces en la ventana, es un bu
-cle.
+            // parche ya se propuso N veces en la ventana, es un bucle.
             same_fingerprint_recent,
             same_failing_verification_recent: self.count(
                 "SELECT COUNT(*) AS count FROM verification WHERE incident_id = ? AND status IN ('blocked', 'poison') AND created_at > ?",
@@ -554,8 +610,7 @@ cle.
             .unwrap_or(defaults.cooldown_seconds)
             * 1000;
         let day = (now / 86_400_000).to_string();
-        
-let usage = QuotaUsage {
+        let usage = QuotaUsage {
             // Intentos REALES del incidente (columna `attempts`, la incrementa
             // /attempt): un incidente que ya agoto intentos no vuelve a
             // encolar aunque llegue con un delivery_id nuevo.
@@ -598,8 +653,7 @@ let usage = QuotaUsage {
                 .unwrap_or(defaults.cooldown_seconds),
             daily_budget: q.daily_budget.parse().unwrap_or(defaults.daily_budget),
         };
-        if let QuotaVerd
-ict::Blocked(reason) = quota_cfg.evaluate(&usage) {
+        if let QuotaVerdict::Blocked(reason) = quota_cfg.evaluate(&usage) {
             let resp =
                 self.blocked_response("blocked_quota", reason, &q.incident_id, &q.correlation_id);
             self.store_idempotency(&q.idem_key, &resp, now)?;
@@ -646,8 +700,7 @@ ict::Blocked(reason) = quota_cfg.evaluate(&usage) {
     fn attempt(&self, req: &Request) -> Result<Response> {
         let q: AttemptQuery = req.query()?;
         let now = now_ms();
-       
- let defaults = QuotaConfig::default();
+        let defaults = QuotaConfig::default();
         let anti_defaults = AntiLoopConfig::default();
 
         // La fila debe existir con ESTE correlation_id. Si una entrega nueva
@@ -694,7 +747,6 @@ ict::Blocked(reason) = quota_cfg.evaluate(&usage) {
                 &q.incident_id,
                 &from_state,
                 STATE_BLOCKED,
-
                 &q.correlation_id,
                 now,
             )?;
@@ -744,8 +796,7 @@ ict::Blocked(reason) = quota_cfg.evaluate(&usage) {
         )? as u32;
         let anti_cfg = AntiLoopConfig {
             max_same_signature: q
-        
-        .max_same_signature
+                .max_same_signature
                 .parse()
                 .unwrap_or(anti_defaults.max_same_signature),
             max_same_fingerprint: q
@@ -798,8 +849,7 @@ ict::Blocked(reason) = quota_cfg.evaluate(&usage) {
             "UPDATE incidents SET attempts = ?, state = ?, updated_at = ? WHERE correlation_id = ?",
             vec![
                 SqlStorageValue::from(attempts),
-                Sql
-StorageValue::from(STATE_REPAIRING),
+                SqlStorageValue::from(STATE_REPAIRING),
                 SqlStorageValue::from(now),
                 SqlStorageValue::from(q.correlation_id.as_str()),
             ],
@@ -853,8 +903,7 @@ StorageValue::from(STATE_REPAIRING),
             vec![
                 SqlStorageValue::from(final_state),
                 SqlStorageValue::from(q.fingerprint.as_str()),
-                SqlStorage
-Value::from(q.reason.as_str()),
+                SqlStorageValue::from(q.reason.as_str()),
                 SqlStorageValue::from(now),
                 SqlStorageValue::from(q.correlation_id.as_str()),
             ],
@@ -868,6 +917,172 @@ Value::from(q.reason.as_str()),
                 SqlStorageValue::from(q.incident_id.as_str()),
                 SqlStorageValue::from(q.verify_status.as_str()),
                 SqlStorageValue::from(q.evidence_ref.as_str()),
-        
+                SqlStorageValue::from(q.fingerprint.as_str()),
+                SqlStorageValue::from(now),
+            ],
+        )?;
+        if !q.fingerprint.is_empty() {
+            exec_write(
+                &self.sql,
+                "INSERT INTO fingerprints (fingerprint, created_at) VALUES (?, ?)",
+                vec![
+                    SqlStorageValue::from(q.fingerprint.as_str()),
+                    SqlStorageValue::from(now),
+                ],
+            )?;
+        }
+        if q.decision == "allow" {
+            // Solo un intento autorizado consume presupuesto de reparacion.
+            let day = (now / 86_400_000).to_string();
+            let repo: String = self
+                .sql
+                .exec(
+                    "SELECT repository FROM incidents WHERE correlation_id = ?",
+                    vec![SqlStorageValue::from(q.correlation_id.as_str())],
+                )?
+                .to_array::<RepoRow>()?
+                .into_iter()
+                .next()
+                .map(|r| r.repository)
+                .unwrap_or_default();
+            if !repo.is_empty() {
+                exec_write(
+                    &self.sql,
+                    "INSERT INTO repair_events (repository, day, created_at) VALUES (?, ?, ?)",
+                    vec![
+                        SqlStorageValue::from(repo.as_str()),
+                        SqlStorageValue::from(day.as_str()),
+                        SqlStorageValue::from(now),
+                    ],
+                )?;
+            }
+        }
+        let from_state = if guard.state.is_empty() {
+            String::from(STATE_QUEUED)
+        } else {
+            guard.state
+        };
+        self.insert_transition(
+            &q.incident_id,
+            &from_state,
+            final_state,
+            &q.correlation_id,
+            now,
+        )?;
+        Response::ok(serde_json::json!({ "ok": true }).to_string())
+    }
 
-... [Content truncated]
+    /// POST /poison: mensaje caido en DLQ.
+    fn poison(&self, req: &Request) -> Result<Response> {
+        let q: PoisonQuery = req.query()?;
+        let now = now_ms();
+        // Mismo guard: un veneno de una correlacion reemplazada no debe
+        // marcar dead_letter a la entrega vigente del incidente.
+        let guard: Option<StateRow> = self.one_opt(
+            "SELECT state FROM incidents WHERE correlation_id = ?",
+            vec![SqlStorageValue::from(q.correlation_id.as_str())],
+        )?;
+        let Some(guard) = guard else {
+            return Response::ok(
+                serde_json::json!({
+                    "ok": false,
+                    "skipped": "correlation_stale_or_missing",
+                    "correlation_id": q.correlation_id,
+                })
+                .to_string(),
+            );
+        };
+        exec_write(
+            &self.sql,
+            "UPDATE incidents SET state = ?, last_reason = ?, updated_at = ? WHERE correlation_id = ?",
+            vec![
+                SqlStorageValue::from(STATE_DEAD_LETTER),
+                SqlStorageValue::from(format!("dlq:{}", q.queue)),
+                SqlStorageValue::from(now),
+                SqlStorageValue::from(q.correlation_id.as_str()),
+            ],
+        )?;
+        exec_write(
+            &self.sql,
+            "INSERT INTO verification (incident_id, status, evidence_ref, created_at)
+             VALUES (?, 'poison', ?, ?)
+             ON CONFLICT(incident_id) DO UPDATE SET status = 'poison', evidence_ref = excluded.evidence_ref, created_at = excluded.created_at",
+            vec![
+                SqlStorageValue::from(q.incident_id.as_str()),
+                SqlStorageValue::from(q.queue.as_str()),
+                SqlStorageValue::from(now),
+            ],
+        )?;
+        let from_state = if guard.state.is_empty() {
+            String::from(STATE_QUEUED)
+        } else {
+            guard.state
+        };
+        self.insert_transition(
+            &q.incident_id,
+            &from_state,
+            STATE_DEAD_LETTER,
+            &q.correlation_id,
+            now,
+        )?;
+        Response::ok(serde_json::json!({ "ok": true }).to_string())
+    }
+
+    /// GET /state: observabilidad del incidente.
+    fn state(&self, req: &Request) -> Result<Response> {
+        let q: StateQuery = req.query()?;
+        let where_clause = if q.correlation_id.is_empty() {
+            "id = ?"
+        } else {
+            "correlation_id = ?"
+        };
+        let value = if q.correlation_id.is_empty() {
+            q.incident_id.clone()
+        } else {
+            q.correlation_id.clone()
+        };
+        let incidents: Vec<serde_json::Value> = self
+            .sql
+            .exec(
+                &format!("SELECT id, repository, signature, state, attempts, correlation_id, last_fingerprint, last_reason, created_at, updated_at FROM incidents WHERE {}", where_clause),
+                vec![SqlStorageValue::from(value.as_str())],
+            )?
+            .to_array()?;
+        let transitions: Vec<serde_json::Value> = self
+            .sql
+            .exec(
+                "SELECT from_state, to_state, correlation_id, created_at FROM transitions WHERE incident_id = ? ORDER BY id",
+                vec![SqlStorageValue::from(q.incident_id.as_str())],
+            )?
+            .to_array()?;
+        let verification: Vec<serde_json::Value> = self
+            .sql
+            .exec(
+                "SELECT status, evidence_ref, created_at FROM verification WHERE incident_id = ?",
+                vec![SqlStorageValue::from(q.incident_id.as_str())],
+            )?
+            .to_array()?;
+        Response::ok(
+            serde_json::json!({
+                "incident": incidents,
+                "transitions": transitions,
+                "verification": verification,
+            })
+            .to_string(),
+        )
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct IdemRow {
+    response: String,
+    // Necesario para el TTL del contrato (CONTRACT.md §5): una respuesta
+    // guardada expira a las IDEMPOTENCY_TTL_SECONDS.
+    #[serde(default)]
+    created_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct RepoRow {
+    repository: String,
+}

@@ -5,9 +5,11 @@
 #   1. Secrets de GitHub: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
 #   2. Secret del Worker: WEBHOOK_SECRET (el webhook falla cerrado sin el -> 503).
 #   3. El id de MODEL_KV es el del namespace real de la cuenta.
-#   4. Las colas de abajo se AUTO-PROVISIONAN en el deploy con Wrangler
-#      moderno (>= 3.x): ya NO hace falta crearlas antes. Solo si usas un
-#      Wrangler antiguo necesitarian `npx wrangler queues create <nombre>`.
+#   4. Las colas de abajo deben existir antes del deploy:
+#        npx wrangler queues create auto-healing-repairs
+#        npx wrangler queues create auto-healing-repairs-dlq
+#        npx wrangler queues create auto-healing-repairs-staging
+#        npx wrangler queues create auto-healing-repairs-dlq-staging
 #   6. Secret del Worker: GITHUB_TOKEN (PAT con Contents:RW y PullRequests:RW).
 #      npx wrangler secret put GITHUB_TOKEN. Sin el, la reparacion es
 #      fail-closed: blocked github_token_not_configured (nunca 500).
@@ -25,7 +27,7 @@
 
 name = "auto-healing-agent"
 main = "build/worker/shim.mjs"
-compatibility_date = "2026-09-01"
+compatibility_date = "2024-09-23"
 
 [build]
 command = "bash ./build.sh"
@@ -33,12 +35,14 @@ command = "bash ./build.sh"
 # Workers Logs: invocaciones y errores consultables con `wrangler tail`.
 [observability]
 enabled = true
+# Muestreo de logs de invocacion: 1 = 100% (volumen actual bajo; bajar
+# si crece el trafego para controlar facturacion de Workers Logs).
+head_sampling_rate = 1
 
 # Quotas y anti-loop: configuracion separada del estado (el estado vive en el
 # Durable Object). Cambiar valores NO requiere tocar el esquema SQL.
 [vars]
-# MONITOR: repos que el cron scheduled barre (worker/src/work
-er/monitor.rs).
+# MONITOR: repos que el cron scheduled barre (worker/src/worker/monitor.rs).
 # Registro en configuracion (separacion config/estado): vacio = no-op con log.
 MONITOR_REPOS = "Rigohl/auto-healing-agent"
 # REGLAS DECLARATIVAS (P1): JSON de {id, expression, action}. "[]" o
@@ -98,8 +102,7 @@ max_retries = 3
 max_concurrency = 1
 dead_letter_queue = "auto-healing-repairs-dlq"
 
-# Consumidor del DLQ: registra el veneno en el Du
-rable Object y lo observa.
+# Consumidor del DLQ: registra el veneno en el Durable Object y lo observa.
 [[queues.consumers]]
 queue = "auto-healing-repairs-dlq"
 max_batch_size = 10
@@ -160,8 +163,7 @@ binding = "MODEL_KV"
 id = "73014a1b32b7446397461a8d438c8ab2"
 
 [[env.staging.kv_namespaces]]
-bin
-ding = "REPAIR_CASES_KV"
+binding = "REPAIR_CASES_KV"
 id = "996211a015f14c54b85ea4b47e79fdf9"
 
 [env.staging.durable_objects]
