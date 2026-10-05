@@ -67,7 +67,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git fetch origin
+          git fetch origin 2>&1 | tee /tmp/cleanup.log
           AUTO=0
           if [ -z "${BRANCHES:-}" ]; then
             AUTO=1
@@ -115,7 +115,26 @@ jobs:
             fi
           done
           echo "ramas restantes:"
-          git ls-remote --heads origin | awk '{print $2}'
+          git ls-remote --heads origin | awk '{print $2}' | tee -a /tmp/cleanup.log
+
+      - name: Post cleanup log (diag temporal)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > /tmp/mkbody.py <<"PYEOF"
+          try:
+              with open("/tmp/cleanup.log") as fh:
+                  t = fh.read()
+          except OSError:
+              t = "log missing"
+          with open("/tmp/body.md", "w") as fh:
+              fh.write("## cleanup log\n\n~~~\n" + t[-15000:] + "\n~~~")
+          PYEOF
+          python3 /tmp/mkbody.py
+          gh issue create \
+            --title "diag-cleanup ${GITHUB_SHA:0:7}" \
+            --body-file /tmp/body.md || true
 
       - name: Re-verificar main (BRANCH_DRIFT pasa a verde tras el borrado)
         env:
