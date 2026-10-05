@@ -64,6 +64,7 @@ jobs:
         env:
           BRANCHES: ${{ github.event_name == 'workflow_dispatch' && inputs.branches || '' }}
           SUPERSEDED: ${{ github.event_name == 'workflow_dispatch' && inputs.superseded || env.DEFAULT_SUPERSEDED }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git fetch origin
@@ -87,7 +88,7 @@ jobs:
             fi
           done
           for b in $SUPERSEDED; do
-            if ! git ls-remote --heads origin "refs/heads/$b" | grep -q .; then
+            if ! git show-ref --verify --quiet "refs/remotes/origin/$b"; then
               echo "::notice::origin/$b ya no existe; se ignora"
               continue
             fi
@@ -103,7 +104,15 @@ jobs:
             echo "  fix/deep-audit-p0-2026-10-05 (validacion refs, print_usage,"
             echo "  rollback promote) ya estan integrados en main; verificados
             echo "  via compare main...rama + contents API."
-            git push origin --delete "$b"
+            if ! git push origin --delete "$b" 2>/tmp/del.err; then
+              echo "git push fallo para $b (exit $?):"
+              cat /tmp/del.err
+              echo "reintentando con gh api..."
+              gh api --method DELETE \
+                "repos/$GITHUB_REPOSITORY/git/refs/heads/$b" \
+                && echo "gh api DELETE ok para $b" \
+                || { echo "::error::no se pudo borrar origin/$b"; exit 1; }
+            fi
           done
           echo "ramas restantes:"
           git ls-remote --heads origin | awk '{print $2}'
