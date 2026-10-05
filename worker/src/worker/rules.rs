@@ -4,12 +4,14 @@
 //! Por que sin el crate wirefilter-engine (0.6.1, cloudflare/wirefilter):
 //! su propio engine/Cargo.toml declara que getrandom NO tiene fuente de
 //! aleatoriedad en wasm32-unknown y exige --features getrandom/wasm_js
-//! (ademas de deps pesadas: backtrace, regex-automata, wildcard), y NINGUN
-//! job de CI compila el worker WASM real (wasm.yml compila solo
-//! repair_nn_wasm): adoptarlo seria un riesgo de deploy no verificable.
-//! Este modulo implementa el subconjunto necesario (Scheme -> AST -> IR en
+//! (ademas de deps pesadas: backtrace, regex-automata, wildcard). CI si
+//! chequea el target wasm32 del worker (cargo check --release en
+//! worker-check y repair-validation), pero NINGUN job de Actions produce
+//! el artefacto desplegable (worker-build + wasm-bindgen): adoptarlo hoy
+//! seria un riesgo de deploy no verificable de punta a punta. Este
+//! modulo implementa el subconjunto necesario (Scheme -> AST -> IR en
 //! miniatura, estilo wirefilter) con cero dependencias nuevas. Reevaluar
-//! cuando CI pueda compilar el worker a wasm32. Fuentes consultadas
+//! cuando un job de CI ejecute worker-build. Fuentes consultadas
 //! 2026-10-05: cloudflare/wirefilter engine/Cargo.toml y README, blueprint
 //! de pingoo (pagina Notion "Cloudflare + Rust - Links").
 //!
@@ -740,7 +742,7 @@ mod tests {
     /// ctx(). Devuelve true si bloquea.
     fn blocks(expr: &str) -> bool {
         let raw = format!(
-            "[{{"id":"r1","expression":{:?},"action":"block"}}]",
+            "[{{\"id\":\"r1\",\"expression\":{:?},\"action\":\"block\}}]",
             expr
         );
         let rs = Ruleset::from_json(&raw).expect("regla valida");
@@ -754,9 +756,9 @@ mod tests {
 
     #[test]
     fn eq_and_ne_on_strings() {
-        assert!(blocks("repo eq "acme/api""));
-        assert!(!blocks("repo eq "other/repo""));
-        assert!(blocks("repo ne "other/repo""));
+        assert!(blocks("repo eq \"acme/api\""));
+        assert!(!blocks("repo eq \"other/repo\""));
+        assert!(blocks("repo ne \"other/repo\""));
     }
 
     #[test]
@@ -772,23 +774,23 @@ mod tests {
     #[test]
     fn and_binds_tighter_than_or() {
         // or(and(x, y), z): falso and verdadero-or-falso => falso
-        assert!(!blocks("repo eq "x" or repo eq "acme/api" and attempts eq 99"));
+        assert!(!blocks("repo eq \"x\" or repo eq \"acme/api\" and attempts eq 99"));
         // and(or(x, y), z): verdadero => verdadero
-        assert!(blocks("(repo eq "x" or repo eq "acme/api") and attempts eq 2"));
+        assert!(blocks("(repo eq \"x\" or repo eq \"acme/api\") and attempts eq 2"));
     }
 
     #[test]
     fn not_and_symbol_operators() {
-        assert!(!blocks("not (repo eq "acme/api")"));
-        assert!(blocks("!(repo eq "acme/api")"));
-        assert!(blocks("repo eq "acme/api" && attempts eq 2 || risk gt 1"));
+        assert!(!blocks("not (repo eq \"acme/api\")"));
+        assert!(!blocks("!(repo eq \"acme/api\")"));
+        assert!(blocks("repo eq \"acme/api\" && attempts eq 2 || risk gt 1"));
     }
 
     #[test]
     fn contains_and_in() {
-        assert!(blocks("signature contains "E500""));
-        assert!(blocks("repo contains "api""));
-        assert!(!blocks("repo contains "nope""));
+        assert!(blocks("signature contains \"E500\""));
+        assert!(blocks("repo contains \"api\""));
+        assert!(!blocks("repo contains \"nope\""));
         assert!(blocks("error_step in {build deploy}"));
         assert!(blocks("error_step in {build, deploy}"));
         assert!(!blocks("error_step in {deploy, test}"));
@@ -796,7 +798,7 @@ mod tests {
 
     #[test]
     fn block_first_match_wins_and_observe_reports() {
-        let raw = "[{"id":"o1","expression":"attempts ge 1","action":"observe"},{"id":"b1","expression":"confidence ge 0.5","action":"block"},{"id":"b2","expression":"risk lt 1","action":"block"}]";
+        let raw = "[{\"id\":\"o1\",\"expression\":\"attempts ge 1\",\"action\":\"observe\"},{\"id\":\"b1\",\"expression\":\"confidence ge 0.5\",\"action\":\"block\"},{\"id\":\"b2\",\"expression\":\"risk lt 1\",\"action\":\"block\"}]";
         let rs = Ruleset::from_json(raw).expect("ruleset valido");
         let (blocked, observed) = rs.evaluate(&ctx()).expect("eval");
         assert_eq!(blocked.as_deref(), Some("b1"));
@@ -816,25 +818,25 @@ mod tests {
         // JSON invalido
         rejected("{no es json}");
         // campo fuera del esquema
-        rejected("[{"id":"r","expression":"wat eq 1","action":"block"}]");
+        rejected("[{\"id\":\"r\",\"expression\":\"wat eq 1\",\"action\":\"block\"}]");
         // tipos mezclados: string vs numero
-        rejected("[{"id":"r","expression":"repo eq 5","action":"block"}]");
+        rejected("[{\"id\":\"r\",\"expression\":\"repo eq 5\",\"action\":\"block\"}]");
         // int vs float
-        rejected("[{"id":"r","expression":"attempts eq 2.0","action":"block"}]");
+        rejected("[{\"id\":\"r\",\"expression\":\"attempts eq 2.0\",\"action\":\"block\"}]");
         // orden entre strings
-        rejected("[{"id":"r","expression":"repo gt "a"","action":"block"}]");
+        rejected("[{\"id\":\"r\",\"expression\":\"repo gt \\\"a\\\"\",\"action\":\"block\"}]");
         // sintaxis: tokens sobrantes
-        rejected("[{"id":"r","expression":"repo eq "a" foo","action":"block"}]");
+        rejected("[{\"id\":\"r\",\"expression\":\"repo eq \\\"a\\\" foo\",\"action\":\"block\"}]");
         // sintaxis: string sin cerrar
-        rejected("[{"id":"r","expression":"repo eq "a","action":"block"}]");
+        rejected("[{\"id\":\"r\",\"expression\":\"repo eq \\\"a\",\"action\":\"block\"}]");
         // conjunto vacio
-        rejected("[{"id":"r","expression":"repo in {}","action":"block"}]");
+        rejected("[{\"id\":\"r\",\"expression\":\"repo in {}\",\"action\":\"block\"}]");
         // id vacio
-        rejected("[{"id":"","expression":"true","action":"block"}]");
+        rejected("[{\"id\":\"\",\"expression\":\"true\",\"action\":\"block\"}]");
         // accion inexistente (no existe allow: solo block u observe)
-        rejected("[{"id":"r","expression":"true","action":"allow"}]");
+        rejected("[{\"id\":\"r\",\"expression\":\"true\",\"action\":\"allow\"}]");
         // campo desconocido en el JSON de regla
-        rejected("[{"id":"r","expression":"true","action":"block","extra":1}]");
+        rejected("[{\"id\":\"r\",\"expression\":\"true\",\"action\":\"block\",\"extra\":1}]");
     }
 
     #[test]
