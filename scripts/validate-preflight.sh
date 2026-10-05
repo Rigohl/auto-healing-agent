@@ -110,7 +110,7 @@ elif [ -f wrangler.toml ]; then
   else
     MAIN_OK="$(grep -E '^[[:space:]]*main[[:space:]]*=' wrangler.toml | grep -c 'worker/build/')"
     BUILD_OK="$(grep -E '^[[:space:]]*command[[:space:]]*=' wrangler.toml | grep -c 'build.sh')"
-    EXTRA_KEYS="$(sed -e 's/#.*//' wrangler.toml | grep -E '^[[:space:]]*[a-zA-Z_]' | grep -vE '^[[:space:]]*(name|main|compatibility_date|command)[[:space:]]*=' | wc -l)"
+    EXTRA_KEYS="$(sed -e 's/#.*//' wrangler.toml | grep -E '^[[:space:]]*[a-zA-Z_]' | { grep -vE '^[[:space:]]*(name|main|compatibility_date|command)[[:space:]]*=' || true; } | wc -l)"
     if [ "$MAIN_OK" -ge 1 ] && [ "$BUILD_OK" -ge 1 ] && [ "$EXTRA_KEYS" -eq 0 ]; then
       pass "wrangler.toml raiz = config puntero a worker/ (Root directory = /, commit 37c3fd5a)"
     else
