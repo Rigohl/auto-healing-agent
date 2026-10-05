@@ -27,6 +27,12 @@ feature_engine = { path = "../crates/feature_engine", default-features = false }
 repair_nn_core = { path = "../crates/repair_nn_core", default-features = false }
 repair_operators = { path = "../crates/repair_operators", default-features = false }
 
+# Tamano del binario WASM (guia oficial de Rust Workers:
+# developers.cloudflare.com/workers/languages/rust/ - el template de
+# workers-rs pre-configura lto, strip y codegen-units = 1; opt-level = "s"
+# es la optimizacion extra a tamano de este worker).
 [profile.release]
 lto = true
 opt-level = "s"
+strip = true
+codegen-units = 1
