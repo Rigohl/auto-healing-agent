@@ -1,0 +1,66 @@
+name: Diag fmt+clippy (temporal)
+
+# WORKFLOW TEMPORAL DE DIAGNOSTICO (2026-10-05). Los jobs worker-check y
+# worker-clippy del PR #31 estan rojos y los logs de Actions requieren
+# permisos de admin que el conector no tiene. Este workflow ejecuta los
+# MISMOS comandos que ci.yml y publica su salida como comentario del PR
+# para poder reparar con evidencia. Se ELIMINA en el commit que arregla
+# fmt/clippy. Edicion de .github/** autorizada por el dueno ("Reparalo
+# todo", 2026-10-05); precedentes PR #14/#16.
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: fmt output
+        id: fmt
+        run: |
+          {
+            echo 'OUT<<DIAGEOF'
+            cargo fmt --manifest-path worker/Cargo.toml -- --check 2>&1 || true
+            echo 'DIAGEOF'
+          } >> "$GITHUB_OUTPUT"
+      - name: clippy output
+        id: clippy
+        run: |
+          {
+            echo 'OUT<<DIAGEOF'
+            cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings 2>&1 || true
+            echo 'DIAGEOF'
+          } >> "$GITHUB_OUTPUT"
+      - name: publicar comentario
+        uses: actions/github-script@v7
+        env:
+          FMT_OUT: ${{ steps.fmt.outputs.OUT }}
+          CLIPPY_OUT: ${{ steps.clippy.outputs.OUT }}
+        with:
+          script: |
+            const cut = (s) => (s || '').slice(0, 20000);
+            const body = [
+              '## Diag fmt+clippy (temporal, commit ' + context.sha.slice(0, 8) + ')',
+              '### cargo fmt --check',
+              '```',
+              cut(process.env.FMT_OUT),
+              '```',
+              '### cargo clippy -D warnings',
+              '```',
+              cut(process.env.CLIPPY_OUT),
+              '```'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
