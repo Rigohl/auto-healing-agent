@@ -41,6 +41,11 @@ jobs:
         run: |
           cargo fmt --manifest-path worker/Cargo.toml \
             -- --check > /tmp/wf.log 2>&1 || true
+      - name: consistency verify
+        run: |
+          git fetch --depth=0 origin +refs/heads/*:refs/remotes/origin/* \
+            || true
+          python3 scripts/verify_repo.py > /tmp/v.log 2>&1 || true
       - name: assemble and post
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -54,6 +59,7 @@ jobs:
               ("workspace-fmt", "f"),
               ("worker-clippy", "wc"),
               ("worker-fmt", "wf"),
+              ("consistency-verify", "v"),
           ]:
               try:
                   with open("/tmp/%s.log" % key) as fh:
