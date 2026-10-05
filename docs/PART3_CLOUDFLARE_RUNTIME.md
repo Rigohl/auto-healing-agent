@@ -385,3 +385,81 @@ divergidas solo con evidencia registrada en el propio paso (head, commits
 fuera de `main`, contenido equivalente ya en `main`). Al terminar
 re-dispatcha `consistency.yml` sobre `main`, así que `BRANCH_DRIFT` queda
 verde cuando `persistent == ["origin/main"]` sin acción humana.
+
+---
+
+## 21. MONITOR: cron scheduled + retencion proactiva (2026-10-05)
+
+El pipeline declara MONITOR tras REPAIR/VERIFY, pero el runtime no tenia
+cron: la retencion del DO solo corria dentro de `/ingest` (un repo sin
+incidentes nuevos nunca purgaba) y no existia observabilidad periodica
+del registro de modelo. Cerrado sin tocar la autoridad:
+
+- `#[event(scheduled)]` en `worker/src/lib.rs` -> `monitor::run`
+  (`worker/src/worker/monitor.rs`).
+- `monitor::run` lee la var `MONITOR_REPOS` (lista por comas; vacia =
+  no-op con log), llama `GET /sweep` en el DO de cada repo y comprueba
+  la salud del registro de modelo (`model::health`). Es OBSERVABILIDAD +
+  retencion: nunca repara, nunca encola, nunca declara VERIFY. Un error
+  del DO o del KV solo se loguea (Workers Logs, `[observability]`).
+- `GET /sweep` en el DO (`incident_state.rs`): misma retencion que
+  `/ingest` paso 0 (TTL de idempotencia del contrato + 7 dias de
+  eventos de ventana; `transitions` es auditoria y no se purga) +
+  conteos de observabilidad (`open_repairs`, `blocked_incidents`).
+  No cambia el estado de ningun incidente.
+- `wrangler.toml`: `[triggers] crons = ["0 * * * *"]` (produccion y
+  staging: los triggers NO se heredan) y `MONITOR_REPOS` en `[vars]`
+  de ambos entornos.
+
+Por que MONITOR_REPOS y no un barrido global: el DO es por repositorio
+(`id_from_name(repo)`) y la plataforma no ofrece enumeracion de
+objetos. El registro de repos vive en configuracion (separacion
+config/estado de PART3), no como estado deducible. El cron solo se
+activa con el siguiente deploy verificado del Worker (el deploy sigue
+pendiente, item 41).
+
+### Decisiones del analisis de repos de referencia (2026-10-05)
+
+Analisis de 26 repos (Cloudflare oficiales, Rust-on-Workers, ML/ONNX,
+GraphQL, CRDT) contra este runtime; detalle en Notion ("Cloudflare +
+Rust — Links") y Mem0. Aplicado y diferido:
+
+- APLICADO: cron MONITOR con el patron `cron sweep` de
+  `RustCFML/RustCFML-Cloudflare-worker` (GC programado de estado).
+- YA EXISTIA (correccion del analisis): el reintento del consumidor YA
+  es por mensaje (`message.retry_with_options` con delay), no por
+  batch; el analisis inicial lo daba por faltante. Sin cambio.
+- DIFERIDO (rollout separado): `worker-build --panic-unwind` (workers-rs):
+  captura panics y recupera el isolate, pero exige toolchain NIGHTLY +
+  rebuild de std (`-Zbuild-std=std,panic_unwind`) y cambia la recreacion
+  de Durable Objects tras un abort: demasiado riesgo para el unico
+  camino de deploy sin pruebas dedicadas. Evaluar en rama aparte con
+  build real.
+- DIFERIDO: single-flight/CacheLock (patron `pingora-memory-cache`) para
+  la carga de pesos desde MODEL_KV: exige decidir la politica de
+  invalidacion current/stable por isolate antes de cachear.
+- DIFERIDO: axum (feature `http` de workers-rs) + GraphQL (`juniper`,
+  soporte wasm32 documentado) para el cockpit; DSL declarativo
+  (`wirefilter`/`bel`) para repair_rules — toca `crates/**`, fuera
+  del alcance PART3 salvo dependencia declarada.
+
+## 22. Eliminacion de legacy/ (2026-10-05)
+
+El directorio `legacy/` (V0: agent.ts, worker.js, CONFIG.md, SECRETS.md,
+mongodb-setup.sh, README.md) fue ELIMINADO del repositorio el 2026-10-05
+por instruccion explicita del dueno. Esta instruccion sustituye la regla
+de PROMPT_03 que pedia conservarlo intacto.
+
+Verificacion previa a borrar: ninguna dependencia operativa. Ni
+`.github/workflows/ci.yml`, ni `deploy.yml`, ni `verify_repo.py`, ni el
+worker ni `set-github-secrets.sh` referencian `legacy/`; solo los docs
+lo mencionaban como archivo historico (search_code + lectura).
+
+Accion humana PENDIENTE (no automatizable desde el repo): rotar/revocar
+el `VERCEL_ORG_ID` que estaba en `legacy/CONFIG.md`; el valor persiste
+en el historial git aunque el archivo ya no exista.
+
+Docs actualizados en el mismo commit: README.md, ROOT_LAYOUT.md,
+INVENTORY.md, INDEX.md, PROMPT_PAD.md, PART1_REPOSITORY.md,
+ARCHITECTURE.md, NO_LLM_POLICY.md, GOVERNANCE.md, DISCREPANCIES.md
+(item 50), scripts/set-github-secrets.sh y esta seccion 22.

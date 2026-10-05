@@ -30,7 +30,7 @@ use worker::*;
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
-    model,
+    model, monitor,
     queue_consumer::{self, QueueTask, WebhookPayload},
     quota::QuotaConfig,
     security::{fnv1a64, urlencode, verify_webhook_secret},
@@ -213,4 +213,20 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         })
         .to_string(),
     )
+}
+
+/// MONITOR (cron scheduled): retencion del DO + salud del registro de
+/// modelo (worker/src/worker/monitor.rs). Observabilidad y limpieza:
+/// nunca repara, nunca encola, nunca toca la autoridad de VERIFY
+/// (GitHub Actions). Requiere [triggers] crons en wrangler.toml.
+///
+/// Devuelve () a proposito: el glue de #[event(scheduled)] en workers-rs
+/// descarta el Result del handler, y devolver Result<()> activaria
+/// unused_must_use bajo `clippy -D warnings`. El error solo se loguea.
+#[event(scheduled)]
+pub async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
+    console_error_panic_hook::set_once();
+    if let Err(e) = monitor::run(&env).await {
+        console_error!("MONITOR cron failed: {e}");
+    }
 }

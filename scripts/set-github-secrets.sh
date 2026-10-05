@@ -63,7 +63,8 @@ put_secret() {
 
 echo ">> Subiendo secrets (solo los que tengas en env)"
 # El núcleo es Rust/WASM sin LLM. No se aprovisiona HF_TOKEN / HF_MODEL /
-# HF_BASE_URL: la ruta HuggingFace está archivada en legacy/ y no se ejecuta
+# HF_BASE_URL: la ruta HuggingFace V0 (legacy/) fue eliminada del repo
+# el 2026-10-05 por decisión del dueño
 # (ver docs/NO_LLM_POLICY.md y DISCREPANCIES.md ítems 3 y 13).
 # MongoDB sigue sin driver en código (ítem 10): el secret se puede preparar,
 # pero su presencia no implica integración.

@@ -66,7 +66,7 @@ docs/
 - `worker/` — runtime PART3 async (webhook fail-closed → DO → Queue → consumidor), **fuera** del workspace Cargo (paquete CF aparte,
   se compila con wrangler).
 - `model/` — `current.txt` = payload KV real (2863 `f32`, pesos V1). `current.json` y `stable.json` siguen como placeholders de metadata (`weights: null`, nadie los consume).
-- `legacy/` — archivado, no ejecutable. Se conserva íntegro.
+- `legacy/` — eliminado del repo el 2026-10-05 por decisión explícita del dueño (era archivo V0 no ejecutable; ver DISCREPANCIES ítem 50).
 - `FeatureVector::DIM = 64`, `WEIGHT_COUNT = 2863`, gate `0.55 / 0.45`,
   `OperatorId` 0–12 (`OPERATOR_COUNT = 13`).
 
@@ -206,8 +206,9 @@ código huérfano o errores") usando GitHub, Context7, Sentry y Linear
 - **Sentry**: org `pyhentretaiment` con 0 proyectos — sin monitoreo de
   errores conectado (worker sin deploy verificado; observabilidad = PART4).
 - Orfanas conocidas que NO son código: 8 ramas residuales (BRANCH_DRIFT,
-  dispatch humano de `cleanup-branches.yml`) y `legacy/` (archivo V0
-  intencional).
+  dispatch humano de `cleanup-branches.yml`). `legacy/` (archivo V0
+  intencional) fue eliminado del repo el 2026-10-05 por decisión
+  explícita del dueño.
 
 
 ## Actualización 2026-10-03 (cierre del item 34: árbol formateado)

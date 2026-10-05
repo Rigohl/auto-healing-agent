@@ -5,7 +5,7 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 | # | Elemento | Notion / otras ramas | Repo (`main`) | Decisión | Justificación |
 |---|----------|----------------------|--------------|---------|-------------|
 | 1 | Dims FeatureVector | 16 / 907 pesos | **64 / 2863** | Repo gana | PROMPT_PAD regla 2 |
-| 2 | Node / package.json | Implícito | No existe | Rust-only | legacy archivado |
+| 2 | Node / package.json | Implícito | No existe | Rust-only | legacy archivado (eliminado del repo 2026-10-05) |
 | 3 | Path LLM / híbrido | HYBRID_POLICY | No existe | Descartado | Rust-only |
 | 4 | tests/ dir | Propuesto | Inline | Mantener inline | |
 | 5 | Scripts train/export | Propuestos | Diferir | Hasta pesos reales |
@@ -105,7 +105,7 @@ ositivo
  del preflight REPLACE_WITH | `deploy.yml` grepea `worker/wrangler.toml` completo, comentarios incluidos | **Filtro de comentarios (absorbido de #8)** | Un comentario que documente el placeholder bloquearia el unico camino de deploy (P0 reportado en el historial). Ahora `sed -e 's/#.*//'` antes del grep. |
 | 48 | Branch protection / rulesets | `branches/main/protection` -> 401 sin admin; `rulesets` -> `[]`; `main.protected = false` | **UNVERIFIABLE/ausente; no se afirma enforcement** | Ningun check es obligatorio hoy a nivel de plataforma. Required checks propuestos con nombres exactos en GOVERNANCE.md; activarlos es accion manual humana. |
 | 49 | Mergify / CODEOWNERS / dependabot / SECURITY.md | No existen `.mergify.yml`, `CODEOWNERS`, `dependabot.yml`, `SECURITY.md` | **Ausentes; no creados** | P1 no los crea sin pedido humano explicito. Mergify no se introduce (AUTO_MERGE=false). |
-| 50 | `VERCEL_ORG_ID` literal en legacy | `legacy/CONFIG.md` contiene un org-id Vercel literal (era V0, archivada) | **Reportado; no rotado** | No se rota ni elimina en silencio: decision humana. `legacy/` no se ejecuta. |
+| 50 | `VERCEL_ORG_ID` literal en legacy | `legacy/CONFIG.md` contenía un org-id Vercel literal (era V0, archivada) | **Archivo eliminado 2026-10-05 (decisión del dueño)** | `legacy/` fue eliminado del repo; el org-id persiste en el historial git. `VERCEL_ORG_ID` es un Team ID (identificador de equipo, no una credencial): no es rotable y no queda acción de rotación pendiente. |
 | 51 | Job `worker` rojo en main HEAD (`d8212dc`) | check-runs del HEAD: `worker` = failure; `test`/`clippy`/`build`/`hygiene` = success | **Preexistente, de P2; no ocultado** | El worker de main no compila hoy (deuda activa de P2 tras `2f4b023`/`d8212dc`). La nueva CI lo sigue mostrando en rojo: `worker-check`/`worker-test`/`worker-clippy` fallaran hasta que P2 lo arregle. Este PR no lo enmascara ni lo corrige (fuera de alcance). |
 | 52 | `Cargo.lock` sin versionar | Cuatro ramas (`#7`, `#8`, `#9`, `#10`) lo anaden con `--locked` en CI para builds reproducibles | **`main` NO los versiona; se mantiene la decision, documentada** | Un lockfile de esas ramas es anterior a `repair_types::contract` y a `serde_json` como dev-dependency: adoptarlo con `--locked` rompe la resolucion, y sin `--locked` es un archivo que miente sobre las dependencias reales. Ademas fij
 aria el 

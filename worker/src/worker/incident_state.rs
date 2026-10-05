@@ -136,6 +136,7 @@ impl DurableObject for IncidentState {
             ["attempt"] => self.attempt(&req),
             ["result"] => self.result(&req),
             ["poison"] => self.poison(&req),
+            ["sweep"] => self.sweep(&req),
             ["state"] => self.state(&req),
             _ => Response::error("not_found", 404),
         }
@@ -351,6 +352,53 @@ impl IncidentState {
             "correlation_id": correlation_id,
         })
         .to_string()
+    }
+
+    /// GET /sweep (cron MONITOR): retencion proactiva + observabilidad.
+    ///
+    /// Hasta ahora la retencion solo corria dentro de /ingest: un repo sin
+    /// incidentes nuevos nunca purgaba y el DO crecia sin bound. El cron
+    /// llama este endpoint por repo (var MONITOR_REPOS del Worker).
+    /// Misma semantica que /ingest paso 0: TTL de idempotencia del contrato
+    /// y 7 dias para los eventos de ventana. `transitions` es auditoria:
+    /// no se purga. Solo OBSERVA: nunca cambia el estado de un incidente.
+    fn sweep(&self, _req: &Request) -> Result<Response> {
+        let now = now_ms();
+        let ttl_ms = IDEMPOTENCY_TTL_SECONDS as i64 * 1000;
+        let retention_ms = 7 * 86_400_000;
+        exec_write(
+            &self.sql,
+            "DELETE FROM idempotency WHERE created_at < ?",
+            vec![SqlStorageValue::from(now - ttl_ms)],
+        )?;
+        for table in ["signature_events", "fingerprints", "repair_events"] {
+            exec_write(
+                &self.sql,
+                &format!("DELETE FROM {table} WHERE created_at < ?"),
+                vec![SqlStorageValue::from(now - retention_ms)],
+            )?;
+        }
+        let open_repairs = self.count(
+            "SELECT COUNT(*) AS count FROM incidents WHERE state IN (?, ?)",
+            vec![
+                SqlStorageValue::from(STATE_QUEUED),
+                SqlStorageValue::from(STATE_REPAIRING),
+            ],
+        )?;
+        let blocked_incidents = self.count(
+            "SELECT COUNT(*) AS count FROM incidents WHERE state = ?",
+            vec![SqlStorageValue::from(STATE_BLOCKED)],
+        )?;
+        Response::ok(
+            serde_json::json!({
+                "status": "swept",
+                "cutoff_idempotency_ms": now - ttl_ms,
+                "cutoff_events_ms": now - retention_ms,
+                "open_repairs": open_repairs,
+                "blocked_incidents": blocked_incidents,
+            })
+            .to_string(),
+        )
     }
 
     /// POST /ingest: retencion -> idempotencia (con TTL) -> anti-loop (4

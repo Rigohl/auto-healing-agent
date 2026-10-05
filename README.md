@@ -22,7 +22,6 @@ worker/          # Cloudflare Worker (workers-rs)
 model/           # current.txt = payload KV real (2863 f32)
 docs/            # incluye PROMPT_PAD.md v2
 scripts/
-legacy/          # archivo muerto (agent.ts no se ejecuta)
 ```
 
 ## Comandos

@@ -36,6 +36,9 @@ enabled = true
 # Quotas y anti-loop: configuracion separada del estado (el estado vive en el
 # Durable Object). Cambiar valores NO requiere tocar el esquema SQL.
 [vars]
+# MONITOR: repos que el cron scheduled barre (worker/src/worker/monitor.rs).
+# Registro en configuracion (separacion config/estado): vacio = no-op con log.
+MONITOR_REPOS = "Rigohl/auto-healing-agent"
 QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
 QUOTA_MAX_REPAIRS_PER_REPO = "10"
 QUOTA_MAX_OPEN_REPAIRS = "3"
@@ -46,6 +49,12 @@ ANTI_LOOP_MAX_SAME_SIGNATURE = "5"
 ANTI_LOOP_MAX_SAME_FINGERPRINT = "2"
 ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION = "3"
 ANTI_LOOP_WINDOW_SECONDS = "900"
+
+# MONITOR (cron scheduled): retencion del DO + salud del registro de
+# modelo. Nunca repara ni encola. Los triggers NO se heredan: staging
+# declara los suyos en [env.staging.triggers].
+[triggers]
+crons = ["0 * * * *"]
 
 [[kv_namespaces]]
 binding = "MODEL_KV"
@@ -119,6 +128,7 @@ max_concurrency = 1
 # el estado queda aislado de produccion sin configuracion extra.
 
 [env.staging.vars]
+MONITOR_REPOS = "Rigohl/auto-healing-agent"
 QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
 QUOTA_MAX_REPAIRS_PER_REPO = "10"
 QUOTA_MAX_OPEN_REPAIRS = "3"
@@ -142,3 +152,6 @@ bindings = [
 [[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = ["IncidentState"]
+
+[env.staging.triggers]
+crons = ["0 * * * *"]

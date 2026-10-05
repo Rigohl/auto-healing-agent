@@ -10,9 +10,6 @@ Raíz limpia: `crates/`, `worker/`, `model/`, `tests/`, `scripts/`, `docs/`, `Ca
 
 | Antes (raíz) | Ahora |
 |--------------|--------|
-| agent.ts | `legacy/agent.ts` |
-| worker.js | `legacy/worker.js` |
-| CONFIG.md / SECRETS.md | `legacy/` |
-| mongodb-setup.sh | `legacy/` |
+| agent.ts, worker.js, CONFIG.md / SECRETS.md, mongodb-setup.sh | Eliminados; `legacy/` (archivo V0, no ejecutable) eliminado del repo el 2026-10-05 por decisión del dueño |
 
 Raíz visible en móvil debe priorizar **crates** y **worker**.

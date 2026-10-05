@@ -61,7 +61,7 @@ Layer arithmetic (from `crates/repair_nn_core/src/lib.rs:18`):
 ## Constraints
 
 - Free-tier Cloudflare + MongoDB Atlas M0 + GitHub Actions.
-- **No LLM in the repair loop.** Legacy HF path in `legacy/` is archived, not executed.
+- **No LLM in the repair loop.** The legacy HF V0 path (former `legacy/`) was removed from the repo on 2026-10-05 (owner decision); no HF path exists.
 - WASM target: `wasm32-unknown-unknown`.
 - No Pony. No free-form source generation.
 - Governance: `AUTO_MERGE=false`, `AUTO_DEPLOY=false`, `PRODUCTION_WRITE=false`, `HIGH_RISK_REPAIR=BLOCK`.

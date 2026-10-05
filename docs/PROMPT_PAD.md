@@ -35,7 +35,7 @@ La NN solo clasifica. CI declara PASS/FAIL. Always Free.
 3. Actualiza docs/DISCREPANCIES.md cuando encuentres gaps.
 4. Usa Result/?, nunca unwrap() en paths de producción/Worker.
 5. No inventes APIs ni cuotas; documenta herramientas no disponibles (Mem0, etc.).
-6. No ejecutes ni reactivies legacy/agent.ts ni generación libre HF.
+6. No introduzcas generación libre HF ni rutas V0 (legacy/ fue eliminado del repo el 2026-10-05).
 7. No implementes Pony.
 8. No declares éxito de reparación por confidence del modelo.
 9. Cada fase: reporta estado | evidencia | discrepancias | siguiente.
@@ -70,7 +70,6 @@ Ninguno salta CI, risk gates, patch limits, protected files, SoT, rollback.
 <repo_layout>
 crates/{repair_types,feature_engine,repair_nn_core,repair_nn_wasm,repair_operators,repair_train,repair_pr}
 worker/  model/  docs/  scripts/  .github/workflows/
-legacy/ = archivo muerto (no ejecutar)
 </repo_layout>
 
 <output_per_phase>

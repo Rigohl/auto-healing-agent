@@ -115,6 +115,9 @@ la API `branches/main/protection` responde 401 sin token admin;
 
 ## Secret legacy
 
-- `legacy/CONFIG.md` contiene un `VERCEL_ORG_ID` literal (id de equipo de la
-  era V0, archivada y no ejecutada). No se rota ni se elimina en silencio:
-  decision humana. Ver "Reconciliacion P1" en DISCREPANCIES.
+- `legacy/` (incluido `legacy/CONFIG.md`, que contenía un `VERCEL_ORG_ID`
+  literal de la era V0) fue eliminado del repositorio el 2026-10-05 por
+  decisión explícita del dueño. El org-id PERSISTE en el historial git,
+  pero `VERCEL_ORG_ID` es un Team ID (identificador de equipo, no un
+  token): no es una credencial rotable y no hay rotación pendiente.
+  Ver "Reconciliacion P1" en DISCREPANCIES (ítem 50).

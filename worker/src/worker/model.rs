@@ -103,3 +103,17 @@ pub async fn report(env: &Env) -> Result<Response> {
         .to_string(),
     )
 }
+
+/// Salud del registro de modelo para el MONITOR del cron: solo si existen
+/// los punteros current/stable. No expone pesos ni promociona nada.
+pub struct ModelHealth {
+    pub current: bool,
+    pub stable: bool,
+}
+
+pub async fn health(env: &Env) -> ModelHealth {
+    ModelHealth {
+        current: exists(env, KEY_CURRENT).await,
+        stable: exists(env, KEY_STABLE).await,
+    }
+}
