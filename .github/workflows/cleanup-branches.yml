@@ -1,16 +1,26 @@
 name: Branch cleanup
 
 # Borra ramas residuales 100% mergeadas en main (el BRANCH_DRIFT del check
-# `verify` se pone verde cuando solo queda origin/main). Fail-closed: si
-# una rama NO es ancestro completo de main, el workflow falla sin borrar.
+# `verify` se pone verde cuando solo queda origin/main). Fail-closed: una
+# rama que NO es ancestro completo de main JAMAS se borra.
 #
-# Disparadores (cierre operativo, 2026-10-03):
+# Disparadores (cierre operativo, 2026-10-03; deteccion automatica 2026-10-05):
 #   1. workflow_dispatch humano (Run workflow), igual que siempre.
 #   2. push a main: cada merge deja la rama efimera recien fusionada como
 #      residual. Este trigger la borra en el momento: ni el conector de
 #      GitHub ni ninguna API disponible pueden borrar refs o despachar
 #      workflows, asi que sin este trigger el BRANCH_DRIFT dependia de una
 #      accion humana en cada tanda de PRs.
+#
+# Deteccion automatica (2026-10-05): la lista estatica DEFAULT_BRANCHES
+# quedaba obsoleta en cada tanda de PRs y dejo residual
+# feat/scheduled-monitor tras el merge del PR #29 (BRANCH_DRIFT rojo en
+# main). Ahora, cuando no se pasa lista explicita (push a main, o dispatch
+# con input vacio), el paso enumera TODAS las ramas remotas excepto main y
+# borra solo las que pasan el check de ancestro: la politica de
+# docs/BRANCH_POLICY.md es que SOLO main persiste. En modo automatico una
+# rama con trabajo no integrado se salta con warning (nunca se borra); en
+# modo explicito (lista dada por un humano) sigue siendo error fatal.
 #
 # `superseded`: ramas con commits fuera de main cuyo contenido ya llego a
 # main por otra via. Se borran SIN check de ancestro, con la evidencia
@@ -21,7 +31,7 @@ on:
   workflow_dispatch:
     inputs:
       branches:
-        description: "Ramas a borrar (separadas por espacio); vacio = lista por defecto"
+        description: "Ramas a borrar (separadas por espacio); vacio = deteccion automatica"
         required: false
         default: ""
       superseded:
@@ -42,12 +52,6 @@ jobs:
       contents: write
       actions: write
     env:
-      # Lista por defecto (trigger push): SOLO ramas 100% fusionadas
-      # (compare ahead_by=0 contra main, verificado 2026-10-03).
-      DEFAULT_BRANCHES: >-
-        fix/do-sql-one-zero-rows
-        fix/pyh-30-staging-bindings
-        fix/smoke-test-unique-id
       # Superseded con evidencia (ver el paso de borrado): commits unicos
       # ya presentes en main via fix/deep-audit-2026-10-03-v2.
       DEFAULT_SUPERSEDED: fix/deep-audit-2026-10-03
@@ -58,19 +62,25 @@ jobs:
 
       - name: Verificar mergeadas y borrar
         env:
-          BRANCHES: ${{ github.event_name == 'workflow_dispatch' && inputs.branches || env.DEFAULT_BRANCHES }}
+          BRANCHES: ${{ github.event_name == 'workflow_dispatch' && inputs.branches || '' }}
           SUPERSEDED: ${{ github.event_name == 'workflow_dispatch' && inputs.superseded || env.DEFAULT_SUPERSEDED }}
         run: |
           set -euo pipefail
           git fetch origin
-          for b in $BRANCHES; do
-            if ! git ls-remote --heads origin "refs/heads/$b" | grep -q .; then
-              echo "::notice::origin/$b ya no existe; se ignora"
-              continue
+          AUTO=0
+          if [ -z "${BRANCHES:-}" ]; then
+            AUTO=1
+            BRANCHES="$(git ls-remote --heads origin | awk '{sub("refs/heads/", "", $2); print $2}' | grep -v '^main$' || true)"
+            if [ -z "$BRANCHES" ]; then
+              echo "::notice::no hay ramas residuales que evaluar"
             fi
+          fi
+          for b in $BRANCHES; do
             if git merge-base --is-ancestor "origin/$b" origin/main; then
               echo "borrando origin/$b (100% mergeada en main)"
               git push origin --delete "$b"
+            elif [ "$AUTO" -eq 1 ]; then
+              echo "::warning::origin/$b tiene commits fuera de main; NO se borra (modo automatico)"
             else
               echo "::error::origin/$b tiene commits fuera de main; NO se borra"
               exit 1
