@@ -23,6 +23,8 @@ pub mod monitor;
 pub mod queue_consumer;
 #[path = "quota.rs"]
 pub mod quota;
+#[path = "rules.rs"]
+pub mod rules;
 #[path = "security.rs"]
 pub mod security;
 

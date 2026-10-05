@@ -547,3 +547,77 @@ crates.io):
   (wasm.yml compila solo repair_nn_wasm); la bandera se verifica en el
   primer deploy (runbook 23.2). CI si verifica worker-check/test/clippy
   en host, guards (exec bit de build.sh) y gitleaks sobre el cambio.
+## 24. Reglas declarativas (P1): DSL sin dependencias (2026-10-05)
+
+### 24.1 Decision: wirefilter-engine diferido (con evidencia)
+
+Evaluado wirefilter-engine 0.6.1 (crates.io, repo cloudflare/wirefilter,
+lib "wirefilter"): su propio engine/Cargo.toml declara en
+[target.'cfg(target_family = "wasm")'.dependencies] que getrandom NO tiene
+fuente de aleatoriedad en wasm32-unknown y exige compilar con
+--features getrandom/wasm_js (y trae deps pesadas: backtrace,
+regex-automata, wildcard, rand). Precision de este PR: CI SI chequea el target wasm32 del worker
+(cargo check --target wasm32-unknown-unknown --release en ci.yml
+worker-check y en repair-validation), pero NINGUN job de Actions produce
+el artefacto desplegable (worker-build + wasm-bindgen + wasm-opt): la
+bandera solo se ejercitaria en el primer deploy real. Adoptarlo hoy
+sigue siendo un riesgo de deploy no verificable de punta a punta.
+Diferido; reevaluar cuando un job de CI ejecute worker-build de punta a
+punta.
+
+### 24.2 Lo implementado (patron blueprint pingoo / bel)
+
+worker/src/worker/rules.rs con CERO dependencias nuevas (worker-check,
+worker-test y worker-clippy lo verifican en host y compila igual a
+wasm32-unknown-unknown al ser Rust puro):
+
+- Config: var REPAIR_RULES (produccion y staging) = JSON array de
+  {id, expression, action}. Sin var o "[]" = sin reglas (no-op). Config
+  invalida = Err y el consumidor BLOQUEA (fail-closed: nunca dejar pasar
+  por defecto; decision=blocked_rules, reason=rules_invalid_config).
+- Esquema fijo y tipado (Scheme -> AST -> IR en miniatura, estilo
+  wirefilter): repo, signature, error_code, error_step, source, operator
+  (strings); confidence, risk (numericos); attempts (entero). Campos y
+  compatibilidad de tipos validados en COMPILE time: eval no puede
+  fallar por tipos (y el path sigue fail-closed de todos modos).
+- Sintaxis soportada: eq ne gt ge lt le, contains, in {"a" "b" "c"} (coma o
+  espacio), and / &&, or / ||, not / !, parentesis, literales "string",
+  1, 1.5, true, false. Ejemplo de var en wrangler.toml (string basico
+  de TOML: en el fuente \\\" produce la comilla escapada \" del JSON):
+    REPAIR_RULES = "[{\"id\":\"no-high-risk\",\"expression\":\"risk gt 0.9\",\"action\":\"block\"},{\"id\":\"watch-repo\",\"expression\":\"repo contains \\\"auto-healing\\\",\"action\":\"observe\"}]"
+- Acciones enum tipadas: block (la PRIMERA que coincide bloquea) u
+  observe (solo log). NO EXISTE allow: las reglas NUNCA pueden saltarse
+  el gate determinista (repair_operators::gate) ni la autoridad VERIFY
+  (GitHub Actions). Inmunidad razonada por diseno, no por convencion.
+- Integracion: queue_consumer.rs pasos 2.5 (carga fail-closed) y 2.6
+  (evaluacion): block => decision=blocked_by_rule, reason=rule:<id>,
+  verify_status=blocked en el DO; observe => log "rules observed".
+- Tests (worker-test, host): eq/ne, comparaciones numericas,
+  precedencia and/or, not y simbolos, contains, in con coma y espacio,
+  primera block gana, observe reporta, config vacia = no-op, y 11 casos
+  de rechazo fail-closed (JSON invalido, campo desconocido, tipos
+  mezclados, orden entre strings, tokens sobrantes, string sin cerrar,
+  conjunto vacio, id vacio, accion allow inexistente, campo JSON extra).
+
+### 24.3 Cumplimiento de la guia oficial de Rust Workers
+
+Verificado contra developers.cloudflare.com/workers/languages/rust/
+(pagina actualizada 2026-04-23; revisada 2026-10-05):
+
+- Entrypoints: macros #[event(...)] de workers-rs. En uso: fetch (webhook),
+  scheduled (cron MONITOR) y queue (consumidor de colas). La guia exige
+  la feature "queue" en Cargo.toml para el evento queue: declarada en
+  worker/Cargo.toml (worker = { version = "0.8", features = ["queue"] }).
+- Bindings via Env (tipos documentados en la guia): Var (REPAIR_RULES,
+  MONITOR_REPOS, QUOTA_*, ANTI_LOOP_*), KvStore (MODEL_KV), ObjectNamespace
+  (INCIDENT_STATE) y Queue (REPAIR_QUEUE).
+- Bundling: worker-build como manda la guia, invocado por [build] de
+  wrangler.toml (bash ./build.sh); wasm-bindgen y wasm-opt son automaticos.
+- Tamano del binario: [profile.release] del template oficial (lto = true,
+  strip = true, codegen-units = 1) alineado en worker/Cargo.toml, mas
+  opt-level = "s" (optimizacion extra a tamano).
+- Panics: --panic-unwind (seccion 23); mejor que el minimo de la guia
+  (fuente: README de cloudflare/workers-rs, "Panic Recovery with
+  --panic-unwind").
+- Deploy: wrangler deploy / Workers Builds. Sigue siendo accion humana
+  (runbook 23.2): CI nunca despliega (regla de autoridad de PART3).

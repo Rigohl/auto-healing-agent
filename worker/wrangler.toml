@@ -39,6 +39,10 @@ enabled = true
 # MONITOR: repos que el cron scheduled barre (worker/src/worker/monitor.rs).
 # Registro en configuracion (separacion config/estado): vacio = no-op con log.
 MONITOR_REPOS = "Rigohl/auto-healing-agent"
+# REGLAS DECLARATIVAS (P1): JSON de {id, expression, action}. "[]" o
+# sin var = sin reglas (no-op). Config invalida = fail-closed (bloquea).
+# Sintaxis y esquema: worker/src/worker/rules.rs.
+REPAIR_RULES = "[]"
 QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
 QUOTA_MAX_REPAIRS_PER_REPO = "10"
 QUOTA_MAX_OPEN_REPAIRS = "3"
@@ -129,6 +133,7 @@ max_concurrency = 1
 
 [env.staging.vars]
 MONITOR_REPOS = "Rigohl/auto-healing-agent"
+REPAIR_RULES = "[]"
 QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
 QUOTA_MAX_REPAIRS_PER_REPO = "10"
 QUOTA_MAX_OPEN_REPAIRS = "3"

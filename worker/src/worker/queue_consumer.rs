@@ -16,6 +16,7 @@ use crate::runtime::{
     anti_loop::AntiLoopConfig,
     model,
     quota::QuotaConfig,
+    rules,
     security::{fnv1a64, urlencode},
     MAX_RISK, MIN_CONFIDENCE,
 };
@@ -213,6 +214,19 @@ async fn process(
     let signature = FailureSignature::from_incident(&incident);
     let features = extract(&incident, &signature);
 
+    // 2.5 Reglas declarativas (P1): filtrado adicional fail-closed.
+    // REPAIR_RULES invalido => bloqueado (nunca dejar pasar por defecto);
+    // sin var o "[]" => sin reglas (no-op). Esquema y sintaxis: rules.rs.
+    let ruleset = match rules::load(&env) {
+        Ok(r) => r,
+        Err(e) => {
+            console_error!("rules config invalid: {}", e);
+            let rqs = blocked_result_qs(&task, "blocked_rules", "rules_invalid_config");
+            crate::runtime::call_do(env, task.repo.clone(), rqs).await?;
+            return Ok(());
+        }
+    };
+
     let loaded = match model::load(&env).await {
         Ok(m) => m,
         Err(_) => {
@@ -224,6 +238,44 @@ async fn process(
     };
     let action = loaded.net.predict(&features);
     let gate_ok = gate(&action, MIN_CONFIDENCE, MAX_RISK).is_ok();
+
+    // 2.6 Evaluacion declarativa: las reglas solo restringen (block) u
+    // observan (observe); NUNCA permiten saltarse el gate determinista
+    // (autoridad: repair_operators::gate + VERIFY en GitHub Actions).
+    let rule_ctx = rules::RuleContext::from_incident_and_action(
+        &incident,
+        &task.repo,
+        &task.signature,
+        action.repair_operator.as_str(),
+        action.confidence,
+        action.risk,
+    );
+    match ruleset.evaluate(&rule_ctx) {
+        Ok((Some(rule_id), observed)) => {
+            if !observed.is_empty() {
+                console_log!("rules observed: {}", observed.join(","));
+            }
+            console_warn!("rule blocked: {}", rule_id);
+            let reason = format!("rule:{}", rule_id);
+            let rqs = blocked_result_qs(&task, "blocked_by_rule", &reason);
+            crate::runtime::call_do(env, task.repo, rqs).await?;
+            return Ok(());
+        }
+        Ok((None, observed)) => {
+            if !observed.is_empty() {
+                console_log!("rules observed: {}", observed.join(","));
+            }
+        }
+        Err(e) => {
+            // No deberia ocurrir (compile valida campos y tipos); el
+            // path sigue fail-closed: nunca unwrap().
+            console_error!("rules eval error: {}", e);
+            let rqs = blocked_result_qs(&task, "blocked_rules", "rules_eval_error");
+            crate::runtime::call_do(env, task.repo, rqs).await?;
+            return Ok(());
+        }
+    }
+
     let decision = if gate_ok {
         "allow"
     } else {
