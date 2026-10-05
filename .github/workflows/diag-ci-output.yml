@@ -1,8 +1,7 @@
 name: Diag CI output (temporal)
 
 # TEMPORAL: publica la salida de test/clippy/fmt en un issue para
-# diagnostico. Borrar cuando el arbol este verde (no es parte del
-# pipeline permanente).
+# diagnostico. Borrar cuando el arbol este verde.
 on:
   push:
     branches: [main]
@@ -26,60 +25,45 @@ jobs:
           components: clippy, rustfmt
       - name: workspace test
         run: |
-          set +e
-          cargo test --workspace > /tmp/t.log 2>&1
+          cargo test --workspace > /tmp/t.log 2>&1 || true
           echo "exit=$?" >> /tmp/t.log
       - name: workspace clippy
         run: |
-          set +e
-          cargo clippy --workspace --all-targets -- -D warnings > /tmp/c.log 2>&1
+          cargo clippy --workspace --all-targets \
+            -- -D warnings > /tmp/c.log 2>&1 || true
           echo "exit=$?" >> /tmp/c.log
       - name: workspace fmt
         run: |
-          set +e
-          cargo fmt --all -- --check > /tmp/f.log 2>&1
+          cargo fmt --all -- --check > /tmp/f.log 2>&1 || true
           echo "exit=$?" >> /tmp/f.log
       - name: worker clippy
         run: |
-          set +e
-          cargo clippy --manifest-path worker/Cargo.toml --all-targets \
-            -- -D warnings > /tmp/wc.log 2>&1
+          cargo clippy --manifest-path worker/Cargo.toml \
+            --all-targets -- -D warnings > /tmp/wc.log 2>&1 || true
           echo "exit=$?" >> /tmp/wc.log
       - name: worker fmt
         run: |
-          set +e
-          cargo fmt --manifest-path worker/Cargo.toml -- --check \
-            > /tmp/wf.log 2>&1
+          cargo fmt --manifest-path worker/Cargo.toml \
+            -- --check > /tmp/wf.log 2>&1 || true
           echo "exit=$?" >> /tmp/wf.log
       - name: post output issue
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require("fs");
-            const files = {
-              "workspace-test": "/tmp/t.log",
-              "workspace-clippy": "/tmp/c.log",
-              "workspace-fmt": "/tmp/f.log",
-              "worker-clippy": "/tmp/wc.log",
-              "worker-fmt": "/tmp/wf.log",
-            };
-            let body = "Diag CI output @ " + context.sha + "\n";
-            for (const [k, p] of Object.entries(files)) {
-              let t = "";
-              try { t = fs.readFileSync(p, "utf8"); } catch (e) {
-                t = "no output"; }
-              if (t.length > 9000) {
-                t = t.slice(0, 3000) + "\n...[cut]...\n" \
-                  + t.slice(-6000);
-              }
-              body += "\n## " + k + "\n```\n" + t + "\n```\n";
-            }
-            if (body.length > 60000) {
-              body = body.slice(0, 60000);
-            }
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: "diag-ci-output " + context.sha.slice(0, 7),
-              body: body,
-            });
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "Diag CI output @ $GITHUB_SHA"
+            for pair in "workspace-test:t" \
+                "workspace-clippy:c" "workspace-fmt:f" \
+                "worker-clippy:wc" "worker-fmt:wf"; do
+              name="${pair%%:*}"
+              key="${pair##*:}"
+              echo ""
+              echo "## $name"
+              echo "```"
+              tail -c 9000 "/tmp/$key.log" || true
+              echo "```"
+            done
+          } > /tmp/body.md
+          gh issue create \
+            --title "diag-ci-output ${GITHUB_SHA:0:7}" \
+            --body-file /tmp/body.md
