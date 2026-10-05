@@ -101,10 +101,14 @@ fn validate_branches(base: &str, head: &str) -> Result<(), String> {
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/'))
     };
     if !allowed(base) || !allowed(head) {
-        return Err(format!("rejecting branch names base={base:?} head={head:?}"));
+        return Err(format!(
+            "rejecting branch names base={base:?} head={head:?}"
+        ));
     }
     if matches!(head, "main" | "master") {
-        return Err(format!("rejecting head {head:?}: would overwrite the base branch"));
+        return Err(format!(
+            "rejecting head {head:?}: would overwrite the base branch"
+        ));
     }
     if !head.starts_with("auto-repair/") {
         return Err(format!(
