@@ -1,7 +1,7 @@
 # Mem0 Analysis for Auto-Healing Agent
 
 > **Date**: 2026-10-05
-> **Status**: Deferred (Not Critical)
+> **Status**: Deferred in worker; workspace connector OPERATIONAL (verified 2026-10-05)
 > **Compatibility**: Cloudflare Workers + Rust/WASM
 
 ---
@@ -22,7 +22,7 @@
 
 | Aspect | Status | Details |
 |--------|--------|---------|
-| **Connector** | ❌ Not Operational | MCP connector prepared but not functional |
+| **Connector** | ✅ Operational in workspace (2026-10-05) | Verified live: add_memory, search_memories, get_memories, update/delete, entities. NOT wired into worker code |
 | **Integration** | ❌ Not Implemented | No code in repo uses Mem0 |
 | **Design** | ✅ Ready | Documented in `PART4_PERSISTENCE_TRANSVERSAL.md` |
 | **Priority** | ⚠️ Low | Not critical (DO + KV cover state) |
@@ -155,7 +155,7 @@ async fn search_mem0(env: &Env, query: &str) -> Result<Vec<String>, Error> {
 ## ⚠️ **Why Mem0 is Deferred**
 
 1. **Not Critical**: The agent works without it (DO + KV + GitHub cover all needs).
-2. **Connector Not Ready**: MCP connector is not operational (2026-10-05).
+2. **Connector Now Available**: The workspace Mem0 connector became operational on 2026-10-05 (verified with live search calls; project memories found for auto-healing-agent). The deferral is now a priority/YAGNI decision, NOT an availability blocker. The WORKER still cannot use it until the `worker::Request` integration is implemented.
 3. **YAGNI Principle**: "You Aren’t Gonna Need It" – Add only when needed.
 4. **Honesty Rule**: Don’t pretend to use services that aren’t integrated.
 
@@ -165,7 +165,7 @@ async fn search_mem0(env: &Env, query: &str) -> Result<Vec<String>, Error> {
 
 When Mem0 is needed, follow these steps:
 
-- [ ] **Verify MCP connector is operational** (test with `curl`).
+- [x] **MCP connector operational** — verified live 2026-10-05 (workspace connector; still test the raw HTTP API endpoint with `curl` before wiring the worker).
 - [ ] **Add `MEM0_API_KEY` to Cloudflare secrets**.
 - [ ] **Add `MEM0_ENABLED` flag to `wrangler.toml`** (default: `false`).
 - [ ] **Implement `store_in_mem0()` in `queue_consumer.rs`**.
