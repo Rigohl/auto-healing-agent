@@ -107,7 +107,9 @@ CREATE INDEX IF NOT EXISTS idx_repair_events ON repair_events (repository, day, 
 pub struct IncidentState {
     sql: SqlStorage,
     // P2: handle del estado para set_alarm/get_alarm (Storage del DO).
-    state: State,
+    // NOTA: el nombre NO es `state`; eso tapiaria el metodo handler del
+    // endpoint GET /state (E0615: un campo no es callable).
+    do_state: State,
 }
 
 /// Ejecuta una query sin filas esperadas (DDL/DML) y AGOTA el cursor: el
@@ -130,7 +132,7 @@ impl DurableObject for IncidentState {
                 exec_write(&sql, stmt, Vec::new()).expect("incident_state schema");
             }
         }
-        Self { sql, state }
+        Self { sql, do_state: state }
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
@@ -170,7 +172,7 @@ impl DurableObject for IncidentState {
         )? as i64;
         if open > 0 {
             if let Err(e) = self
-                .state
+                .do_state
                 .storage()
                 .set_alarm(ALARM_RETENTION_INTERVAL_MS)
                 .await
@@ -453,10 +455,10 @@ impl IncidentState {
     /// Se invoca desde fetch() en /ingest (actividad real del repositorio):
     /// un DO sin incidentes nunca programa alarms ni paga retencion.
     pub async fn arm_alarm_if_needed(&self) {
-        match self.state.storage().get_alarm().await {
+        match self.do_state.storage().get_alarm().await {
             Ok(None) => {
                 if let Err(e) = self
-                    .state
+                    .do_state
                     .storage()
                     .set_alarm(ALARM_RETENTION_INTERVAL_MS)
                     .await
