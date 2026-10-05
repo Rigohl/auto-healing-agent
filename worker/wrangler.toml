@@ -5,18 +5,16 @@
 #   1. Secrets de GitHub: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
 #   2. Secret del Worker: WEBHOOK_SECRET (el webhook falla cerrado sin el -> 503).
 #   3. El id de MODEL_KV es el del namespace real de la cuenta.
-#   4. Las colas de abajo las auto-provisiona Wrangler 4 durante el deploy:
-#      no hace falta crearlas antes. Para crearlas a mano:
+#   4. Las colas de abajo deben existir antes del deploy:
 #        npx wrangler queues create auto-healing-repairs
 #        npx wrangler queues create auto-healing-repairs-dlq
 #        npx wrangler queues create auto-healing-repairs-staging
 #        npx wrangler queues create auto-healing-repairs-dlq-staging
-#   5. Secret del Worker: GITHUB_TOKEN (PAT con Contents:RW y PullRequests:RW).
+#   6. Secret del Worker: GITHUB_TOKEN (PAT con Contents:RW y PullRequests:RW).
 #      npx wrangler secret put GITHUB_TOKEN. Sin el, la reparacion es
 #      fail-closed: blocked github_token_not_configured (nunca 500).
-#   6. Workers Builds NO honra el [build] de este archivo (docs de Cloudflare)
+#   5. Workers Builds NO honra el [build] de este archivo (docs de Cloudflare)
 #      y su imagen no lista Rust: en el dashboard (Settings > Build) usar
-#        Root directory:  worker
 #        Build command:  bash build.sh
 #        Deploy command: npx wrangler deploy
 #
@@ -29,7 +27,7 @@
 
 name = "auto-healing-agent"
 main = "build/worker/shim.mjs"
-compatibility_date = "2026-10-01"
+compatibility_date = "2024-09-23"
 
 [build]
 command = "bash ./build.sh"
@@ -37,6 +35,9 @@ command = "bash ./build.sh"
 # Workers Logs: invocaciones y errores consultables con `wrangler tail`.
 [observability]
 enabled = true
+# Muestreo de logs de invocacion: 1 = 100% (volumen actual bajo; bajar
+# si crece el trafego para controlar facturacion de Workers Logs).
+head_sampling_rate = 1
 
 # Quotas y anti-loop: configuracion separada del estado (el estado vive en el
 # Durable Object). Cambiar valores NO requiere tocar el esquema SQL.
