@@ -34,5 +34,9 @@ repair_operators = { path = "../crates/repair_operators", default-features = fal
 [profile.release]
 lto = true
 opt-level = "s"
-strip = true
+# strip = true ELIMINADO (fix 2026-10-05): con --panic-unwind, wasm-bindgen genera
+# catch wrappers que necesitan la tabla externref con su simbolo. strip borra ese
+# simbolo del WASM y el build falla con "externref table required for catch
+# wrappers" (evidencia: PR #33 diag, main 66f930fe). El ahorro de tamano se
+# conserva con opt-level = "s" + lto + codegen-units = 1.
 codegen-units = 1
