@@ -17,6 +17,7 @@ use repair_types::{
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
     model,
+    param_derive,
     quota::QuotaConfig,
     rules,
     security::{fnv1a64, urlencode},
@@ -50,8 +51,7 @@ pub struct WebhookPayload {
     pub source: String,
     #[serde(default)]
     pub error_code: String,
-    #[serde(def
-ault)]
+    #[serde(default)]
     pub error_step: String,
     #[serde(default)]
     pub command: String,
@@ -118,8 +118,7 @@ impl WebhookPayload {
 ///
 /// Sin campo `attempts`: el body del mensaje es inmutable al reintentar,
 /// asi que un contador aqui no sobreviviria a los redeliveries. El numero de
-/// intentos REALES vive en el DO (columna `incidents
-.attempts`, la incrementa
+/// intentos REALES vive en el DO (columna `incidents.attempts`, la incrementa
 /// `/attempt`); ver `RETRY_DELAY_SECONDS`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueTask {
@@ -168,8 +167,7 @@ pub async fn consume(batch: MessageBatch<QueueTask>, env: Env) -> Result<()> {
                 // mensaje cae a la DLQ (su consumidor lo registra como
                 // veneno). El corte autoritativo por numero de intentos es el
                 // DO (/attempt), no este consumidor.
-           
-     console_warn!(
+                console_warn!(
                     "retry correlation_id={} en {}s: {}",
                     task.correlation_id,
                     RETRY_DELAY_SECONDS,
@@ -223,8 +221,7 @@ async fn process(
     let features = extract(&incident, &signature);
 
     // 2.5 Reglas declarativas (P1): filtrado adicional fail-closed.
-    // REPAIR_RULES invalido => bl
-oqueado (nunca dejar pasar por defecto);
+    // REPAIR_RULES invalido => bloqueado (nunca dejar pasar por defecto);
     // sin var o "[]" => sin reglas (no-op). Esquema y sintaxis: rules.rs.
     let ruleset = match rules::load(&env) {
         Ok(r) => r,
@@ -245,12 +242,7 @@ oqueado (nunca dejar pasar por defecto);
             return Ok(());
         }
     };
-    let mut action = loaded.net.predict(&features);
-    // Derivacion determinista de parametros (PASO 2): sin esto, todo
-    // DependencyRepair/VersionPin terminaba bloqueado en missing_param
-    // aunque el diagnostico fuera correcto. Sin I/O, sin LLM: solo
-    // extraccion textual del mensaje (worker/src/worker/param_derive.rs).
-    crate::runtime::param_derive::ensure_params(&mut action, &incident);
+    let action = loaded.net.predict(&features);
     let gate_ok = gate(&action, MIN_CONFIDENCE, MAX_RISK).is_ok();
 
     // 2.6 Evaluacion declarativa: las reglas solo restringen (block) u
@@ -277,8 +269,7 @@ oqueado (nunca dejar pasar por defecto);
         }
         Ok((None, observed)) => {
             if !observed.is_empty() {
-                console_log!("rules
- observed: {}", observed.join(","));
+                console_log!("rules observed: {}", observed.join(","));
             }
         }
         Err(e) => {
@@ -332,8 +323,7 @@ oqueado (nunca dejar pasar por defecto);
 
 fn blocked_result_qs(task: &QueueTask, decision: &str, reason: &str) -> String {
     format!(
-        "/result?correlation_id={}&incident
-_id={}&decision={}&fingerprint=&verify_status=blocked&evidence_ref=&reason={}",
+        "/result?correlation_id={}&incident_id={}&decision={}&fingerprint=&verify_status=blocked&evidence_ref=&reason={}",
         urlencode(&task.correlation_id),
         urlencode(&task.incident_id),
         decision,
@@ -388,8 +378,7 @@ async fn attempt_repair(
     // Target file del edit acotado (paso 1): package.json para operadores de
     // dependencias; el resto lo nombra el parametro `file` de la accion.
     let target_path = match action.repair_operator {
-        OperatorId::DependencyRepair | OperatorId
-::VersionPin => String::from("package.json"),
+        OperatorId::DependencyRepair | OperatorId::VersionPin => String::from("package.json"),
         _ => match action.parameters.get("file") {
             Some(f) if !f.is_empty() => f.clone(),
             _ => {
@@ -399,6 +388,15 @@ async fn attempt_repair(
             }
         },
     };
+
+    // La NN clasifica el OPERADOR pero V0 no emite parametros (no tiene
+    // cabezas para ellos): sin derivarlos, todo intento con el gate en
+    // verde terminaba bloqueado con missing_param aunque el diagnostico
+    // fuera correcto (auditoria de codigo 2026-10-05). Derivacion textual
+    // acotada y determinista (param_derive); lo no derivable sigue
+    // bloqueado (fail-closed: nunca se inventa un valor).
+    let mut action = action.clone();
+    param_derive::ensure_params(&mut action, incident);
 
     // Contenido actual (todo el I/O vive aqui, no en el crate no_std).
     let before = match client.get_file(&target_path).await {
@@ -413,7 +411,7 @@ async fn attempt_repair(
     };
 
     // Edit acotado + diff unificado (crates/repair_operators/src/diff.rs).
-    let edit = match diff::generate_edit(action, incident, |p: &str| {
+    let edit = match diff::generate_edit(&action, incident, |p: &str| {
         if p == target_path {
             Some(before.clone())
         } else {
@@ -445,8 +443,7 @@ async fn attempt_repair(
         task.correlation_id
     );
     let pr_body = format!(
-        "## Auto-repair (bounded, deterministic)\n\n- operator: `{}`\n- correlation_id: `{}`\n- incident: `{}`\n- confidence: `{:.3}` risk: `{:.3}`\n\n```diff\n{}\n```\n\nVERIFY authority = GitHub Actions. CI results post to `/github/callback`. This PR is never auto-app
-roved or auto-merged.",
+        "## Auto-repair (bounded, deterministic)\n\n- operator: `{}`\n- correlation_id: `{}`\n- incident: `{}`\n- confidence: `{:.3}` risk: `{:.3}`\n\n```diff\n{}\n```\n\nVERIFY authority = GitHub Actions. CI results post to `/github/callback`. This PR is never auto-approved or auto-merged.",
         action.repair_operator.as_str(),
         task.correlation_id,
         task.incident_id,
@@ -472,7 +469,7 @@ roved or auto-merged.",
     };
 
     // PASO 3: RepairCase persistible en KV (alternativa sin Mongo).
-    persist_case(env, task, incident, action, &pr_url).await;
+    persist_case(env, task, incident, &action, &pr_url).await;
 
     console_log!("repair pr opened: {} {}", task.correlation_id, pr_url);
     Ok(RepairOutcome::Repaired { pr_url })
@@ -503,8 +500,7 @@ async fn persist_case(
 ) {
     let case = RepairCase {
         incident_id: task.incident_id.clone(),
-        signature: FailureSignature::from_incident(incident
-),
+        signature: FailureSignature::from_incident(incident),
         action: action.clone(),
         // Pendiente de VERIFY: Skipped = aun sin verificacion (PASS/FAIL
         // llega por /github/callback; el reward se computa al verificar).
