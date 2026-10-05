@@ -1,0 +1,58 @@
+name: Diag worker-build (temporal)
+
+# TEMPORAL: publica el output exacto de worker/build.sh (worker-build
+# --release --panic-unwind) como comentario del PR porque los logs de
+# Actions requieren auth de admin. ELIMINAR en el commit que arregle.
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compilar WASM real capturando output
+        run: |
+          set +e
+          bash worker/build.sh > /tmp/build.log 2>&1
+          echo "EXIT_BUILD=$?" >> $GITHUB_ENV
+          set -e
+          if [ $(wc -c < /tmp/build.log) -gt 60000 ]; then
+            tail -c 50000 /tmp/build.log > /tmp/build_tail.log
+            echo "...(truncado, cola del log)..." > /tmp/build_tail.log
+            cat /tmp/build_tail.log >> /tmp/build_tail.log
+            tail -c 50000 /tmp/build.log > /tmp/build_out.log
+            { echo "...(log truncado, se muestra la cola)..."; tail -c 50000 /tmp/build.log; } > /tmp/build_out.log
+          else
+            cp /tmp/build.log /tmp/build_out.log
+          fi
+
+      - name: Comentar el PR
+        uses: actions/github-script@v7
+        env:
+          EXIT_BUILD: ${{ env.EXIT_BUILD }}
+        with:
+          script: |
+            const fs = require('fs');
+            const log = fs.readFileSync('/tmp/build_out.log', 'utf8');
+            const exitCode = process.env.EXIT_BUILD || 'unknown';
+            const sha = context.sha.slice(0, 8);
+            const body = `## Diag worker-build (temporal, commit ${sha})
+            EXIT_BUILD=${exitCode}
+            \`\`\`
+            ${log}
+            \`\`\``;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body.slice(0, 60000),
+            });
