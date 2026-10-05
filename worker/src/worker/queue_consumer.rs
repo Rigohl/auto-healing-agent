@@ -242,7 +242,7 @@ async fn process(
     // 2.6 Evaluacion declarativa: las reglas solo restringen (block) u
     // observan (observe); NUNCA permiten saltarse el gate determinista
     // (autoridad: repair_operators::gate + VERIFY en GitHub Actions).
-    let rule_ctx = rules::from_incident_and_action(
+    let rule_ctx = rules::RuleContext::from_incident_and_action(
         &incident,
         &task.repo,
         &task.signature,
