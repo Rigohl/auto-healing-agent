@@ -151,8 +151,7 @@ pub fn gate(action: &RepairAction, min_c: f32, max_r: f32) -> Result<(), Pipelin
         phase: PipelinePhase::Policy,
         operator_id: Some(action.repair_operator as u8),
         policy_decision: PolicyDecision::DenyWithReason(alloc::format!(
-            
-"c={:.3} r={:.3} op={}",
+            "c={:.3} r={:.3} op={}",
             action.confidence,
             action.risk,
             action.repair_operator.as_str()
@@ -262,7 +261,6 @@ mod tests {
             assert_eq!(p.operator, op, "operator {raw} must round-trip");
             if op == OperatorId::NoOp || op == OperatorId::Unknown {
                 assert!(p.advisory, "{op:?} must stay advisory");
-    
         }
         }
     }

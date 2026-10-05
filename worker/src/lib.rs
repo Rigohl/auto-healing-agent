@@ -95,8 +95,7 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     // 2. Body. Un payload corrupto no debe tumbar el isolate.
     let body = match req.text().await {
         Ok(text) => text,
-        Err(_) => return
- Response::error("invalid_body", 400),
+        Err(_) => return Response::error("invalid_body", 400),
     };
     if body.trim().is_empty() {
         return Response::error("empty_body", 400);

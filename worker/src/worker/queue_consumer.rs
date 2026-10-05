@@ -170,8 +170,7 @@ pub async fn consume(batch: MessageBatch<QueueTask>, env: Env) -> Result<()> {
                     task.correlation_id,
                     RETRY_DELAY_SECONDS,
                     err
-         
-       );
+                );
                 message.retry_with_options(
                     &QueueRetryOptionsBuilder::new()
                         .with_delay_seconds(RETRY_DELAY_SECONDS)

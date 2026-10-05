@@ -109,8 +109,7 @@ pub fn unified_diff(edit: &FileEdit) -> String {
         out.push('\n');
     }
     for line in new_mid {
-    
-    out.push('+');
+        out.push('+');
         out.push_str(line);
         out.push('\n');
     }
@@ -130,7 +129,7 @@ pub fn generate_edit<F>(
     action: &RepairAction,
     _incident: &Incident,
     fetch: F,
-) -> Result<String, DiffError>
+) -> Result<FileEdit, DiffError>
 where
     F: Fn(&str) -> Option<String>,
 {
@@ -304,8 +303,7 @@ mod tests {
     fn fetch_map(files: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> + '_ {
         move |path| {
             files
-         
-       .iter()
+                .iter()
                 .find(|(p, _)| *p == path)
                 .map(|(_, c)| c.to_string())
         }
@@ -426,7 +424,6 @@ mod tests {
 
     #[test]
     fn oversized_file_is_refused() {
-
         let big = "x".repeat(MAX_FILE_BYTES + 1);
         let a = action(
             OperatorId::SourceRepair,
