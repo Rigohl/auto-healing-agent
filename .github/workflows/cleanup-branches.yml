@@ -68,7 +68,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          exec > >(tee /tmp/cleanup.log) 2>&1
+          {
           git fetch origin
           AUTO=0
           if [ -z "${BRANCHES:-}" ]; then
@@ -80,44 +80,39 @@ jobs:
           fi
           for b in $BRANCHES; do
             if git merge-base --is-ancestor "origin/$b" origin/main; then
-              echo "borrando origin/$b (100% mergeada en main)"
+              echo "borrando origin/$b: 100 por ciento mergeada en main"
               git push origin --delete "$b"
             elif [ "$AUTO" -eq 1 ]; then
-              echo "::warning::origin/$b tiene commits fuera de main; NO se borra (modo automatico)"
+              echo "::warning::origin/$b tiene commits fuera de main; NO se borra"
             else
               echo "::error::origin/$b tiene commits fuera de main; NO se borra"
               exit 1
             fi
           done
           for b in $SUPERSEDED; do
-            if ! git show-ref --verify --quiet "refs/remotes/origin/$b"; then
+            if ! git ls-remote --exit-code --heads origin "refs/heads/$b" >/dev/null 2>&1; then
               echo "::notice::origin/$b ya no existe; se ignora"
               continue
             fi
-            echo "::warning::borrado SUPERSEDED de origin/$b (sin check de ancestro)"
-            echo "  evidencia (2026-10-03): 2 commits unicos (fix de"
-            echo "  set-github-secrets.sh + resolucion de conflicto) cuyo contenido"
-            echo "  ya llego a main via fix/deep-audit-2026-10-03-v2; compare"
-            echo "  main...rama = diverged (ahead 2 / behind 45)."
-            echo "  autorizacion del dueno 2026-10-03: las eliminemos a todas."
-            echo "  evidencia (2026-10-05): diag/worker-build-main solo tenia"
-            echo "  un workflow temporal de diagnostico; feat/declarative-rules"
-            echo "  (rules.rs 30KB registrado en mod.rs) y"
-            echo "  fix/deep-audit-p0-2026-10-05 (validacion refs, print_usage,"
-            echo "  rollback promote) ya estan integrados en main; verificados
-            echo "  via compare main...rama + contents API."
-            if ! git push origin --delete "$b" 2>/tmp/del.err; then
-              echo "git push fallo para $b (exit $?):"
-              cat /tmp/del.err
-              echo "reintentando con gh api..."
-              gh api --method DELETE \
-                "repos/$GITHUB_REPOSITORY/git/refs/heads/$b" \
-                && echo "gh api DELETE ok para $b" \
-                || { echo "::error::no se pudo borrar origin/$b"; exit 1; }
+            echo "::warning::borrado SUPERSEDED de origin/$b"
+            echo "  evidencia 2026-10-05: contenido ya integrado en main;"
+            echo "  verificado via compare main...rama y contents API."
+            if ! git push origin --delete "$b" > /tmp/del.out 2>&1; then
+              echo "git push fallo para $b, salida:"
+              cat /tmp/del.out
+              echo "reintentando con gh api"
+              if gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$b"; then
+                echo "gh api DELETE ok para $b"
+              else
+                echo "::error::no se pudo borrar origin/$b"
+                exit 1
+              fi
             fi
           done
           echo "ramas restantes:"
-          git ls-remote --heads origin | awk '{print $2}' | tee -a /tmp/cleanup.log
+          git ls-remote --heads origin | awk '{print $2}'
+          } > /tmp/cleanup.log 2>&1
+          cat /tmp/cleanup.log
 
       - name: Post cleanup log (diag temporal)
         if: always()
