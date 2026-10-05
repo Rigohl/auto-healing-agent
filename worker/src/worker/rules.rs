@@ -742,7 +742,7 @@ mod tests {
     /// ctx(). Devuelve true si bloquea.
     fn blocks(expr: &str) -> bool {
         let raw = format!(
-            "[{{\"id\":\"r1\",\"expression\":{:?},\"action\":\"block\}}]",
+            "[{{\"id\":\"r1\",\"expression\":{:?},\"action\":\"block\"}}]",
             expr
         );
         let rs = Ruleset::from_json(&raw).expect("regla valida");
@@ -783,7 +783,7 @@ mod tests {
     fn not_and_symbol_operators() {
         assert!(!blocks("not (repo eq \"acme/api\")"));
         assert!(!blocks("!(repo eq \"acme/api\")"));
-        assert!(blocks("repo eq \"acme/api\" && attempts eq 2 || risk gt 1"));
+        assert!(blocks("repo eq \"acme/api\" && attempts eq 2 || risk gt 1.0"));
     }
 
     #[test]
@@ -791,14 +791,14 @@ mod tests {
         assert!(blocks("signature contains \"E500\""));
         assert!(blocks("repo contains \"api\""));
         assert!(!blocks("repo contains \"nope\""));
-        assert!(blocks("error_step in {build deploy}"));
-        assert!(blocks("error_step in {build, deploy}"));
-        assert!(!blocks("error_step in {deploy, test}"));
+        assert!(blocks("error_step in {\"build\" \"deploy\"}"));
+        assert!(blocks("error_step in {\"build\", \"deploy\"}"));
+        assert!(!blocks("error_step in {\"deploy\", \"test\"}"));
     }
 
     #[test]
     fn block_first_match_wins_and_observe_reports() {
-        let raw = "[{\"id\":\"o1\",\"expression\":\"attempts ge 1\",\"action\":\"observe\"},{\"id\":\"b1\",\"expression\":\"confidence ge 0.5\",\"action\":\"block\"},{\"id\":\"b2\",\"expression\":\"risk lt 1\",\"action\":\"block\"}]";
+        let raw = "[{\"id\":\"o1\",\"expression\":\"attempts ge 1\",\"action\":\"observe\"},{\"id\":\"b1\",\"expression\":\"confidence ge 0.5\",\"action\":\"block\"},{\"id\":\"b2\",\"expression\":\"risk lt 1.0\",\"action\":\"block\"}]";
         let rs = Ruleset::from_json(raw).expect("ruleset valido");
         let (blocked, observed) = rs.evaluate(&ctx()).expect("eval");
         assert_eq!(blocked.as_deref(), Some("b1"));
@@ -869,7 +869,7 @@ mod tests {
         assert_eq!(c.get(F_SOURCE), Some(&Value::Str("ci".to_string())));
         assert_eq!(c.get(F_OPERATOR), Some(&Value::Str("pin_dependency".to_string())));
         assert_eq!(c.get(F_CONFIDENCE), Some(&Value::Num(0.75)));
-        assert_eq!(c.get(F_RISK), Some(&Value::Num(0.3)));
+        assert_eq!(c.get(F_RISK), Some(&Value::Num(0.3f32 as f64)));
         assert_eq!(c.get(F_ATTEMPTS), Some(&Value::Int(3)));
         assert_eq!(c.get(F_REPO), Some(&Value::Str("acme/api".to_string())));
     }
