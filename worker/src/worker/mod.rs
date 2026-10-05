@@ -17,6 +17,8 @@ pub mod anti_loop;
 pub mod incident_state;
 #[path = "model.rs"]
 pub mod model;
+#[path = "monitor.rs"]
+pub mod monitor;
 #[path = "queue_consumer.rs"]
 pub mod queue_consumer;
 #[path = "quota.rs"]
