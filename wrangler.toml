@@ -1,6 +1,0 @@
-name = "auto-healing-agent"
-main = "worker/build/worker/shim.mjs"
-compatibility_date = "2024-09-23"
-
-[build]
-command = "cd worker && bash build.sh"
