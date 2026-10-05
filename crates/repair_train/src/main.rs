@@ -85,3 +85,8 @@ fn main() {
         weights.len()
     );
 }
+
+fn print_usage() {
+    eprintln!("uso: repair-train [--out <ruta>]");
+    eprintln!("  entrena con la config V1 y escribe el payload KV (WEIGHT_COUNT f32 en texto)");
+}
