@@ -16,5 +16,5 @@ Notas de governance:
 - `MIN_CONFIDENCE=0.55` / `MAX_RISK=0.45` (`GOVERNANCE.md`, SoT).
 - Ninguna fase se declara completada por `confidence` del modelo: la autoridad
   de VERIFY es GitHub Actions (`NO_LLM_POLICY.md`).
-- Mem0, R2, D1, DO y el driver Rust de MongoDB siguen **planificados y
+- - Mem0, R2 y el driver Rust de MongoDB siguen **planificados y ausentes del codigo**. El **DO SI esta implementado** (clase `IncidentState`, binding `INCIDENT_STATE`, wrangler.toml; ~1.000 lineas en `worker/src/worker/incident_state.rs`): dedup, idempotencia, quota y anti-loop.
   ausentes del código** (`DISCREPANCIES` 9, 10, 21). No se inventan.
