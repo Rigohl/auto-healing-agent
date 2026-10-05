@@ -34,7 +34,8 @@ Detalle y reglas: `docs/BRANCH_POLICY.md`.
     `thiserror` ni `wasm-bindgen` sin uso).
 - ~~kilo/bionic-owl-ok9~~ — 30 archivos / +7634. Absorbido **depurado**:
   `docs/REFERENCES.md` (enlaces oficiales + glosario corregido).
-  Descartados: `DOCUMENTATION.md` 
+  Descartados: `DOCUM
+ENTATION.md` 
 
 
 (afirma "MongoDB ✅ Conectado" sin driver,
@@ -76,7 +77,8 @@ docs/
 | Workflow | Resultado |
 |----------|-----------|
 | CI / test | ✅ `cargo test -p repair_types -p feature_engine -p repair_nn_core -p repair_operators` — 27 tests |
-| CI / worker | ✅ `cargo check --manifest-path worker/Cargo.toml --all-targets` (worker enlaza los 4 crates) |
+| CI / worker | ✅ `cargo check --manifest-path worker/Cargo.toml --all-t
+argets` (worker enlaza los 4 crates) |
 | CI / clippy | ✅ `-D warnings` |
 | WASM | ✅ `cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown` |
 | Security | ✅ |
@@ -90,13 +92,14 @@ crate `no_std`); corregido en `acddb02` con `libm::expf`. Ver `DISCREPANCIES` 26
 |---|------|
 | 25 | **Parcialmente cerrado por el encoder V1**: los 64 slots llevan señal explícita y un test lo comprueba sobre 1000 muestras sintéticas. Lo que sigue faltando es la señal de AST/CFG, que sigue sin extraerse. |
 | — | El webhook ya corre `Incident → features → NN → gate` y falla cerrado sin secret. Falta: abrir PR efímera, persistir `RepairCase`, y `apply()` sigue sin generar diff real. |
-| 9, 10 | Sin bindings R2/D1/DO, sin driver Rust de MongoDB, sin conector Mem0. Diseñado, no implementado. |
+| 9, 10 | Sin bindings R2/D1, sin driver Rust de MongoDB, sin conector Mem0 (diseñado, no implementado). El **DO SI esta implementado** (binding `INCIDENT_STATE`, wrangler.toml; `incident_state.rs`). |
 | 5, 6, 22 | **Train + export cerrados (2026-10-03)**: `crates/repair_train` (trainer offline V1, sin LLM ni `rand`) + `model/current.txt` (payload KV validado en CI con el `extract`/`predict` reales). Pendiente: promoción **humana** a `MODEL_KV` (`model/current`/`model/stable`); un wrapper `scripts/train` sigue sin existir (el bin `repair-train` lo cubre). |
 | — | `apply()` tiene un brazo por operador y devuelve `CandidatePatch` (files + steps), pero no genera diff ni escribe ficheros. |
 | — | E2E completo no verde (ver `docs/E2E_CHECKLIST.md`). |
 | 7, 52 | Sin `Cargo.lock`, **por decisión** (ítem 52): las versiones resuelven en cada build de CI. Cuatro ramas pidieron versionarlos; se explica en DISCREPANCIES por qué no se adoptan tal cual. |
 | 34 | Parcial: clippy con `-D warnings` activo y **verde** (los seis checks de `ci.yml` pasan en el PR #13); falta `cargo fmt --check` bloqueante, que necesita toolchain local para aplicar el formato. |
-| 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`) y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están
+| 51 | **Resuelto** en la unificación del 2026-10-02: el worker no compilaba (lifetime en `model.rs`, import sin usar en `incident_state.rs`)
+ y `repair_nn_wasm` no pasaba clippy. Los tres errores del log del run `36963179520` están
  c
 or
 regidos. |
@@ -122,7 +125,8 @@ Ningún success se declara por confidence del modelo: la autoridad es GitHub Act
   eliminada; tope real = `max_retries=3` → DLQ + `/attempt` del DO), guard
   `correlation_stale_or_missing` en `/attempt`/`/result`/`/poison`,
   `from_state` real en auditoría, TTL de idempotencia + retención (24 h /
-  7 días), `idem_key` canónica del contrato, cola real en `record_poison`.
+  7 días), `idem_key` canónica del contrato, cola real en `record_poi
+son`.
   Detalle: `DISCREPANCIES` 58–66.
 - **Docs sincronizadas** (GOVERNANCE, CONTRACT §2, 
 PAR
@@ -163,7 +167,8 @@ T3
 
 - **P2 de `CONTRACT.md` §3 cerrado como crate**: `crates/repair_pr` — generador
   de diff unificado real (`similar` 3.2.0) + apertura de PR (`octocrab` 0.54.2
-  con `secrecy` 0.10.3; versiones verificadas contra crates.io). 7º miembro del
+  con `secrecy` 0.10
+.3; versiones verificadas contra crates.io). 7º miembro del
   workspace; bin `repair-pr` (`diff` offline | `pr` desde rama efímera).
 - **Fail-closed de extremo a extremo**: token solo de `GITHUB_TOKEN` (jamás
   adivinado ni logueado); bundle vacío ⇒ `Blocked` (NO INVENTED DIFFS); PR
@@ -196,7 +201,8 @@ código huérfano o errores") usando GitHub, Context7, Sentry y Linear
   nuevo en ci.yml (cargo-machete 0.9.2 + cargo-shear 1.14.0, verificados
   contra docs.rs) + claims nuevos `NO_ORPHAN_CRATES` y
   `NO_ORPHAN_DEPS_CI` en verify_repo.py.
-- `wrangler.toml` raíz: era un **symlink** a `worker/wrangler.toml` (el
+- `wrangler.toml` raíz: era un **symlink** a `worker/wrangler.to
+ml` (el
   raw de GitHub sirve el contenido del destino — por eso parecía texto
   plano). La API disponible no recrea symlinks: queda como archivo de
   solo-comentarios (fail-closed: un wrangler desde la raíz no despliega
@@ -233,7 +239,8 @@ código huérfano o errores") usando GitHub, Context7, Sentry y Linear
   (DISCREPANCIES item 73).
 - `cleanup-branches.yml` corre solo al push a `main`: fail-closed
   (`git merge-base --is-ancestor`), camino `superseded` con evidencia y
-  re-dispatch de `consistency.yml`. Objetivo: `BRANCH_DRIFT` verde sin
+  
+re-dispatch de `consistency.yml`. Objetivo: `BRANCH_DRIFT` verde sin
   dispatch humano.
 - `worker-check` (ci.yml) también corre
   `cargo fmt --manifest-path worker/Cargo.toml -- --check`: el árbol

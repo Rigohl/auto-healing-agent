@@ -79,6 +79,18 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         return Response::error("unauthorized", 401);
     }
 
+    // 1b. delivery_id real de la entrega (BUG-03): el header
+    //     X-GitHub-Delivery identifica la ENTREGA, distinta del incidente
+    //     (payload.id). Derivar ambos del mismo campo colapsaba la clave
+    //     de idempotencia en "por incidente" y descartaba entregas nuevas
+    //     del mismo incidente como duplicadas durante el TTL. Sin header,
+    //     fallback al incident_id (comportamiento anterior, conservador).
+    let header_delivery: String = req
+        .headers()
+        .get("x-github-delivery")?
+        .filter(|d| !d.is_empty())
+        .unwrap_or_default();
+
     // 2. Body. Un payload corrupto no debe tumbar el isolate.
     let body = match req.text().await {
         Ok(text) => text,
@@ -102,10 +114,10 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     let incident_id = payload.incident_id();
     let repo = payload.repo();
     let signature = payload.signature_str();
-    let delivery_id = if payload.id.is_empty() {
+    let delivery_id = if header_delivery.is_empty() {
         incident_id.clone()
     } else {
-        payload.id.clone()
+        header_delivery
     };
     let now = crate::runtime::now_ms();
     let correlation_id = format!(

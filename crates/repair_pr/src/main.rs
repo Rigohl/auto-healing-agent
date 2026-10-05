@@ -21,7 +21,7 @@
 //! The CLI never declares a repair PASS: that is GitHub Actions' verdict
 //! (CONTRACT.md §4).
 
-use std::path::Path;
+use std::path::{Component, Path};
 use std::process::Command;
 use std::process::ExitCode;
 
@@ -71,8 +71,58 @@ struct PrInput {
     files: Vec<FileAfter>,
 }
 
+/// Validacion fail-closed de rutas relativas (auditoria BUG-02): el JSON de
+/// entrada es dato no confiable. Rechaza rutas absolutas, traversal con ..,
+/// prefijos - (argument injection hacia git) y componentes no Normal.
+fn validate_rel_path(path: &str) -> Result<(), String> {
+    if path.is_empty() {
+        return Err("rejecting empty file path".to_string());
+    }
+    if path.starts_with('-') {
+        return Err(format!("rejecting path {path:?}: starts with '-'"));
+    }
+    for component in Path::new(path).components() {
+        if !matches!(component, Component::Normal(_)) {
+            return Err(format!(
+                "rejecting path {path:?}: component {component:?} escapes the repo"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Validacion fail-closed de refs git (auditoria BUG-02): head_branch debe
+/// ser una rama efimera auto-repair/* con caracteres permitidos, nunca
+/// main/master (un push sobrescribiria la base).
+fn validate_branches(base: &str, head: &str) -> Result<(), String> {
+    let allowed = |s: &str| {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/'))
+    };
+    if !allowed(base) || !allowed(head) {
+        return Err(format!(
+            "rejecting branch names base={base:?} head={head:?}"
+        ));
+    }
+    if matches!(head, "main" | "master") {
+        return Err(format!(
+            "rejecting head {head:?}: would overwrite the base branch"
+        ));
+    }
+    if !head.starts_with("auto-repair/") {
+        return Err(format!(
+            "rejecting head {head:?}: ephemeral branches must be auto-repair/*"
+        ));
+    }
+    Ok(())
+}
+
 fn cmd_diff(input_path: &str) -> Result<ExitCode, String> {
     let input: DiffInput = read_json(input_path)?;
+    for file in &input.files {
+        validate_rel_path(&file.path)?;
+    }
     let bundle = patch_bundle(&input.files);
     if bundle_is_empty(&bundle) {
         eprintln!("repair-pr: BLOCKED - empty diff bundle (CONTRACT.md §3: no invented diffs)");
@@ -93,6 +143,13 @@ fn cmd_pr(input_path: &str, rest: &[String]) -> Result<ExitCode, String> {
     let mut input: PrInput = read_json(input_path)?;
     let base = input.request.base_branch.clone();
     let head = input.request.head_branch.clone();
+
+    // 0. Fail-closed ANTES de tocar git o el disco: rutas y refs salen del
+    //    JSON de entrada (dato no confiable, auditoria BUG-02).
+    validate_branches(&base, &head)?;
+    for file in &input.files {
+        validate_rel_path(&file.path)?;
+    }
 
     // 1. Ephemeral branch from the base ref (fail-closed on git errors).
     prepare_branch(repo_dir, &base, &head)?;
@@ -222,4 +279,29 @@ fn run_git(repo_dir: &str, args: &[String]) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_traversal_paths() {
+        assert!(validate_rel_path("src/lib.rs").is_ok());
+        assert!(validate_rel_path("../outside.txt").is_err());
+        assert!(validate_rel_path("/etc/passwd").is_err());
+        assert!(validate_rel_path("-rf").is_err());
+        assert!(validate_rel_path("a/../../b").is_err());
+        assert!(validate_rel_path("").is_err());
+    }
+
+    #[test]
+    fn rejects_dangerous_branches() {
+        assert!(validate_branches("main", "auto-repair/inc-1").is_ok());
+        assert!(validate_branches("main", "main").is_err());
+        assert!(validate_branches("main", "master").is_err());
+        assert!(validate_branches("main", "feature/x").is_err());
+        assert!(validate_branches("main", "auto-repair/a;rm -rf").is_err());
+        assert!(validate_branches("", "auto-repair/inc-1").is_err());
+    }
 }

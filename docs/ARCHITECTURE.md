@@ -44,7 +44,8 @@ RepairCase → MongoDB (memory, diseñado) + TrainingExample (offline `repair_tr
 2. Normalizes to `Incident`.
 3. `feature_engine::extract` → `[f32; 64]`.
 4. `RepairNet::predict` (or WASM `RepairModel::predictFromFeatures`) → `RepairAction`.
-5. Gate on `confidence >= 0.55` / `risk <= 0.45`.
+5. Gate on `c
+onfidence >= 0.55` / `risk <= 0.45`.
 6. If actionable → `repair_operators::apply` → `CandidatePatch`.
 7. If actionable, `repair_pr` builds the unified diff (`similar`) and opens the PR (`octocrab`, fail-closed); GitHub Actions verifies (PASS / FAIL / BLOCKED) — **CI is VERIFY authority, never model confidence**.
 8. Persist `RepairCase`.
@@ -74,4 +75,5 @@ Layer arithmetic (from `crates/repair_nn_core/src/lib.rs:18`):
 | MongoDB | incidents, signatures, repair cases, audit, training examples |
 | KV (`MODEL_KV`) | Model pointers (current/stable) |
 | R2 | WASM artifacts / checkpoints (when real artifact exists) |
-| Mem0 / D1 / DO SQLite | Deferred — not provisioned |
+| Mem0 / D1 | Deferred — not provisioned |
+| DO SQLite | **Provisioned** (binding `INCIDENT_STATE`, clase `IncidentState`) |

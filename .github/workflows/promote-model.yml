@@ -2,7 +2,7 @@ name: Promote model to KV
 
 # GOVERNANCE.md: AUTO_DEPLOY=false, PRODUCTION_WRITE solo bajo dispatch
 # humano (Run workflow). Sube model/current.txt (payload KV, 2863 f32)
-# a MODEL_KV en las claves model/current y model/stable. Con esto el
+# a MODEL_KV en las claves model/current (con respaldo previo del current actual en model/rollback; BUG-07: subir el mismo payload a current y stable anulaba el fallback). Con esto el
 # Worker puede cargar la red (antes: blocked_no_model). Requiere los
 # secrets CLOUDFLARE_API_TOKEN (Workers KV Storage: Edit) y
 # CLOUDFLARE_ACCOUNT_ID. Alternativa sin setup: dashboard de Cloudflare
@@ -15,9 +15,9 @@ on:
         required: true
         default: "73014a1b32b7446397461a8d438c8ab2"
       keys:
-        description: "Claves destino (separadas por espacio)"
+        description: "Claves destino (separadas por espacio; por defecto solo model/current)"
         required: true
-        default: "model/current model/stable"
+        default: "model/current"
 
 concurrency:
   group: promote-model-kv
@@ -52,6 +52,27 @@ jobs:
             fi
           done
 
+      - name: Respaldar current -> model/rollback
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NS: ${{ inputs.kv_namespace_id }}
+        run: |
+          set -euo pipefail
+          # BUG-07: guardar el current previo como model/rollback ANTES de
+          # sobrescribirlo; sin este paso /model reportaria rollback:
+          # "missing" para siempre y no habria vuelta atras.
+          if npx wrangler@4 kv key get "model/current" --namespace-id "$NS" > /tmp/current-payload 2>/dev/null; then
+            if [ -s /tmp/current-payload ]; then
+              npx wrangler@4 kv key put "model/rollback" --namespace-id "$NS" --path /tmp/current-payload
+              echo "model/rollback actualizado con el current previo ($(wc -w < /tmp/current-payload) tokens)"
+            else
+              echo "model/current vacio: nada que respaldar"
+            fi
+          else
+            echo "model/current inexistente (primer promote): nada que respaldar"
+          fi
+
       - name: Subir payload
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -62,7 +83,7 @@ jobs:
           set -euo pipefail
           for key in $KEYS; do
             echo "wrangler kv key put $key -> namespace $NS"
-            npx wrangler@latest kv key put "$key" --namespace-id "$NS" --path model/current.txt
+            npx wrangler@4 kv key put "$key" --namespace-id "$NS" --path model/current.txt
           done
 
       - name: Verificacion (read-back)
@@ -74,7 +95,7 @@ jobs:
         run: |
           set -euo pipefail
           for key in $KEYS; do
-            n=$(npx wrangler@latest kv key get "$key" --namespace-id "$NS" 2>/dev/null | wc -w)
+            n=$(npx wrangler@4 kv key get "$key" --namespace-id "$NS" 2>/dev/null | wc -w)
             if [ "$n" -ne 2863 ]; then
               echo "::error::la clave $key devolvio $n tokens, se esperan 2863"
               exit 1

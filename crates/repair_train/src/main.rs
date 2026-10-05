@@ -63,6 +63,18 @@ fn main() {
         holdout_m.accuracy, holdout_m.actionable, holdout_m.mean_confidence, holdout_m.mean_risk
     );
 
+    // BUG-05: validar ANTES de escribir. El orden anterior escribia el
+    // artefacto en model/current.txt y solo entonces comprobaba el umbral:
+    // un re-entrenamiento degradado dejaba en disco (listo para un git add)
+    // un payload que el propio comando declaraba no promovible.
+    if train_m.accuracy < MIN_ARTIFACT_ACCURACY || holdout_m.accuracy < MIN_ARTIFACT_ACCURACY {
+        eprintln!(
+            "accuracy por debajo del umbral V1 ({MIN_ARTIFACT_ACCURACY}): no se escribe {}",
+            out.display()
+        );
+        process::exit(1);
+    }
+
     fs::write(&out, &payload).unwrap_or_else(|e| {
         eprintln!("no se pudo escribir {}: {e}", out.display());
         process::exit(1);
@@ -72,13 +84,6 @@ fn main() {
         out.display(),
         weights.len()
     );
-
-    if train_m.accuracy < MIN_ARTIFACT_ACCURACY || holdout_m.accuracy < MIN_ARTIFACT_ACCURACY {
-        eprintln!(
-            "accuracy por debajo del umbral V1 ({MIN_ARTIFACT_ACCURACY}): no promover este payload"
-        );
-        process::exit(1);
-    }
 }
 
 fn print_usage() {

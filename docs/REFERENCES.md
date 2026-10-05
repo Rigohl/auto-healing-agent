@@ -38,6 +38,7 @@ No se repiten aquí para evitar dos fuentes de verdad.
 | wasm-opt (WABT) | https://github.com/WebAssembly/wabt |
 | cargo-bloat | https://github.com/RazrFalcon/cargo-bloat |
 | worker-build | https://github.com/cloudflare/workers-rs/
+
 tree/main/worker-build |
 
 Target fijado en `rust-toolchain.toml`: `wasm32-unknown-unknown`, toolchain `stable`.
@@ -85,7 +86,8 @@ de R2/D1/DO en el árbol: ver `docs/DISCREPANCIES.md` ítems 9, 10 y 21.
 | Context7 (repo) | https://github.com/upstash/context7 |
 
 Obligatorio antes de escribir código contra cualquier API/crate externo.
-Detalle en `docs/PART4_PERSISTENCE_TRANSVERSAL.md`.
+Detalle en `docs/PART4_PERSIST
+ENCE_TRANSVERSAL.md`.
 
 ## Glosario (corregido contra el código)
 
@@ -123,7 +125,8 @@ Donde la fuente absorbida discrepaba, se indica.
 | Tema | URL |
 |------|-----|
 | similar (diff unificado) | https://crates.io/crates/similar |
-| similar (docs.rs) | https://docs.rs/si
+| similar (docs.rs) | https://docs.rs/s
+i
 milar |
 | octocrab (cliente GitHub / PR) | https://crates.io/crates/octocrab |
 | octocrab (docs.rs) | https://docs.rs/octocrab |
@@ -153,14 +156,15 @@ Versiones ancladas en `crates/repair_pr/Cargo.toml` (verificadas contra crates.i
 |---------|------------|
 | **KV** | Store global de Cloudflare. En el código: solo puntero `model/current` |
 | **R2** | Object storage S3-compatible. **Sin binding en `wrangler.toml`** |
-| **DO** | Entidad stateful de Cloudflare. **Sin uso en el código** |
+| **DO** | Entidad stateful de Cloudflare. **EN USO**: `INCIDENT_STATE` (clase `IncidentState`, wrangler.toml) es la pieza transaccional central (dedup, idempotencia, quota, anti-loop) en `worker/src/worker/incident_state.rs` (~1.000 lineas) |
 | **MongoDB** | Memoria operacional/semántica según diseño. **Sin driver Rust** |
 | **Mem0** | Memoria semántica. **Conector pendiente, no operativo** |
 | **Notion** | Autoridad de diseño e histórico. **Nunca** autoridad del código |
 
 ### Siglas
 
-CF, CI, CD, DO, KV, NN, PR, R2, WASM, AST, HMAC, TTL, ECE, P99, OOM, DLQ.
+CF, CI, CD, DO, KV, NN, PR, R2, WAS
+M, AST, HMAC, TTL, ECE, P99, OOM, DLQ.
 
 ## Lo que se descartó de la fuente
 
