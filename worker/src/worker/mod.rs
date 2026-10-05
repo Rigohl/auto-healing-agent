@@ -21,8 +21,6 @@ pub mod incident_state;
 pub mod model;
 #[path = "monitor.rs"]
 pub mod monitor;
-#[path = "param_derive.rs"]
-pub mod param_derive;
 #[path = "queue_consumer.rs"]
 pub mod queue_consumer;
 #[path = "quota.rs"]
