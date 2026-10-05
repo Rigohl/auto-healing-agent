@@ -51,6 +51,7 @@ jobs:
     permissions:
       contents: write
       actions: write
+      issues: write
     env:
       # Superseded con evidencia (ver el paso de borrado): commits unicos
       # ya presentes en main via fix/deep-audit-2026-10-03-v2.
