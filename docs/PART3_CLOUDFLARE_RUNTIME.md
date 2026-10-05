@@ -547,3 +547,53 @@ crates.io):
   (wasm.yml compila solo repair_nn_wasm); la bandera se verifica en el
   primer deploy (runbook 23.2). CI si verifica worker-check/test/clippy
   en host, guards (exec bit de build.sh) y gitleaks sobre el cambio.
+## 24. Reglas declarativas (P1): DSL sin dependencias (2026-10-05)
+
+### 24.1 Decision: wirefilter-engine diferido (con evidencia)
+
+Evaluado wirefilter-engine 0.6.1 (crates.io, repo cloudflare/wirefilter,
+lib "wirefilter"): su propio engine/Cargo.toml declara en
+[target.'cfg(target_family = "wasm")'.dependencies] que getrandom NO tiene
+fuente de aleatoriedad en wasm32-unknown y exige compilar con
+--features getrandom/wasm_js (y trae deps pesadas: backtrace,
+regex-automata, wildcard, rand). NINGUN job de CI compila el worker WASM
+real (wasm.yml compila solo repair_nn_wasm), asi que adoptarlo hoy seria
+un riesgo de deploy imposible de verificar en CI (la bandera solo se
+ejercitaria en el primer deploy). Diferido; reevaluar cuando CI pueda
+compilar el worker a wasm32-unknown-unknown.
+
+### 24.2 Lo implementado (patron blueprint pingoo / bel)
+
+worker/src/worker/rules.rs con CERO dependencias nuevas (worker-check,
+worker-test y worker-clippy lo verifican en host y compila igual a
+wasm32-unknown-unknown al ser Rust puro):
+
+- Config: var REPAIR_RULES (produccion y staging) = JSON array de
+  {id, expression, action}. Sin var o "[]" = sin reglas (no-op). Config
+  invalida = Err y el consumidor BLOQUEA (fail-closed: nunca dejar pasar
+  por defecto; decision=blocked_rules, reason=rules_invalid_config).
+- Esquema fijo y tipado (Scheme -> AST -> IR en miniatura, estilo
+  wirefilter): repo, signature, error_code, error_step, source, operator
+  (strings); confidence, risk (numericos); attempts (entero). Campos y
+  compatibilidad de tipos validados en COMPILE time: eval no puede
+  fallar por tipos (y el path sigue fail-closed de todos modos).
+- Sintaxis soportada: eq ne gt ge lt le, contains, in {a b c} (coma o
+  espacio), and / &&, or / ||, not / !, parentesis, literales "string",
+  1, 1.5, true, false. Ejemplo:
+    REPAIR_RULES = [
+      {"id":"no-high-risk","expression":"risk gt 0.9","action":"block"},
+      {"id":"watch-repo","expression":"repo contains \"auto-healing\"","action":"observe"}
+    ]
+- Acciones enum tipadas: block (la PRIMERA que coincide bloquea) u
+  observe (solo log). NO EXISTE allow: las reglas NUNCA pueden saltarse
+  el gate determinista (repair_operators::gate) ni la autoridad VERIFY
+  (GitHub Actions). Inmunidad razonada por diseno, no por convencion.
+- Integracion: queue_consumer.rs pasos 2.5 (carga fail-closed) y 2.6
+  (evaluacion): block => decision=blocked_by_rule, reason=rule:<id>,
+  verify_status=blocked en el DO; observe => log "rules observed".
+- Tests (worker-test, host): eq/ne, comparaciones numericas,
+  precedencia and/or, not y simbolos, contains, in con coma y espacio,
+  primera block gana, observe reporta, config vacia = no-op, y 12 casos
+  de rechazo fail-closed (JSON invalido, campo desconocido, tipos
+  mezclados, orden entre strings, tokens sobrantes, string sin cerrar,
+  conjunto vacio, id vacio, accion allow inexistente, campo JSON extra).
