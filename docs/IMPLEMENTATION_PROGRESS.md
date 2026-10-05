@@ -111,7 +111,7 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
   - ✅ Workers (HTTP + Queues)
   - ✅ Durable Objects (SQLite)
   - ✅ KV (Model Weights + RepairCases)
-  - ❌ Mem0 (Connector not operational)
+  - ⚠️ Mem0 (workspace connector OPERATIONAL since 2026-10-05; worker does not call it yet)
   - ❌ MongoDB (No Rust/WASM driver)
   - ❌ R2 (Not needed)
 
@@ -123,13 +123,26 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
 
 ---
 
+## ✅ **Verified Evidence (2026-10-05, live connectors)**
+
+| Item | Evidence |
+|------|----------|
+| CI in main | 100% green after PR #29 (MONITOR, merge `3136ea8a`) and PR #30 (panic=unwind, merge `f123f12`); only Workers Builds red (item 56, human action) |
+| panic=unwind | `worker/build.sh` in main compiles with `worker-build --release --panic-unwind` (blob `aa7f10cf`, verified) |
+| PR #32 (open) | New job `worker-build-artifact` in ci.yml: FIRST CI job that compiles the real worker WASM |
+| Worker deploy | ❌ PENDING: the deployed Cloudflare script is a 275-byte "Hello world" placeholder; the real worker has NEVER been deployed (runbook docs §23.2) |
+| Branches | Repo has ONLY `main` (cleanup-branches.yml auto-deletes fully merged branches) |
+| Mem0 | Workspace connector OPERATIONAL (verified live 2026-10-05: add/search/get memories); no usage from the worker yet |
+
+---
+
 ## 📌 **Blockers**
 
 | Blocker | Impact | Solution |
 |---------|--------|----------|
 | No `octocrab` in WASM | Cannot open PRs | Use `worker::Request` for GitHub API |
 | No MongoDB driver for WASM | Cannot persist `RepairCase` | Use KV instead |
-| No Mem0 connector | Cannot use semantic memory | Deferred (not critical) |
+| ~~No Mem0 connector~~ | RESOLVED 2026-10-05: connector operational in workspace (add/search/get memories verified live) | Use `worker::Request` to call Mem0 API when semantic memory is needed |
 
 ---
 
@@ -149,6 +162,7 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
 |------|--------|--------|
 | 2026-10-05 | Created `IMPLEMENTATION_PROGRESS.md` | Vibe Code |
 | 2026-10-05 | Fixed `/wrangler.toml` for `Root directory = /` | Vibe Code |
+| 2026-10-05 | Updated with verified evidence (PRs #29/#30 merged, PR #32 open, Mem0 workspace connector operational) | Vibe |
 
 ---
 
