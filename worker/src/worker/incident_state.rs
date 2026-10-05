@@ -132,7 +132,10 @@ impl DurableObject for IncidentState {
                 exec_write(&sql, stmt, Vec::new()).expect("incident_state schema");
             }
         }
-        Self { sql, do_state: state }
+        Self {
+            sql,
+            do_state: state,
+        }
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
@@ -140,7 +143,7 @@ impl DurableObject for IncidentState {
         let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
         match parts.as_slice() {
             ["health"] => Response::ok("ok"),
-["ingest"] => {
+            ["ingest"] => {
                 let resp = self.ingest(&req);
                 // P2: con actividad real, garantiza retencion proxima por
                 // alarm aunque el cron no dispare. Idempotente (get_alarm).
@@ -180,7 +183,7 @@ impl DurableObject for IncidentState {
                 console_error!("incident_state alarm re-arm failed: {}", e);
             }
         }
-        resp
+        Ok(resp)
     }
 }
 
