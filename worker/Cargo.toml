@@ -16,7 +16,13 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # workers-rs 0.8: Durable Objects (#[durable_object] + SqlStorage, SQLite) y
 # Queues (feature "queue" + #[event(queue)]) con soporte mantenido.
-worker = { version = "0.8", features = ["queue"] }
+worker = { version = "0.8", features = ["queue", "http", "axum"] }
+# La feature "http" de worker activa transitivamente worker-macros/http
+# (worker 0.8: http = ["worker-macros/http"]); NO hace falta declarar
+# worker-macros como dependencia directa (cargo-machete la marca sin uso).
+# Capa HTTP: Router de Axum (migration del Router legacy de workers-rs).
+axum = { version = "0.8", default-features = false, features = ["json"] }
+tower-service = "0.3.3"
 console_error_panic_hook = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
