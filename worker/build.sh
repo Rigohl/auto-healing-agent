@@ -17,6 +17,19 @@ set -euo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# GUARDA (2026-10-06, tras la falla real de Workers Builds "Could not detect
+# a directory containing static files"): si este script termina corriendo sin
+# su wrangler.toml al lado, es que alguien lo copio/movo a la raiz o cambio el
+# Root directory del dashboard. Fallar AQUI con mensaje claro es mejor que un
+# deploy sin bindings (KV/DO/Queues) que responde 503 en cada request.
+if [ ! -f wrangler.toml ] || [ ! -f Cargo.toml ]; then
+  echo "[build.sh] ERROR: falta wrangler.toml o Cargo.toml junto a build.sh." >&2
+  echo "[build.sh] Este script DEBE vivir en worker/ (Root directory: worker)." >&2
+  echo "[build.sh] NUNCA recrear wrangler.toml/build.sh en la raiz del repo" >&2
+  echo "[build.sh] (deploy sin bindings, commit 2ad38a8)." >&2
+  exit 1
+fi
+
 export PATH="$HOME/.cargo/bin:$PATH"
 
 if ! command -v cargo >/dev/null 2>&1; then
