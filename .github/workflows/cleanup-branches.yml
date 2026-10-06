@@ -58,7 +58,7 @@ jobs:
       # Superseded con evidencia (ver el paso de borrado): commits unicos
       # ya presentes en main via otra via. Los tres siguientes llegaron a main
       # byte-exactos via el PR #56 (P2 alarma DO, P3 sampling, docs backlog).
-      DEFAULT_SUPERSEDED: fix/deep-audit-2026-10-03 diag/worker-build-main feat/declarative-rules fix/deep-audit-p0-2026-10-05 feat/p2-do-alarm-retention feat/p3-observability-sampling docs/workers-best-practices-2026-10-05
+      DEFAULT_SUPERSEDED: fix/deep-audit-2026-10-03 diag/worker-build-main feat/declarative-rules fix/deep-audit-p0-2026-10-05 feat/p2-do-alarm-retention feat/p3-observability-sampling docs/workers-best-practices-2026-10-05 feat/reland-param-derive
     steps:
       - uses: actions/checkout@v4
         with:
