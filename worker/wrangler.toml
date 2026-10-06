@@ -18,9 +18,12 @@
 #        Root directory:  worker   (OBLIGATORIO: con raiz desplegaria sin bindings)
 #        Build command:   bash build.sh
 #        Deploy command:  npx wrangler deploy
-#      NOTA (commit 2ad38a8, 2026-10-05): NO recrear wrangler.toml ni build.sh
-#      en la raiz del repo. Existieron para "Root directory = /" y provocaban
-#      deploys sin KV/DO/Queues (webhook fail-closed en cada request).
+#      NOTA (actualizada 2026-10-06): la raiz tiene AHORA un wrangler.toml
+#      ESPEJO COMPLETO de este archivo (decision del dueno, revierte
+#      parcialmente 2ad38a8) para que Workers Builds con Root directory = /
+#      despliegue con TODOS los bindings. scripts/validate-preflight.sh
+#      (guard 6) exige equivalencia de claves criticas entre ambos: si
+#      divergan, CI falla. build.sh sigue PROHIBIDO en la raiz.
 #
 # Produccion = entorno por defecto: deploy.yml ejecuta `npx wrangler deploy`
 # sin --env, y el nombre del Worker del dashboard debe coincidir con `name`.
