@@ -92,8 +92,9 @@ async fn main(
 /// GET /model: informe de salud del registro de modelos. `model::report`
 /// devuelve una respuesta del crate `worker`; se transporta preservando
 /// status y cuerpo en la respuesta de Axum.
+#[worker::send]
 async fn model_report(State(env): State<Env>) -> AxumResponse {
-    let report = match model::report(&env).await {
+    let mut report = match model::report(&env).await {
         Ok(report) => report,
         Err(e) => {
             console_error!("model report failed: {e}");
@@ -115,7 +116,12 @@ async fn model_report(State(env): State<Env>) -> AxumResponse {
 /// idempotencia, quota, anti-loop) -> Queue. Los extractores de Axum
 /// (State, HeaderMap, Bytes) sustituyen a Request/RouteContext; el
 /// algoritmo y los cuerpos de error son identicos al del Router legacy.
-async fn handle_webhook(State(env): State<Env>, headers: HeaderMap, body: Bytes) -> AxumResponse {
+#[worker::send]
+async fn handle_webhook(
+    State(env): State<Env>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> AxumResponse {
     // 1. Autorizacion fail-closed. Sin secret configurado el endpoint queda
     //    cerrado (503); con secret, comparacion en tiempo constante. Un secret
     //    VACIO cuenta como no configurado: con un secret "" el header vacio
@@ -292,6 +298,7 @@ async fn handle_webhook(State(env): State<Env>, headers: HeaderMap, body: Bytes)
 /// de VERIFY (CI del PR de reparacion) y el DO asienta la verificacion.
 /// Este endpoint NUNCA declara PASS por si mismo: solo registra lo que CI
 /// envia. Misma autorizacion fail-closed que /webhook.
+#[worker::send]
 async fn handle_github_callback(
     State(env): State<Env>,
     headers: HeaderMap,
