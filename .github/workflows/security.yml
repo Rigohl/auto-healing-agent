@@ -49,8 +49,7 @@ jobs:
         run: cargo audit
       # worker/ es un [workspace] propio (DISCREPANCIES item 35): `cargo audit`
       # sin --file no ve sus dependencias. Ojo: cargo-audit 0.22.1 NO acepta
-      # `--manifest-path` (no es cargo); e
-l flag es `--file`, y apunta al lock.
+      # `--manifest-path` (no es cargo); el flag es `--file`, y apunta al lock.
       - name: Generar lock de worker/
         run: cargo generate-lockfile --manifest-path worker/Cargo.toml
       - name: Auditar worker/
