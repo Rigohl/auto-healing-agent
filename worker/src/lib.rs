@@ -100,8 +100,8 @@ async fn model_report(State(env): State<Env>) -> AxumResponse {
             return internal_error("model_report_failed");
         }
     };
-    let status = StatusCode::from_u16(report.status_code().unwrap_or(500))
-        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let code = report.status_code();
+    let status = StatusCode::from_u16(code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     match report.text().await {
         Ok(text) => (status, text).into_response(),
         Err(e) => {
@@ -115,11 +115,7 @@ async fn model_report(State(env): State<Env>) -> AxumResponse {
 /// idempotencia, quota, anti-loop) -> Queue. Los extractores de Axum
 /// (State, HeaderMap, Bytes) sustituyen a Request/RouteContext; el
 /// algoritmo y los cuerpos de error son identicos al del Router legacy.
-async fn handle_webhook(
-    State(env): State<Env>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> AxumResponse {
+async fn handle_webhook(State(env): State<Env>, headers: HeaderMap, body: Bytes) -> AxumResponse {
     // 1. Autorizacion fail-closed. Sin secret configurado el endpoint queda
     //    cerrado (503); con secret, comparacion en tiempo constante. Un secret
     //    VACIO cuenta como no configurado: con un secret "" el header vacio
@@ -131,7 +127,9 @@ async fn handle_webhook(
     if secret.is_empty() {
         return svc_unavailable("webhook_secret_not_configured");
     }
-    let header = headers.get("x-webhook-secret").and_then(|v| v.to_str().ok());
+    let header = headers
+        .get("x-webhook-secret")
+        .and_then(|v| v.to_str().ok());
     if !verify_webhook_secret(header, &secret) {
         return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
     }
@@ -146,6 +144,7 @@ async fn handle_webhook(
         .get("x-github-delivery")
         .and_then(|v| v.to_str().ok())
         .filter(|d| !d.is_empty())
+        .map(|d| d.to_string())
         .unwrap_or_default();
 
     // 2. Body. Un payload corrupto no debe tumbar el isolate.
@@ -305,7 +304,9 @@ async fn handle_github_callback(
     if secret.is_empty() {
         return svc_unavailable("webhook_secret_not_configured");
     }
-    let header = headers.get("x-webhook-secret").and_then(|v| v.to_str().ok());
+    let header = headers
+        .get("x-webhook-secret")
+        .and_then(|v| v.to_str().ok());
     if !verify_webhook_secret(header, &secret) {
         return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
     }
