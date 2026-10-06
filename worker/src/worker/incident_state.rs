@@ -931,8 +931,11 @@ impl IncidentState {
                 ],
             )?;
         }
-        if q.decision == "allow" {
-            // Solo un intento autorizado consume presupuesto de reparacion.
+        // Solo un VERIFY=pass de Actions consume presupuesto de reparacion
+        // (una vez por reparacion exitosa). Contar tambien el /result inicial
+        // del consumidor (decision=allow con verify_status=pending_ci)
+        // doble-contaba cada reparacion en cooldown y daily_budget.
+        if q.verify_status == "pass" {
             let day = (now / 86_400_000).to_string();
             let repo: String = self
                 .sql
