@@ -97,6 +97,24 @@ Ramas: solo `main` (cleanup-branches auto-deleta las fusionadas).
 - ❌ Branch protection que exija checks: pendiente decisión del dueño (hoy es disciplinario).
 - ❌ MongoDB/R2: fuera del plan Free; el estado vive en DO+KV.
 
+### F) Falla real de Workers Builds (2026-10-06 19:08 UTC) — firma y fix
+
+Log: `Cloning repository... -> Executing user deploy command: npx wrangler deploy -> ERROR Could not detect a directory containing static files`.
+Causa: el deploy corrió en la RAIZ del repo y sin Build command; en la raiz no
+hay wrangler.toml (eliminado a proposito, commit 2ad38a8), asi que wrangler
+4.148 asumio proyecto de static assets. NO falta ningun archivo del repo: falta
+la configuracion del dashboard (Settings > Build):
+  Root directory:  worker
+  Build command:   bash build.sh
+  Deploy command:  npx wrangler deploy
+Alternativa con Root directory = raiz: Deploy command
+`cd worker && bash build.sh && npx wrangler deploy`. NUNCA recrear
+wrangler.toml/build.sh en la raiz (deploy sin bindings). Firmas de esta
+familia de errores: (a) "No build output detected to cache" + deploy sin
+build previo = falta Build command o Root directory mal; (b) "Could not
+detect a directory containing static files" = wrangler sin config en CWD.
+Runbook Notion actualizado con esta firma.
+
 ## Historial de este documento (actualizado)
 - 2026-10-06 (tarde): reparación del bump de actions — el push 0a2dee1 dejó YAML inválido en 7 workflows (deploy-staging, cleanup-branches + 5 más con "Invalid workflow file"). Se reconstruyeron desde 5337044 (último verde) aplicando solo checkout@v5 (commits b109e04, 5b38422, be3ccad, 0a4585a, 04fe0c5, 9c8b6b3, 0b76945). En 0b76945: CI ✅, Consistency ✅ (verify 50 claims), Security ✅, Branch cleanup ✅. Nota técnica: el "content viewer" open_url parte líneas al azar al mostrar YAML — verificación de contenido siempre vía raw fetch (apify web-fetch), nunca open_url.
 - 2026-10-06: sección CI/CD completa (dashboard + secrets + vars, valores exactos); inventario KV actualizado a 6 namespaces; referencias a commits que fijaron cada decisión.
