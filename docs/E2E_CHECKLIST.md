@@ -37,3 +37,36 @@ Marcado lo que existe hoy en `main`:
 
 **Full E2E no está verde.** No se declara PASS por confidence del modelo:
 la autoridad es GitHub Actions (`docs/NO_LLM_POLICY.md`).
+
+## Prevención de errores de Workers Builds (2026-10-06, tras falla real)
+
+Firma de la falla: build sin compilar ("No build output detected to cache") +
+deploy en la raiz -> "Could not detect a directory containing static files".
+Causa raiz: configuracion del dashboard (Root directory / Build command),
+no del repo. Guardas activas y de proceso:
+
+1. **Config correcta (unica fuente)**: Root directory `worker`, Build
+   `bash build.sh`, Deploy `npx wrangler deploy`. Alternativa inmune a
+   errores de Root directory: Deploy
+   `cd worker && bash build.sh && npx wrangler deploy`.
+2. **Guarda en build.sh**: si no encuentra wrangler.toml/Cargo.toml a su
+   lado, aborta con mensaje explicito (nunca un deploy sin bindings).
+3. **Guarda estructural del repo**: wrangler.toml/build.sh PROHIBIDOS en la
+   raiz (commit 2ad38a8). Si reaparecen, el deploy de raiz vuelve a salir
+   sin KV/DO/Queues: webhook fail-closed en cada request.
+4. **Watch paths** (dashboard > Build > watch paths): `worker/**` para que
+   solo los cambios del worker disparen builds (menos builds fallidos por
+   pushes de docs).
+5. **Firmas de diagnostico rapido**:
+   - "No build output detected to cache" + deploy sin compilar = falta
+     Build command o Root directory mal.
+   - "Could not detect a directory containing static files" = wrangler
+     sin config en el CWD (corriendo en la raiz).
+   - "Workers Builds" fallando en GitHub checks pero CI verde = ambiental
+     (dashboard), no del codigo.
+6. **Retry sin dashboard**: los builds fallidos se pueden relanzar directo
+   desde GitHub (changelog 2025-03-17), y la API de Builds usa el *tag*
+   del Worker (UUID), no su nombre.
+7. **Verificacion post-deploy**: el worker desplegado debe pesar >100 KB
+   (placeholder = 275 bytes), tener los 2 KV bindings + DO + Queues, y
+   responder 200 en /health. Ver DEVOPS_STATUS seccion F.
