@@ -21,6 +21,8 @@
 use serde_json::{json, Value};
 use worker::{Fetch, Headers, Method, Request, RequestInit};
 
+use crate::runtime::security::urlencode;
+
 pub const API_BASE: &str = "https://api.github.com";
 pub const TOKEN_SECRET: &str = "GITHUB_TOKEN";
 const BRANCH_PREFIX: &str = "auto-heal/";
@@ -141,8 +143,18 @@ impl GitHubClient {
     }
 
     /// sha del blob actual (necesario para el PUT del Contents API). None = 404.
-    pub async fn get_file_sha(&self, path: &str) -> Result<Option<String>, GitHubError> {
-        let p = format!("/repos/{}/contents/{}", self.repo, path);
+    ///
+    /// `reference` acota la lectura a la rama de reparacion: en un reintento
+    /// tras un put_file exitoso, el sha de la rama BASE esta obsoleto y el PUT
+    /// devuelve 409 (sha_mismatch) clasificado como Permanent. El sha de la
+    /// RAMA siempre es el vigente: primer intento = sha copiado de la base,
+    /// reintento = sha del commit ya subido (mismo contenido, commit idempotente).
+    pub async fn get_file_sha(
+        &self,
+        path: &str,
+        reference: &str,
+    ) -> Result<Option<String>, GitHubError> {
+        let p = format!("/repos/{}/contents/{}?ref={}", self.repo, path, urlencode(reference));
         let (status, value) = self.request_json(Method::Get, &p, None).await?;
         match status {
             200 => Ok(value.get("sha").and_then(|s| s.as_str()).map(String::from)),
@@ -238,6 +250,31 @@ impl GitHubClient {
                 .and_then(|u| u.as_str())
                 .map(String::from)
                 .ok_or_else(|| GitHubError::Permanent("pr_url_missing".to_string())),
+            // Idempotencia en reintentos: 422 con el PR ya abierto (put_file
+            // exitoso + create_pull_request fallido y reintentado). Se
+            // recupera el html_url del PR existente en vez de clasificar el
+            // 422 como Permanent y bloquear el incidente por nada.
+            422 => {
+                let head = format!("{}:{}", self.repo, head);
+                let (list_status, list) = self
+                    .request_json(
+                        Method::Get,
+                        &format!("/repos/{}/pulls?head={}&state=open", self.repo, urlencode(&head)),
+                        None,
+                    )
+                    .await?;
+                if list_status == 200 {
+                    let url = list
+                        .as_array()
+                        .and_then(|prs| prs.first())
+                        .and_then(|pr| pr.get("html_url"))
+                        .and_then(|u| u.as_str());
+                    if let Some(url) = url {
+                        return Ok(url.to_string());
+                    }
+                }
+                Err(GitHubError::Permanent("pr_already_open".to_string()))
+            }
             s => Err(Self::classify(s, "create_pull_request")),
         }
     }
@@ -256,7 +293,9 @@ impl GitHubClient {
         let base = self.default_branch().await?;
         let sha = self.head_sha(&base).await?;
         self.create_branch(&branch, &sha).await?;
-        let blob_sha = self.get_file_sha(file_path).await?;
+        // sha desde la RAMA de reparacion (no la base): reintentos tras un
+        // put_file exitoso leen el sha vigente y no fallan con 409.
+        let blob_sha = self.get_file_sha(file_path, &branch).await?;
         self.put_file(
             &branch,
             file_path,
