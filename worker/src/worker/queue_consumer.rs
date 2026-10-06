@@ -16,7 +16,7 @@ use repair_types::{
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
-    model,
+    model, param_derive,
     quota::QuotaConfig,
     rules,
     security::{fnv1a64, urlencode},
@@ -241,7 +241,11 @@ async fn process(
             return Ok(());
         }
     };
-    let action = loaded.net.predict(&features);
+    let mut action = loaded.net.predict(&features);
+    // PASO 2: derivacion determinista de los parametros del edit acotado
+    // (dependency/version). Fail-closed: lo no derivable queda "missing_param"
+    // y nunca se sobrescriben parametros existentes (param_derive.rs).
+    param_derive::ensure_params(&mut action, &incident);
     let gate_ok = gate(&action, MIN_CONFIDENCE, MAX_RISK).is_ok();
 
     // 2.6 Evaluacion declarativa: las reglas solo restringen (block) u
