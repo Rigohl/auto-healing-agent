@@ -154,7 +154,12 @@ impl GitHubClient {
         path: &str,
         reference: &str,
     ) -> Result<Option<String>, GitHubError> {
-        let p = format!("/repos/{}/contents/{}?ref={}", self.repo, path, urlencode(reference));
+        let p = format!(
+            "/repos/{}/contents/{}?ref={}",
+            self.repo,
+            path,
+            urlencode(reference)
+        );
         let (status, value) = self.request_json(Method::Get, &p, None).await?;
         match status {
             200 => Ok(value.get("sha").and_then(|s| s.as_str()).map(String::from)),
@@ -259,7 +264,11 @@ impl GitHubClient {
                 let (list_status, list) = self
                     .request_json(
                         Method::Get,
-                        &format!("/repos/{}/pulls?head={}&state=open", self.repo, urlencode(&head)),
+                        &format!(
+                            "/repos/{}/pulls?head={}&state=open",
+                            self.repo,
+                            urlencode(&head)
+                        ),
                         None,
                     )
                     .await?;
