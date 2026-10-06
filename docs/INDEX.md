@@ -21,6 +21,7 @@
 | [PART3_CLOUDFLARE_RUNTIME.md](PART3_CLOUDFLARE_RUNTIME.md) | Worker orquestador, límites Free |
 | [PART4_PERSISTENCE_TRANSVERSAL.md](PART4_PERSISTENCE_TRANSVERSAL.md) | MongoDB / Notion / Mem0 / regla Context7 |
 | [MEM0_STATUS.md](MEM0_STATUS.md) | Estado real del conector + diseño futuro |
+| [STACK_ANALYSIS.md](STACK_ANALYSIS.md) | Análisis del stack Cloudflare+Agent-Auto-Repair (PDF 2026-10-06): 11 repos verificados, decisión por repo, Axum ya migrado |
 
 ## Principios
 1. Worker = orquestador (no motor de cómputo).
@@ -32,7 +33,8 @@
 ## Estado resumido
 - crates: types (+ `contract`) / feature_engine (V1) / nn_core / nn_wasm / operators / train (V1) → ✅
 - worker → runtime PART3 async: webhook fail-closed → DO (dedup, quota, anti-loop) → Queue → 202
-- model/ → `current.txt` = payload KV real (2863 `f32`, entrenado por `repair_train`); `current.json`/`stable.json` siguen como placeholders de metadata
+- model/ → `current.txt` = payload KV real 
+(2863 `f32`, entrenado por `repair_train`); `current.json`/`stable.json` siguen como placeholders de metadata
 - docs/verification_evidence.json → artefacto de CI, no versionado
 - legacy/ → eliminado del repo el 2026-10-05 (archivo V0 no ejecutable, decisión del dueño)
 - Mem0 → pendiente de conector
