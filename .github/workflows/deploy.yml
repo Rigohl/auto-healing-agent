@@ -58,8 +58,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: worker
-        run: npx wrangle
-r deploy
+        run: npx wrangler deploy
 
       - name: Smoke test
         env:
