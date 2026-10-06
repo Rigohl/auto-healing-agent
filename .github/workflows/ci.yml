@@ -56,8 +56,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-   
-   - run: cargo fmt --all -- --check
+      - run: cargo fmt --all -- --check
 
   # ---------------- código huérfano (deps sin uso) ----------------
   # Ninguna tool de Rust ve una dependencia declarada que ningún crate usa:
@@ -101,8 +100,7 @@ jobs:
       # Item 34, gap restante (2026-10-03): worker/ es una unidad de build
       # propia y `cargo fmt --all` del raiz no la alcanza (DISCREPANCIES
       # item 34). El arbol del worker se formateo con el mismo toolchain
-      # (workflow temporal del PR #24
-); este check impide que el formato
+      # (workflow temporal del PR #24); este check impide que el formato
       # vuelva a divergir en silencio.
       - run: cargo fmt --manifest-path worker/Cargo.toml -- --check
 
