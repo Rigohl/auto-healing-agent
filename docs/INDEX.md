@@ -21,7 +21,6 @@
 | [PART3_CLOUDFLARE_RUNTIME.md](PART3_CLOUDFLARE_RUNTIME.md) | Worker orquestador, límites Free |
 | [PART4_PERSISTENCE_TRANSVERSAL.md](PART4_PERSISTENCE_TRANSVERSAL.md) | MongoDB / Notion / Mem0 / regla Context7 |
 | [MEM0_STATUS.md](MEM0_STATUS.md) | Estado real del conector + diseño futuro |
-| [STACK_ANALYSIS.md](STACK_ANALYSIS.md) | Análisis del stack Cloudflare+Agent-Auto-Repair (PDF 2026-10-06): 11 repos verificados, decisión por repo, Axum ya migrado |
 
 ## Principios
 1. Worker = orquestador (no motor de cómputo).
