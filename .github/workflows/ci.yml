@@ -130,7 +130,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: worker/wrangler.toml debe ser TOML valido
-        run: python3 -c "import tomllib; tomllib.load(open('worker/wrangler.toml','rb')); print('wrangler.toml: TOML valido')"
+        run: |
+          python3 -c "import tomllib; tomllib.load(open('worker/wrangler.toml','rb'))"
+          echo "wrangler.toml: TOML valido"
 
   # ---------------- artefacto real de deploy (worker-build) ----------------
   # Auditoria P0: ningun job de CI compilaba el artefacto WASM real; el
