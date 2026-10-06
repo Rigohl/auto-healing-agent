@@ -350,7 +350,7 @@ def check_constant_time_auth(r: Report) -> None:
     r.expect(
         "AUTH_FAIL_CLOSED",
         "Sin WEBHOOK_SECRET el webhook responde 503 (nunca fail-open)",
-        '(StatusCode::SERVICE_UNAVAILABLE, "webhook_secret_not_configured")' in lib,
+        'svc_unavailable("webhook_secret_not_configured")' in lib,
     )
     r.expect(
         "AUTH_REJECTS_401",
