@@ -103,24 +103,32 @@ if [ -L wrangler.toml ]; then
     fail "wrangler.toml (symlink) apunta a otra cosa"
   fi
 elif [ -f wrangler.toml ]; then
-  # Dos formas validas para la raiz (decision del dueno 2026-10-05, commit
-  # 37c3fd5a: Root directory = / en Workers Builds):
-  #   (a) solo comentarios: nada desplegable (fail-closed), o
-  #   (b) config "puntero": SOLO name/main/compatibility_date/[build], con
-  #       main apuntando al arbol de worker/ (worker/build/...) y command
-  #       ejecutando build.sh. Cualquier OTRA config activa (bindings, colas,
-  #       DO, vars) divergiria de worker/wrangler.toml y debe fallar.
+  # Decision del dueno 2026-10-06 (revierte parcialmente 2ad38a8): la raiz
+  # tiene ESPEJO COMPLETO de worker/wrangler.toml para que Workers Builds
+  # con Root directory = / despliegue con TODOS los bindings. Formas validas:
+  #   (a) solo comentarios (historico), o
+  #   (b) espejo completo: main -> worker/build/, [build] command -> build.sh
+  #       con cwd -> worker, y las claves activas criticas IDENTICAS a
+  #       worker/wrangler.toml. Cualquier divergencia (id KV, cola, binding,
+  #       class_name, crons, vars de quota/anti-loop) es error fatal: nunca
+  #       dos configuraciones distintas de lo mismo.
   ACTIVE="$(sed -e 's/#.*//' wrangler.toml | tr -d '[:space:]')"
   if [ -z "$ACTIVE" ]; then
     pass "wrangler.toml raiz solo comentarios: nada desplegable (fail-closed)"
   else
     MAIN_OK="$(grep -E '^[[:space:]]*main[[:space:]]*=' wrangler.toml | grep -c 'worker/build/')"
     BUILD_OK="$(grep -E '^[[:space:]]*command[[:space:]]*=' wrangler.toml | grep -c 'build.sh')"
-    EXTRA_KEYS="$(sed -e 's/#.*//' wrangler.toml | grep -E '^[[:space:]]*[a-zA-Z_]' | { grep -vE '^[[:space:]]*(name|main|compatibility_date|command)[[:space:]]*=' || true; } | wc -l)"
-    if [ "$MAIN_OK" -ge 1 ] && [ "$BUILD_OK" -ge 1 ] && [ "$EXTRA_KEYS" -eq 0 ]; then
-      pass "wrangler.toml raiz = config puntero a worker/ (Root directory = /, commit 37c3fd5a)"
+    CWD_OK="$(grep -E '^[[:space:]]*cwd[[:space:]]*=' wrangler.toml | grep -c 'worker')"
+    extract_critical() {
+      sed -e 's/#.*//' "$1" \
+        | grep -E '^[[:space:]]*(id|queue|binding|class_name|new_sqlite_classes|crons|MONITOR_REPOS|REPAIR_RULES|QUOTA_[A-Z_]+|ANTI_LOOP_[A-Z_]+)[[:space:]]*=' \
+        | sed 's/[[:space:]]//g' | sort
+    }
+    if [ "$MAIN_OK" -ge 1 ] && [ "$BUILD_OK" -ge 1 ] && [ "$CWD_OK" -ge 1 ] \
+      && diff <(extract_critical worker/wrangler.toml) <(extract_critical wrangler.toml) >/dev/null; then
+      pass "wrangler.toml raiz = espejo completo de worker/wrangler.toml (bindings equivalentes, decision 2026-10-06)"
     else
-      fail "wrangler.toml regular diverge de worker/wrangler.toml (main no apunta a worker/build/, build sin build.sh, o keys activos de mas)"
+      fail "wrangler.toml raiz diverge de worker/wrangler.toml (main/cwd/build mal, o bindings/vars distintos: NUNCA dos configs distintas de lo mismo)"
     fi
   fi
 else
