@@ -52,3 +52,10 @@ Los hallazgos P1-P3 de la auditoria estan registrados como issues PYH-36 a PYH-4
 ## Historial de este documento
 
 - 2026-10-05: creado con estado verificado en vivo (GitHub + Cloudflare). Corrige "DO sin uso" en REFERENCES/PHASE_STATUS/INVENTORY/ARCHITECTURE.
+
+## 2026-10-05 — Reparación integral de main (PR #56)
+
+- **Root cause**: 812f3bb truncó `incident_state.rs` a mitad de `result()`; 441705f introdujo fmt-unclean y `param_derive.rs` sin CI verificado. Último verde: 18d6ca0.
+- **Fix**: revert byte-exacto a 18d6ca0 + P2 (alarma DO de retención 24 h, `do_state`) + P3 (`head_sampling_rate = 1`) + docs/WORKERS_BEST_PRACTICES.md. PRs #53/#54/#55 consolidados y cerrados.
+- **Pendiente**: re-land de `param_derive.rs` formateado y con CI verde (issue de follow-up); secret WORKER_URL para cerrar SMOKE_WORKER_URL (backlog P4).
+- **Ramas**: feat/p2-do-alarm-retention, feat/p3-observability-sampling y docs/workers-best-practices-2026-10-05 marcadas superseded en cleanup-branches (contenido ya en main byte-exacto).
