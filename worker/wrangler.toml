@@ -43,16 +43,14 @@ enabled = true
 # si crece el trafego para controlar facturacion de Workers Logs).
 head_sampling_rate = 1
 
-# Quotas y anti-loop: configuracion separada del estad
-o (el estado vive en el
+# Quotas y anti-loop: configuracion separada del estado (el estado vive en el
 # Durable Object). Cambiar valores NO requiere tocar el esquema SQL.
 [vars]
 # MONITOR: repos que el cron scheduled barre (worker/src/worker/monitor.rs).
 # Registro en configuracion (separacion config/estado): vacio = no-op con log.
 MONITOR_REPOS = "Rigohl/auto-healing-agent"
 # REGLAS DECLARATIVAS (P1): JSON de {id, expression, action}. "[]" o
-# sin var =
- sin reglas (no-op). Config invalida = fail-closed (bloquea).
+# sin var = sin reglas (no-op). Config invalida = fail-closed (bloquea).
 # Sintaxis y esquema: worker/src/worker/rules.rs.
 REPAIR_RULES = "[]"
 QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
@@ -101,8 +99,7 @@ queue = "auto-healing-repairs"
 # el consumidor ademas corta por su propio contador de attempts (hard stop).
 [[queues.consumers]]
 queue = "auto-healing-repairs"
-max_batch_size
- = 5
+max_batch_size = 5
 max_batch_timeout = 10
 max_retries = 3
 max_concurrency = 1
@@ -161,8 +158,7 @@ QUOTA_DAILY_BUDGET = "50"
 ANTI_LOOP_MAX_SAME_INCIDENT = "3"
 ANTI_LOOP_MAX_SAME_SIGNATURE = "5"
 ANTI_LOOP_MAX_SAME_FINGERPRINT = "2"
-ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION = "3
-"
+ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION = "3"
 ANTI_LOOP_WINDOW_SECONDS = "900"
 
 [[env.staging.kv_namespaces]]
