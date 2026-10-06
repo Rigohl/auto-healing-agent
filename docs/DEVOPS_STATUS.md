@@ -93,7 +93,7 @@ Ramas: solo `main` (cleanup-branches auto-deleta las fusionadas).
 
 ### E) Qué NO debe existir (por diseño)
 
-- ❌ `wrangler.toml` ni `build.sh` en la RAÍZ del repo (eliminados a propósito, commit `2ad38a8`; recrearlos reintroduce el deploy sin bindings).
+- ⚠️ ACTUALIZADO (2026-10-06, decisión del dueño): `wrangler.toml` en la RAÍZ ahora EXISTE como espejo completo de `worker/wrangler.toml` (build cwd=worker, main=worker/build/...) para que Workers Builds con Root directory = / despliegue con TODOS los bindings usando `npx wrangler deploy` tal cual. `validate-preflight.sh` (guard 6) exige equivalencia de claves críticas; si divergen, CI falla. `build.sh` sigue PROHIBIDO en la raíz (solo en worker/).
 - ❌ Branch protection que exija checks: pendiente decisión del dueño (hoy es disciplinario).
 - ❌ MongoDB/R2: fuera del plan Free; el estado vive en DO+KV.
 
@@ -115,6 +115,7 @@ build previo = falta Build command o Root directory mal; (b) "Could not
 detect a directory containing static files" = wrangler sin config en CWD.
 Runbook Notion actualizado con esta firma.
 
+- 2026-10-06 (noche): decisión del dueño tras dos fallos reales de Workers Builds ("static files"): wrangler.toml raíz espejo completo (commit 98076b6) + guard 6 de equivalencia en validate-preflight.sh (e7cd2713) + docs alineadas. El deploy desde raíz con `npx wrangler deploy` ya funciona SIN tocar el dashboard.
 ## Historial de este documento (actualizado)
 - 2026-10-06 (tarde): reparación del bump de actions — el push 0a2dee1 dejó YAML inválido en 7 workflows (deploy-staging, cleanup-branches + 5 más con "Invalid workflow file"). Se reconstruyeron desde 5337044 (último verde) aplicando solo checkout@v5 (commits b109e04, 5b38422, be3ccad, 0a4585a, 04fe0c5, 9c8b6b3, 0b76945). En 0b76945: CI ✅, Consistency ✅ (verify 50 claims), Security ✅, Branch cleanup ✅. Nota técnica: el "content viewer" open_url parte líneas al azar al mostrar YAML — verificación de contenido siempre vía raw fetch (apify web-fetch), nunca open_url.
 - 2026-10-06: sección CI/CD completa (dashboard + secrets + vars, valores exactos); inventario KV actualizado a 6 namespaces; referencias a commits que fijaron cada decisión.
