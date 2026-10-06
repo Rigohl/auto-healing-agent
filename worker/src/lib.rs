@@ -10,6 +10,11 @@
 //! del propio modulo WASM del Worker. Por eso wrangler.toml no necesita
 //! [wasm_modules].
 //!
+//! Capa HTTP: Router de Axum (patron del ejemplo oficial examples/axum de
+//! workers-rs: worker features "http" + "axum"). La migracion conserva
+//! cuerpos y codigos de respuesta exactos: el smoke test de deploy.yml y
+//! los claims de scripts/verify_repo.py dependen de ellos.
+//!
 //! Regla de autoridad: Cloudflare ORCHESTRATES, PERSISTS, DEDUPLICATES,
 //! QUEUES, LIMITS, OBSERVES. GitHub Actions es la autoridad de VERIFY;
 //! este Worker nunca declara CI PASS, aprueba ni fusiona PRs.
@@ -23,10 +28,18 @@
 #[path = "worker/mod.rs"]
 mod runtime;
 
+use axum::body::Bytes;
+use axum::extract::State;
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response as AxumResponse};
+use axum::routing::{get, post};
+use axum::Router;
+use tower_service::Service;
+use worker::*;
+
 use feature_engine::extract;
 use repair_operators::gate;
 use repair_types::{compute_idempotency_key, FailureSignature};
-use worker::*;
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
@@ -37,47 +50,90 @@ use crate::runtime::{
     MAX_RISK, MIN_CONFIDENCE,
 };
 
-#[event(fetch)]
-async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
-    console_error_panic_hook::set_once();
+/// 503 fail-closed con el cuerpo literal que el Router legacy producia con
+/// Response::error(msg, 503): el smoke test de deploy.yml lo espera tal cual.
+fn svc_unavailable(body: &'static str) -> AxumResponse {
+    (StatusCode::SERVICE_UNAVAILABLE, body).into_response()
+}
+
+/// 400 con cuerpo literal (invalid_body | empty_body | invalid_json).
+fn bad_request(body: &'static str) -> AxumResponse {
+    (StatusCode::BAD_REQUEST, body).into_response()
+}
+
+/// 500 con cuerpo literal para fallos internos de generacion de respuesta.
+fn internal_error(body: &'static str) -> AxumResponse {
+    (StatusCode::INTERNAL_SERVER_ERROR, body).into_response()
+}
+
+/// Router de Axum con Env como estado compartido. Misma superficie HTTP
+/// que el Router legacy de workers-rs: GET /, /health, /model y
+/// POST /webhook, /github/callback.
+fn router(env: Env) -> Router {
     Router::new()
-        .get("/", |_, _| Response::ok("AUTO-REPAIR LAB"))
-        .get("/health", |_, _| Response::ok("ok"))
-        .get_async(
-            "/model",
-            |_, ctx| async move { model::report(&ctx.env).await },
-        )
-        .post_async("/webhook", handle_webhook)
-        .post_async("/github/callback", handle_github_callback)
-        .run(req, env)
-        .await
+        .route("/", get(|| async { "AUTO-REPAIR LAB" }))
+        .route("/health", get(|| async { "ok" }))
+        .route("/model", get(model_report))
+        .route("/webhook", post(handle_webhook))
+        .route("/github/callback", post(handle_github_callback))
+        .with_state(env)
 }
 
-/// Consumidor de cola (produccion, staging y DLQ): retry con backoff,
-/// hard-stop y DLQ. Ver worker/src/worker/queue_consumer.rs.
-#[event(queue)]
-pub async fn queue_main(batch: MessageBatch<QueueTask>, env: Env, _ctx: Context) -> Result<()> {
-    queue_consumer::consume(batch, env).await
+#[event(fetch)]
+async fn main(
+    req: HttpRequest,
+    env: Env,
+    _ctx: Context,
+) -> Result<axum::http::Response<axum::body::Body>> {
+    console_error_panic_hook::set_once();
+    Ok(router(env).call(req).await?)
 }
 
-#[worker::send]
-async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let env = ctx.env;
+/// GET /model: informe de salud del registro de modelos. `model::report`
+/// devuelve una respuesta del crate `worker`; se transporta preservando
+/// status y cuerpo en la respuesta de Axum.
+async fn model_report(State(env): State<Env>) -> AxumResponse {
+    let report = match model::report(&env).await {
+        Ok(report) => report,
+        Err(e) => {
+            console_error!("model report failed: {e}");
+            return internal_error("model_report_failed");
+        }
+    };
+    let status = StatusCode::from_u16(report.status_code().unwrap_or(500))
+        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    match report.text().await {
+        Ok(text) => (status, text).into_response(),
+        Err(e) => {
+            console_error!("model report body failed: {e}");
+            internal_error("model_report_failed")
+        }
+    }
+}
 
+/// POST /webhook (PASO 2): secret fail-closed -> Durable Object (dedup,
+/// idempotencia, quota, anti-loop) -> Queue. Los extractores de Axum
+/// (State, HeaderMap, Bytes) sustituyen a Request/RouteContext; el
+/// algoritmo y los cuerpos de error son identicos al del Router legacy.
+async fn handle_webhook(
+    State(env): State<Env>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> AxumResponse {
     // 1. Autorizacion fail-closed. Sin secret configurado el endpoint queda
     //    cerrado (503); con secret, comparacion en tiempo constante. Un secret
     //    VACIO cuenta como no configurado: con un secret "" el header vacio
     //    `x-webhook-secret: ` pasaria la comparacion y abriria el endpoint.
     let secret = match env.secret("WEBHOOK_SECRET") {
         Ok(s) => s.to_string(),
-        Err(_) => return Response::error("webhook_secret_not_configured", 503),
+        Err(_) => return svc_unavailable("webhook_secret_not_configured"),
     };
     if secret.is_empty() {
-        return Response::error("webhook_secret_not_configured", 503);
+        return svc_unavailable("webhook_secret_not_configured");
     }
-    let header = req.headers().get("x-webhook-secret")?;
-    if !verify_webhook_secret(header.as_deref(), &secret) {
-        return Response::error("unauthorized", 401);
+    let header = headers.get("x-webhook-secret").and_then(|v| v.to_str().ok());
+    if !verify_webhook_secret(header, &secret) {
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
     }
 
     // 1b. delivery_id real de la entrega (BUG-03): el header
@@ -86,23 +142,23 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     //     de idempotencia en "por incidente" y descartaba entregas nuevas
     //     del mismo incidente como duplicadas durante el TTL. Sin header,
     //     fallback al incident_id (comportamiento anterior, conservador).
-    let header_delivery: String = req
-        .headers()
-        .get("x-github-delivery")?
+    let header_delivery: String = headers
+        .get("x-github-delivery")
+        .and_then(|v| v.to_str().ok())
         .filter(|d| !d.is_empty())
         .unwrap_or_default();
 
     // 2. Body. Un payload corrupto no debe tumbar el isolate.
-    let body = match req.text().await {
+    let body = match std::str::from_utf8(&body) {
         Ok(text) => text,
-        Err(_) => return Response::error("invalid_body", 400),
+        Err(_) => return bad_request("invalid_body"),
     };
     if body.trim().is_empty() {
-        return Response::error("empty_body", 400);
+        return bad_request("empty_body");
     }
-    let payload: WebhookPayload = match serde_json::from_str(&body) {
+    let payload: WebhookPayload = match serde_json::from_str(body) {
         Ok(p) => p,
-        Err(_) => return Response::error("invalid_json", 400),
+        Err(_) => return bad_request("invalid_json"),
     };
 
     // 3. Correlacion estructurada + clave de idempotencia CANONICA del
@@ -155,11 +211,11 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     );
     let do_text = match crate::runtime::call_do(env.clone(), repo.clone(), qs).await {
         Ok(t) => t,
-        Err(_) => return Response::error("state_store_unavailable", 503),
+        Err(_) => return svc_unavailable("state_store_unavailable"),
     };
     let verdict: serde_json::Value = match serde_json::from_str(&do_text) {
         Ok(v) => v,
-        Err(_) => return Response::error("state_store_invalid_response", 503),
+        Err(_) => return svc_unavailable("state_store_invalid_response"),
     };
     let status = verdict
         .get("status")
@@ -168,7 +224,7 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     if status != "queued" {
         // duplicate | blocked_quota | blocked_anti_loop: misma decision para
         // la misma entrega; el sender NO debe reintentar (200).
-        return Response::ok(do_text);
+        return (StatusCode::OK, do_text).into_response();
     }
 
     // 5. Preview determinista del gate. Compatibilidad con el smoke test de
@@ -201,7 +257,13 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         payload,
         enqueued_at: now,
     };
-    let queue = env.queue(queue_consumer::QUEUE_BINDING)?;
+    let queue = match env.queue(queue_consumer::QUEUE_BINDING) {
+        Ok(queue) => queue,
+        Err(e) => {
+            console_error!("queue binding failed: {e}");
+            return svc_unavailable("queue_unavailable");
+        }
+    };
     if let Err(e) = queue.send(task).await {
         console_error!("queue send failed: {}", e);
         // Fail-closed: dejar el incidente bloqueado en el DO antes del 503.
@@ -211,50 +273,50 @@ async fn handle_webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
             urlencode(&incident_id)
         );
         let _ = crate::runtime::call_do(env, repo, rqs).await;
-        return Response::error("queue_unavailable", 503);
+        return svc_unavailable("queue_unavailable");
     }
 
-    Response::ok(
-        serde_json::json!({
-            "status": "accepted",
-            "correlation_id": correlation_id,
-            "incident_id": incident_id,
-            "queued": true,
-            "preview": preview,
-            "pr": null,
-            "note": "async repair queued; VERIFY authority = GitHub Actions"
-        })
-        .to_string(),
-    )
+    let resp = serde_json::json!({
+        "status": "accepted",
+        "correlation_id": correlation_id,
+        "incident_id": incident_id,
+        "queued": true,
+        "preview": preview,
+        "pr": null,
+        "note": "async repair queued; VERIFY authority = GitHub Actions"
+    })
+    .to_string();
+    (StatusCode::OK, resp).into_response()
 }
 
 /// POST /github/callback (PASO 4): GitHub Actions reporta el resultado
 /// de VERIFY (CI del PR de reparacion) y el DO asienta la verificacion.
 /// Este endpoint NUNCA declara PASS por si mismo: solo registra lo que CI
 /// envia. Misma autorizacion fail-closed que /webhook.
-#[worker::send]
-async fn handle_github_callback(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let env = ctx.env;
-
+async fn handle_github_callback(
+    State(env): State<Env>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> AxumResponse {
     let secret = match env.secret("WEBHOOK_SECRET") {
         Ok(s) => s.to_string(),
-        Err(_) => return Response::error("webhook_secret_not_configured", 503),
+        Err(_) => return svc_unavailable("webhook_secret_not_configured"),
     };
     if secret.is_empty() {
-        return Response::error("webhook_secret_not_configured", 503);
+        return svc_unavailable("webhook_secret_not_configured");
     }
-    let header = req.headers().get("x-webhook-secret")?;
-    if !verify_webhook_secret(header.as_deref(), &secret) {
-        return Response::error("unauthorized", 401);
+    let header = headers.get("x-webhook-secret").and_then(|v| v.to_str().ok());
+    if !verify_webhook_secret(header, &secret) {
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
     }
 
-    let body = match req.text().await {
+    let body = match std::str::from_utf8(&body) {
         Ok(t) => t,
-        Err(_) => return Response::error("invalid_body", 400),
+        Err(_) => return bad_request("invalid_body"),
     };
-    let payload: serde_json::Value = match serde_json::from_str(&body) {
+    let payload: serde_json::Value = match serde_json::from_str(body) {
         Ok(v) => v,
-        Err(_) => return Response::error("invalid_json", 400),
+        Err(_) => return bad_request("invalid_json"),
     };
     let get_str = |k: &str| -> String {
         payload
@@ -266,7 +328,7 @@ async fn handle_github_callback(mut req: Request, ctx: RouteContext<()>) -> Resu
 
     let correlation_id = get_str("correlation_id");
     if correlation_id.is_empty() {
-        return Response::error("missing_correlation_id", 400);
+        return bad_request("missing_correlation_id");
     }
     let incident_id = get_str("incident_id");
     let repo = get_str("repo");
@@ -278,7 +340,7 @@ async fn handle_github_callback(mut req: Request, ctx: RouteContext<()>) -> Resu
         "pass" => "pass",
         "fail" => "fail",
         "blocked" => "blocked",
-        _ => return Response::error("invalid_verify_status", 400),
+        _ => return bad_request("invalid_verify_status"),
     };
     // El DO marca done solo si CI pasa; fail deja el incidente bloqueado
     // con la evidencia para auditoria.
@@ -299,17 +361,23 @@ async fn handle_github_callback(mut req: Request, ctx: RouteContext<()>) -> Resu
     );
     let do_text = match crate::runtime::call_do(env, repo, qs).await {
         Ok(t) => t,
-        Err(_) => return Response::error("state_store_unavailable", 503),
+        Err(_) => return svc_unavailable("state_store_unavailable"),
     };
-    Response::ok(
-        serde_json::json!({
-            "status": "recorded",
-            "correlation_id": correlation_id,
-            "verify_status": verify_status,
-            "state_store": do_text,
-        })
-        .to_string(),
-    )
+    let resp = serde_json::json!({
+        "status": "recorded",
+        "correlation_id": correlation_id,
+        "verify_status": verify_status,
+        "state_store": do_text,
+    })
+    .to_string();
+    (StatusCode::OK, resp).into_response()
+}
+
+/// Consumidor de cola (produccion, staging y DLQ): retry con backoff,
+/// hard-stop y DLQ. Ver worker/src/worker/queue_consumer.rs.
+#[event(queue)]
+pub async fn queue_main(batch: MessageBatch<QueueTask>, env: Env, _ctx: Context) -> Result<()> {
+    queue_consumer::consume(batch, env).await
 }
 
 /// MONITOR (cron scheduled): retencion del DO + salud del registro de
