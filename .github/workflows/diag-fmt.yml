@@ -1,0 +1,36 @@
+name: diag-fmt
+
+# TEMPORAL: publica el diff de cargo fmt --check del worker en un issue.
+# Se autodispara con este push. BORRAR tras diagnosticar (patron
+# diag-worker-check.yml, sesiones anteriores).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Recoger diff de fmt
+        run: |
+          {
+            cargo fmt --manifest-path worker/Cargo.toml -- --check || true
+          } > /tmp/fmt.log 2>&1
+          cat /tmp/fmt.log
+      - name: Publicar diff en issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "diag-fmt ${GITHUB_SHA:0:7}" \
+            --body-file /tmp/fmt.log || true
