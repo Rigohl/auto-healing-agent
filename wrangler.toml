@@ -1,0 +1,147 @@
+# Config de deploy desde la RAIZ del repo. Decision del dueno 2026-10-06:
+# revertir parcialmente el 2ad38a8 para que Workers Builds con
+# Root directory = / pueda desplegar con "npx wrangler deploy" SIN tocar
+# el dashboard. A diferencia del wrangler.toml raiz original (que
+# desplegaba SIN bindings), esta config es ESPEJO COMPLETO de
+# worker/wrangler.toml (KV + DO + Queues + vars + staging).
+#
+# INVARIANTE (scripts/validate-preflight.sh, guard 6): las claves activas
+# criticas (ids de KV, colas, bindings, class_name, crons, vars) deben ser
+# IDENTICAS en ambas configs. Si divergen, el preflight falla: nunca dos
+# configuraciones distintas de lo mismo.
+#
+# Diferencias deliberadas y unicas frente a worker/wrangler.toml:
+#   main = "worker/build/worker/shim.mjs"   (ruta desde la raiz)
+#   [build] command = "bash build.sh" + cwd = "worker" (build dentro de worker/)
+# build.sh sigue PROHIBIDO en la raiz (solo vive en worker/).
+#
+# Requisitos sin cambio: secrets CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID
+# (GitHub) y WEBHOOK_SECRET/GITHUB_TOKEN (Worker); colas creadas con
+# wrangler queues create (ver worker/wrangler.toml para la lista).
+
+name = "auto-healing-agent"
+main = "worker/build/worker/shim.mjs"
+compatibility_date = "2024-09-23"
+
+# Build desde la raiz: wrangler ejecuta build.sh dentro de worker/
+# (build.cwd). El script se auto-fija su CWD y valida que wrangler.toml y
+# Cargo.toml esten a su lado (guarda anti Root directory mal configurado).
+[build]
+command = "bash build.sh"
+cwd = "worker"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[vars]
+MONITOR_REPOS = "Rigohl/auto-healing-agent"
+REPAIR_RULES = "[]"
+QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
+QUOTA_MAX_REPAIRS_PER_REPO = "10"
+QUOTA_MAX_OPEN_REPAIRS = "3"
+QUOTA_COOLDOWN_SECONDS = "3600"
+QUOTA_DAILY_BUDGET = "50"
+ANTI_LOOP_MAX_SAME_INCIDENT = "3"
+ANTI_LOOP_MAX_SAME_SIGNATURE = "5"
+ANTI_LOOP_MAX_SAME_FINGERPRINT = "2"
+ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION = "3"
+ANTI_LOOP_WINDOW_SECONDS = "900"
+
+[triggers]
+crons = ["0 * * * *"]
+
+[[kv_namespaces]]
+binding = "MODEL_KV"
+id = "73014a1b32b7446397461a8d438c8ab2"
+
+[[kv_namespaces]]
+binding = "REPAIR_CASES_KV"
+id = "996211a015f14c54b85ea4b47e79fdf9"
+
+[durable_objects]
+bindings = [
+  { name = "INCIDENT_STATE", class_name = "IncidentState" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["IncidentState"]
+
+[[queues.producers]]
+binding = "REPAIR_QUEUE"
+queue = "auto-healing-repairs"
+
+[[queues.consumers]]
+queue = "auto-healing-repairs"
+max_batch_size = 5
+max_batch_timeout = 10
+max_retries = 3
+max_concurrency = 1
+dead_letter_queue = "auto-healing-repairs-dlq"
+
+[[queues.consumers]]
+queue = "auto-healing-repairs-dlq"
+max_batch_size = 10
+max_batch_timeout = 10
+max_retries = 1
+max_concurrency = 1
+
+# ------------------------- staging -------------------------
+# Espejo de [env.staging] en worker/wrangler.toml: mismo Worker aparte
+# (auto-healing-agent-staging), mismas colas *-staging, mismo KV.
+[env.staging]
+name = "auto-healing-agent-staging"
+
+[[env.staging.queues.producers]]
+binding = "REPAIR_QUEUE"
+queue = "auto-healing-repairs-staging"
+
+[[env.staging.queues.consumers]]
+queue = "auto-healing-repairs-staging"
+max_batch_size = 5
+max_batch_timeout = 10
+max_retries = 3
+max_concurrency = 1
+dead_letter_queue = "auto-healing-repairs-dlq-staging"
+
+[[env.staging.queues.consumers]]
+queue = "auto-healing-repairs-dlq-staging"
+max_batch_size = 10
+max_batch_timeout = 10
+max_retries = 1
+max_concurrency = 1
+
+[env.staging.vars]
+MONITOR_REPOS = "Rigohl/auto-healing-agent"
+REPAIR_RULES = "[]"
+QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
+QUOTA_MAX_REPAIRS_PER_REPO = "10"
+QUOTA_MAX_OPEN_REPAIRS = "3"
+QUOTA_COOLDOWN_SECONDS = "3600"
+QUOTA_DAILY_BUDGET = "50"
+ANTI_LOOP_MAX_SAME_INCIDENT = "3"
+ANTI_LOOP_MAX_SAME_SIGNATURE = "5"
+ANTI_LOOP_MAX_SAME_FINGERPRINT = "2"
+ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION = "3"
+ANTI_LOOP_WINDOW_SECONDS = "900"
+
+[[env.staging.kv_namespaces]]
+binding = "MODEL_KV"
+id = "73014a1b32b7446397461a8d438c8ab2"
+
+[[env.staging.kv_namespaces]]
+binding = "REPAIR_CASES_KV"
+id = "996211a015f14c54b85ea4b47e79fdf9"
+
+[env.staging.durable_objects]
+bindings = [
+  { name = "INCIDENT_STATE", class_name = "IncidentState" }
+]
+
+[[env.staging.migrations]]
+tag = "v1"
+new_sqlite_classes = ["IncidentState"]
+
+[env.staging.triggers]
+crons = ["0 * * * *"]
