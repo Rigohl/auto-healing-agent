@@ -19,14 +19,15 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # GUARDA (2026-10-06, tras la falla real de Workers Builds "Could not detect
 # a directory containing static files"): si este script termina corriendo sin
-# su wrangler.toml al lado, es que alguien lo copio/movo a la raiz o cambio el
-# Root directory del dashboard. Fallar AQUI con mensaje claro es mejor que un
-# deploy sin bindings (KV/DO/Queues) que responde 503 en cada request.
+# su wrangler.toml al lado, alguien lo copio/movo o el cwd del [build] raiz
+# esta mal. La raiz tiene un wrangler.toml ESPEJO (decision dueno 2026-10-06)
+# que ejecuta este script con cwd = worker: nunca desde la raiz directamente.
+# Fallar AQUI con mensaje claro es mejor que un deploy sin bindings.
 if [ ! -f wrangler.toml ] || [ ! -f Cargo.toml ]; then
   echo "[build.sh] ERROR: falta wrangler.toml o Cargo.toml junto a build.sh." >&2
-  echo "[build.sh] Este script DEBE vivir en worker/ (Root directory: worker)." >&2
-  echo "[build.sh] NUNCA recrear wrangler.toml/build.sh en la raiz del repo" >&2
-  echo "[build.sh] (deploy sin bindings, commit 2ad38a8)." >&2
+  echo "[build.sh] Este script DEBE ejecutarse desde worker/ (cwd del build)." >&2
+  echo "[build.sh] build.sh solo vive en worker/; si esta copia en la raiz," >&2
+  echo "[build.sh] reviertelo: el deploy raiz usa [build] cwd = worker." >&2
   exit 1
 fi
 
