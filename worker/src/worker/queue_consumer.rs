@@ -5,6 +5,7 @@
 //! cada mensaje e idempotencia via el Durable Object (la puerta /attempt
 //! decide si el intento procede; un duplicado nunca consume quota dos veces).
 
+use crate::runtime::param_derive;
 use serde::{Deserialize, Serialize};
 use worker::*;
 
@@ -389,7 +390,15 @@ async fn attempt_repair(
     };
 
     // Contenido actual (todo el I/O vive aqui, no en el crate no_std).
-    let before = match client.get_file(&target_path).await {
+    // La NN clasifica el OPERADOR pero V0 no emite parametros (no tiene
+// cabezas para ellos): sin derivarlos, todo intento con el gate en
+// verde terminaba bloqueado con missing_param aunque el diagnostico
+// fuera correcto (auditoria de codigo 2026-10-05). Derivacion textual
+// acotada y determinista (param_derive); lo no derivable sigue
+// bloqueado (fail-closed: nunca se inventa un valor).
+let mut action = action.clone();
+param_derive::ensure_params(&mut action, incident);
+let before = match client.get_file(&target_path).await {
         Ok(Some(c)) => c,
         Ok(None) => {
             return Ok(RepairOutcome::Blocked {
