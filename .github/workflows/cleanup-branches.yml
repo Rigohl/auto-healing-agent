@@ -117,24 +117,22 @@ jobs:
           } > /tmp/cleanup.log 2>&1
           cat /tmp/cleanup.log
 
-      - name: Post cleanup log (diag temporal)
+      - name: Cerrar issues diag-cleanup residuales
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cat > /tmp/mkbody.py <<"PYEOF"
-          try:
-              with open("/tmp/cleanup.log") as fh:
-                  t = fh.read()
-          except OSError:
-              t = "log missing"
-          with open("/tmp/body.md", "w") as fh:
-              fh.write("## cleanup log\n\n~~~\n" + t[-15000:] + "\n~~~")
-          PYEOF
-          python3 /tmp/mkbody.py
-          gh issue create \
-            --title "diag-cleanup ${GITHUB_SHA:0:7}" \
-            --body-file /tmp/body.md || true
+          set -euo pipefail
+          # Historico: este paso abria una issue "diag-cleanup <sha>" en cada
+          # push a main y nunca las cerraba (18 acumuladas, #92-#109). El log
+          # completo ya queda en la salida del paso anterior de este mismo run
+          # de Actions; los issues diag no aportan (docs/WORKERS_BEST_PRACTICES.md
+          # P6). Ahora el paso CIERRA las residuales en vez de crear mas.
+          nums="$(gh issue list --state open --limit 200 --json number,title \
+            --jq '.[] | select(.title | startswith("diag-cleanup")) | .number' || true)"
+          for n in $nums; do
+            gh issue close "$n" --comment "Cierre automatico: issue diag temporal obsoleta; el log completo vive en el run de Branch cleanup de Actions."
+          done
 
       - name: Re-verificar main (BRANCH_DRIFT pasa a verde tras el borrado)
         env:
