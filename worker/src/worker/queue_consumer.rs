@@ -5,7 +5,6 @@
 //! cada mensaje e idempotencia via el Durable Object (la puerta /attempt
 //! decide si el intento procede; un duplicado nunca consume quota dos veces).
 
-use crate::runtime::param_derive;
 use serde::{Deserialize, Serialize};
 use worker::*;
 
@@ -18,6 +17,7 @@ use repair_types::{
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
     model,
+    param_derive,
     quota::QuotaConfig,
     rules,
     security::{fnv1a64, urlencode},
@@ -50,8 +50,7 @@ pub struct WebhookPayload {
     #[serde(default)]
     pub source: String,
     #[serde(default)]
-    pub e
-rror_code: String,
+    pub error_code: String,
     #[serde(default)]
     pub error_step: String,
     #[serde(default)]
@@ -119,8 +118,7 @@ impl WebhookPayload {
 ///
 /// Sin campo `attempts`: el body del mensaje es inmutable al reintentar,
 /// asi que un contador aqui no sobreviviria a los redeliveries. El numero de
-/// intentos REALES
- vive en el DO (columna `incidents.attempts`, la incrementa
+/// intentos REALES vive en el DO (columna `incidents.attempts`, la incrementa
 /// `/attempt`); ver `RETRY_DELAY_SECONDS`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueTask {
@@ -168,8 +166,7 @@ pub async fn consume(batch: MessageBatch<QueueTask>, env: Env) -> Result<()> {
                 // delay fijo; el TOPE es max_retries=3 de la cola, y ahi el
                 // mensaje cae a la DLQ (su consumidor lo registra como
                 // veneno). El corte autoritativo por numero de intentos es el
-                // DO (/attempt
-), no este consumidor.
+                // DO (/attempt), no este consumidor.
                 console_warn!(
                     "retry correlation_id={} en {}s: {}",
                     task.correlation_id,
@@ -224,7 +221,6 @@ async fn process(
     let features = extract(&incident, &signature);
 
     // 2.5 Reglas declarativas (P1): filtrado adicional fail-closed.
-
     // REPAIR_RULES invalido => bloqueado (nunca dejar pasar por defecto);
     // sin var o "[]" => sin reglas (no-op). Esquema y sintaxis: rules.rs.
     let ruleset = match rules::load(&env) {
@@ -273,8 +269,7 @@ async fn process(
         }
         Ok((None, observed)) => {
             if !observed.is_empty() {
- 
-               console_log!("rules observed: {}", observed.join(","));
+                console_log!("rules observed: {}", observed.join(","));
             }
         }
         Err(e) => {
@@ -328,8 +323,7 @@ async fn process(
 
 fn blocked_result_qs(task: &QueueTask, decision: &str, reason: &str) -> String {
     format!(
-        "
-/result?correlation_id={}&incident_id={}&decision={}&fingerprint=&verify_status=blocked&evidence_ref=&reason={}",
+        "/result?correlation_id={}&incident_id={}&decision={}&fingerprint=&verify_status=blocked&evidence_ref=&reason={}",
         urlencode(&task.correlation_id),
         urlencode(&task.incident_id),
         decision,
@@ -384,8 +378,7 @@ async fn attempt_repair(
     // Target file del edit acotado (paso 1): package.json para operadores de
     // dependencias; el resto lo nombra el parametro `file` de la accion.
     let target_path = match action.repair_operator {
-        Operato
-rId::DependencyRepair | OperatorId::VersionPin => String::from("package.json"),
+        OperatorId::DependencyRepair | OperatorId::VersionPin => String::from("package.json"),
         _ => match action.parameters.get("file") {
             Some(f) if !f.is_empty() => f.clone(),
             _ => {
@@ -404,7 +397,6 @@ rId::DependencyRepair | OperatorId::VersionPin => String::from("package.json"),
     // bloqueado (fail-closed: nunca se inventa un valor).
     let mut action = action.clone();
     param_derive::ensure_params(&mut action, incident);
-
     // Contenido actual (todo el I/O vive aqui, no en el crate no_std).
     let before = match client.get_file(&target_path).await {
         Ok(Some(c)) => c,
@@ -440,8 +432,7 @@ rId::DependencyRepair | OperatorId::VersionPin => String::from("package.json"),
     }
 
     let title = format!(
-        "auto-heal: {} [{
-}]",
+        "auto-heal: {} [{}]",
         action.repair_operator.as_str(),
         task.incident_id
     );
@@ -491,8 +482,7 @@ fn diff_blocked_reason(e: &diff::DiffError) -> String {
         diff::DiffError::FileUnavailable(_) => String::from("file_unavailable"),
         diff::DiffError::FileTooLarge(_) => String::from("file_too_large"),
         diff::DiffError::PatternNotFound(_) => String::from("pattern_not_found"),
-        diff::DiffError::MajorBump { .. } => String::from("major_bump
-_refused"),
+        diff::DiffError::MajorBump { .. } => String::from("major_bump_refused"),
     }
 }
 
