@@ -22,7 +22,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -51,7 +51,8 @@ jobs:
       # El invariant del proyecto, comprobado y no solo escrito: la confianza
       # de la NN nunca es PASS. Si alguien borra el gate o sus umbrales, esto
       # se pone rojo antes que el reviewer.
-      - name: El gate sigue fail-closed (0.55 / 0.45)
+      - name: El gate sigu
+e fail-closed (0.55 / 0.45)
         run: |
           set -euo pipefail
           grep -q "pub const MIN_CONFIDENCE: f32 = 0.55;" worker/src/worker/mod.rs

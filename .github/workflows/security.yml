@@ -28,7 +28,7 @@ jobs:
     name: Cargo Audit (dependencias Rust)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       # `cargo install cargo-audit` compila ~200 crates y domina el tiempo de
       # este job; cache-bin reutiliza el binario ya compilado.
@@ -49,7 +49,8 @@ jobs:
         run: cargo audit
       # worker/ es un [workspace] propio (DISCREPANCIES item 35): `cargo audit`
       # sin --file no ve sus dependencias. Ojo: cargo-audit 0.22.1 NO acepta
-      # `--manifest-path` (no es cargo); el flag es `--file`, y apunta al lock.
+      # `--manifest-path` (no es cargo); e
+l flag es `--file`, y apunta al lock.
       - name: Generar lock de worker/
         run: cargo generate-lockfile --manifest-path worker/Cargo.toml
       - name: Auditar worker/
@@ -59,7 +60,7 @@ jobs:
     name: Gitleaks (secretos en el arbol y el historial)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -72,7 +73,7 @@ jobs:
     name: Guards de deploy (preflight y permisos)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Una sola implementacion de la logica de Preflight: este script, no una
       # copia del `sed` del paso Preflight de deploy.yml. Si divergieran, el
       # job pasaría mientras el deploy se cae, que es peor que no tenerlo.

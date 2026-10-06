@@ -28,7 +28,7 @@ jobs:
   workspace-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       # --workspace: los 6 crates del raiz, incluido repair_nn_wasm (que el
       # listado -p anterior excluía). El worker NO es miembro: jobs worker-*.
@@ -37,7 +37,7 @@ jobs:
   workspace-clippy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -52,11 +52,12 @@ jobs:
   workspace-fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - run: cargo fmt --all -- --check
+   
+   - run: cargo fmt --all -- --check
 
   # ---------------- código huérfano (deps sin uso) ----------------
   # Ninguna tool de Rust ve una dependencia declarada que ningún crate usa:
@@ -67,7 +68,7 @@ jobs:
   unused-deps:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: cargo-machete (deps declaradas sin uso en crates/ y worker/)
@@ -84,7 +85,7 @@ jobs:
   worker-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -100,21 +101,22 @@ jobs:
       # Item 34, gap restante (2026-10-03): worker/ es una unidad de build
       # propia y `cargo fmt --all` del raiz no la alcanza (DISCREPANCIES
       # item 34). El arbol del worker se formateo con el mismo toolchain
-      # (workflow temporal del PR #24); este check impide que el formato
+      # (workflow temporal del PR #24
+); este check impide que el formato
       # vuelva a divergir en silencio.
       - run: cargo fmt --manifest-path worker/Cargo.toml -- --check
 
   worker-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --manifest-path worker/Cargo.toml
 
   worker-clippy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -131,6 +133,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Compilar el artefacto WASM real (worker-build --release --panic-unwind)
         run: bash worker/build.sh

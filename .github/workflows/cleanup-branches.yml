@@ -36,7 +36,8 @@ on:
         default: ""
       superseded:
         description: "Ramas superseded (ver evidencia en el paso de borrado); vacio = default"
-        required: false
+        required: fal
+se
         default: ""
   push:
     branches: [main]
@@ -60,7 +61,7 @@ jobs:
       # byte-exactos via el PR #56 (P2 alarma DO, P3 sampling, docs backlog).
       DEFAULT_SUPERSEDED: fix/deep-audit-2026-10-03 diag/worker-build-main feat/declarative-rules fix/deep-audit-p0-2026-10-05 feat/p2-do-alarm-retention feat/p3-observability-sampling docs/workers-best-practices-2026-10-05 feat/reland-param-derive
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -86,7 +87,8 @@ jobs:
               echo "borrando origin/$b: 100 por ciento mergeada en main"
               git push origin --delete "$b"
             elif [ "$AUTO" -eq 1 ]; then
-              echo "::warning::origin/$b tiene commits fuera de main; NO se borra"
+              echo "::warning::origin/$b tiene comm
+its fuera de main; NO se borra"
             else
               echo "::error::origin/$b tiene commits fuera de main; NO se borra"
               exit 1
@@ -138,7 +140,8 @@ jobs:
 
       - name: Re-verificar main (BRANCH_DRIFT pasa a verde tras el borrado)
         env:
-          GH_TOKEN: ${{ github.token }}
+     
+     GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # El borrado de refs NO es un push a main: consistency no se

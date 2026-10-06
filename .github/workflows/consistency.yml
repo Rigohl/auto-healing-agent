@@ -27,7 +27,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # fetch-depth: 0 es OBLIGATORIO, no una optimizacion. Con el shallow
           # default (1) no existen refs de origin y el claim BRANCH_DRIFT no
@@ -35,7 +35,7 @@ jobs:
           # de una sola rama.
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -54,9 +54,10 @@ jobs:
       - name: Comprobacion de consistencia y deriva
         run: python3 scripts/verify_repo.py --out verification_evidence.json
 
+
       - name: Subir evidencia
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: verification-evidence
           path: verification_evidence.json

@@ -23,7 +23,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # El build lo hace wrangler vía worker/wrangler.toml:
       #   command = "bash ./build.sh"
@@ -58,7 +58,8 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         working-directory: worker
-        run: npx wrangler deploy
+        run: npx wrangle
+r deploy
 
       - name: Smoke test
         env:
