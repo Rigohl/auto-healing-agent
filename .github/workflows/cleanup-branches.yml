@@ -36,8 +36,7 @@ on:
         default: ""
       superseded:
         description: "Ramas superseded (ver evidencia en el paso de borrado); vacio = default"
-        required: fal
-se
+        required: false
         default: ""
   push:
     branches: [main]
@@ -87,8 +86,7 @@ jobs:
               echo "borrando origin/$b: 100 por ciento mergeada en main"
               git push origin --delete "$b"
             elif [ "$AUTO" -eq 1 ]; then
-              echo "::warning::origin/$b tiene comm
-its fuera de main; NO se borra"
+              echo "::warning::origin/$b tiene commits fuera de main; NO se borra"
             else
               echo "::error::origin/$b tiene commits fuera de main; NO se borra"
               exit 1
@@ -140,8 +138,7 @@ its fuera de main; NO se borra"
 
       - name: Re-verificar main (BRANCH_DRIFT pasa a verde tras el borrado)
         env:
-     
-     GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           # El borrado de refs NO es un push a main: consistency no se
