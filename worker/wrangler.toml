@@ -15,8 +15,12 @@
 #      fail-closed: blocked github_token_not_configured (nunca 500).
 #   5. Workers Builds NO honra el [build] de este archivo (docs de Cloudflare)
 #      y su imagen no lista Rust: en el dashboard (Settings > Build) usar
-#        Build command:  bash build.sh
-#        Deploy command: npx wrangler deploy
+#        Root directory:  worker   (OBLIGATORIO: con raiz desplegaria sin bindings)
+#        Build command:   bash build.sh
+#        Deploy command:  npx wrangler deploy
+#      NOTA (commit 2ad38a8, 2026-10-05): NO recrear wrangler.toml ni build.sh
+#      en la raiz del repo. Existieron para "Root directory = /" y provocaban
+#      deploys sin KV/DO/Queues (webhook fail-closed en cada request).
 #
 # Produccion = entorno por defecto: deploy.yml ejecuta `npx wrangler deploy`
 # sin --env, y el nombre del Worker del dashboard debe coincidir con `name`.
@@ -39,7 +43,8 @@ enabled = true
 # si crece el trafego para controlar facturacion de Workers Logs).
 head_sampling_rate = 1
 
-# Quotas y anti-loop: configuracion separada del estado (el estado vive en el
+# Quotas y anti-loop: configuracion separada del estad
+o (el estado vive en el
 # Durable Object). Cambiar valores NO requiere tocar el esquema SQL.
 [vars]
 # MONITOR: repos que el cron scheduled barre (worker/src/worker/monitor.rs).
@@ -96,7 +101,8 @@ queue = "auto-healing-repairs"
 # el consumidor ademas corta por su propio contador de attempts (hard stop).
 [[queues.consumers]]
 queue = "auto-healing-repairs"
-max_batch_size = 5
+max_batch_size
+ = 5
 max_batch_timeout = 10
 max_retries = 3
 max_concurrency = 1
@@ -155,7 +161,8 @@ QUOTA_DAILY_BUDGET = "50"
 ANTI_LOOP_MAX_SAME_INCIDENT = "3"
 ANTI_LOOP_MAX_SAME_SIGNATURE = "5"
 ANTI_LOOP_MAX_SAME_FINGERPRINT = "2"
-ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION = "3"
+ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION = "3
+"
 ANTI_LOOP_WINDOW_SECONDS = "900"
 
 [[env.staging.kv_namespaces]]
