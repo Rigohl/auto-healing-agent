@@ -55,8 +55,7 @@ jobs:
       - name: Respaldar current -> model/rollback
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_A
-CCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           NS: ${{ inputs.kv_namespace_id }}
         run: |
           set -euo pipefail
@@ -99,8 +98,7 @@ CCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
             n=$(npx wrangler@4 kv key get "$key" --namespace-id "$NS" 2>/dev/null | wc -w)
             if [ "$n" -ne 2863 ]; then
               echo "::error::la clave $key devolvio $n tokens, se esperan 2863"
-              exit 
-1
+              exit 1
             fi
             echo "$key OK: 2863 tokens"
           done
