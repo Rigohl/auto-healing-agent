@@ -50,7 +50,8 @@ pub struct WebhookPayload {
     #[serde(default)]
     pub source: String,
     #[serde(default)]
-    pub error_code: String,
+    pub e
+rror_code: String,
     #[serde(default)]
     pub error_step: String,
     #[serde(default)]
@@ -118,7 +119,8 @@ impl WebhookPayload {
 ///
 /// Sin campo `attempts`: el body del mensaje es inmutable al reintentar,
 /// asi que un contador aqui no sobreviviria a los redeliveries. El numero de
-/// intentos REALES vive en el DO (columna `incidents.attempts`, la incrementa
+/// intentos REALES
+ vive en el DO (columna `incidents.attempts`, la incrementa
 /// `/attempt`); ver `RETRY_DELAY_SECONDS`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueTask {
@@ -166,7 +168,8 @@ pub async fn consume(batch: MessageBatch<QueueTask>, env: Env) -> Result<()> {
                 // delay fijo; el TOPE es max_retries=3 de la cola, y ahi el
                 // mensaje cae a la DLQ (su consumidor lo registra como
                 // veneno). El corte autoritativo por numero de intentos es el
-                // DO (/attempt), no este consumidor.
+                // DO (/attempt
+), no este consumidor.
                 console_warn!(
                     "retry correlation_id={} en {}s: {}",
                     task.correlation_id,
@@ -221,6 +224,7 @@ async fn process(
     let features = extract(&incident, &signature);
 
     // 2.5 Reglas declarativas (P1): filtrado adicional fail-closed.
+
     // REPAIR_RULES invalido => bloqueado (nunca dejar pasar por defecto);
     // sin var o "[]" => sin reglas (no-op). Esquema y sintaxis: rules.rs.
     let ruleset = match rules::load(&env) {
@@ -269,7 +273,8 @@ async fn process(
         }
         Ok((None, observed)) => {
             if !observed.is_empty() {
-                console_log!("rules observed: {}", observed.join(","));
+ 
+               console_log!("rules observed: {}", observed.join(","));
             }
         }
         Err(e) => {
@@ -323,7 +328,8 @@ async fn process(
 
 fn blocked_result_qs(task: &QueueTask, decision: &str, reason: &str) -> String {
     format!(
-        "/result?correlation_id={}&incident_id={}&decision={}&fingerprint=&verify_status=blocked&evidence_ref=&reason={}",
+        "
+/result?correlation_id={}&incident_id={}&decision={}&fingerprint=&verify_status=blocked&evidence_ref=&reason={}",
         urlencode(&task.correlation_id),
         urlencode(&task.incident_id),
         decision,
@@ -378,7 +384,8 @@ async fn attempt_repair(
     // Target file del edit acotado (paso 1): package.json para operadores de
     // dependencias; el resto lo nombra el parametro `file` de la accion.
     let target_path = match action.repair_operator {
-        OperatorId::DependencyRepair | OperatorId::VersionPin => String::from("package.json"),
+        Operato
+rId::DependencyRepair | OperatorId::VersionPin => String::from("package.json"),
         _ => match action.parameters.get("file") {
             Some(f) if !f.is_empty() => f.clone(),
             _ => {
@@ -389,16 +396,17 @@ async fn attempt_repair(
         },
     };
 
-    // Contenido actual (todo el I/O vive aqui, no en el crate no_std).
     // La NN clasifica el OPERADOR pero V0 no emite parametros (no tiene
-// cabezas para ellos): sin derivarlos, todo intento con el gate en
-// verde terminaba bloqueado con missing_param aunque el diagnostico
-// fuera correcto (auditoria de codigo 2026-10-05). Derivacion textual
-// acotada y determinista (param_derive); lo no derivable sigue
-// bloqueado (fail-closed: nunca se inventa un valor).
-let mut action = action.clone();
-param_derive::ensure_params(&mut action, incident);
-let before = match client.get_file(&target_path).await {
+    // cabezas para ellos): sin derivarlos, todo intento con el gate en
+    // verde terminaba bloqueado con missing_param aunque el diagnostico
+    // fuera correcto (auditoria de codigo 2026-10-05). Derivacion textual
+    // acotada y determinista (param_derive); lo no derivable sigue
+    // bloqueado (fail-closed: nunca se inventa un valor).
+    let mut action = action.clone();
+    param_derive::ensure_params(&mut action, incident);
+
+    // Contenido actual (todo el I/O vive aqui, no en el crate no_std).
+    let before = match client.get_file(&target_path).await {
         Ok(Some(c)) => c,
         Ok(None) => {
             return Ok(RepairOutcome::Blocked {
@@ -410,7 +418,7 @@ let before = match client.get_file(&target_path).await {
     };
 
     // Edit acotado + diff unificado (crates/repair_operators/src/diff.rs).
-    let edit = match diff::generate_edit(action, incident, |p: &str| {
+    let edit = match diff::generate_edit(&action, incident, |p: &str| {
         if p == target_path {
             Some(before.clone())
         } else {
@@ -432,7 +440,8 @@ let before = match client.get_file(&target_path).await {
     }
 
     let title = format!(
-        "auto-heal: {} [{}]",
+        "auto-heal: {} [{
+}]",
         action.repair_operator.as_str(),
         task.incident_id
     );
@@ -482,7 +491,8 @@ fn diff_blocked_reason(e: &diff::DiffError) -> String {
         diff::DiffError::FileUnavailable(_) => String::from("file_unavailable"),
         diff::DiffError::FileTooLarge(_) => String::from("file_too_large"),
         diff::DiffError::PatternNotFound(_) => String::from("pattern_not_found"),
-        diff::DiffError::MajorBump { .. } => String::from("major_bump_refused"),
+        diff::DiffError::MajorBump { .. } => String::from("major_bump
+_refused"),
     }
 }
 
