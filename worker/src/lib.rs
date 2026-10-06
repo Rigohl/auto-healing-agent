@@ -117,11 +117,7 @@ async fn model_report(State(env): State<Env>) -> AxumResponse {
 /// (State, HeaderMap, Bytes) sustituyen a Request/RouteContext; el
 /// algoritmo y los cuerpos de error son identicos al del Router legacy.
 #[worker::send]
-async fn handle_webhook(
-    State(env): State<Env>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> AxumResponse {
+async fn handle_webhook(State(env): State<Env>, headers: HeaderMap, body: Bytes) -> AxumResponse {
     // 1. Autorizacion fail-closed. Sin secret configurado el endpoint queda
     //    cerrado (503); con secret, comparacion en tiempo constante. Un secret
     //    VACIO cuenta como no configurado: con un secret "" el header vacio
