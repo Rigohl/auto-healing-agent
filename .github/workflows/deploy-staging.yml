@@ -54,8 +54,7 @@ jobs:
           # [env.staging] referencia colas *-staging que DEBEN existir en la
           # cuenta antes del primer deploy (Cloudflare > Storage & Databases >
           # Queues). El preflight no puede crearlas (least privilege): si
-          # faltan, la API de Cloudflare rechaza el d
-eploy con un error claro.
+          # faltan, la API de Cloudflare rechaza el deploy con un error claro.
 
       - name: Deploy
         env:
