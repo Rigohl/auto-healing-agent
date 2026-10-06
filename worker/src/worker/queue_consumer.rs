@@ -16,8 +16,7 @@ use repair_types::{
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
-    model,
-    param_derive,
+    model, param_derive,
     quota::QuotaConfig,
     rules,
     security::{fnv1a64, urlencode},
