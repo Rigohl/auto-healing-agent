@@ -120,6 +120,18 @@ jobs:
           components: clippy
       - run: cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings
 
+  # ---------------- guard de configuracion (wrangler.toml) ----------------
+  # Ningun job validaba wrangler.toml: solo wrangler lo parsea, en el momento
+  # del deploy (accion humana). El incidente fb6d59db dejo 4 saltos de linea
+  # que rompian el TOML (fix 1f0c66e) y CI seguia verde porque nada lo leia.
+  # tomllib (Python 3.11+, en ubuntu-latest) valida el parseo en cada push/PR.
+  wrangler-toml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: worker/wrangler.toml debe ser TOML valido
+        run: python3 -c "import tomllib; tomllib.load(open('worker/wrangler.toml','rb')); print('wrangler.toml: TOML valido')"
+
   # ---------------- artefacto real de deploy (worker-build) ----------------
   # Auditoria P0: ningun job de CI compilaba el artefacto WASM real; el
   # primer deploy seria la primera prueba de build.sh (incluido
