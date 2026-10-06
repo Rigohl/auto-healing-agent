@@ -52,6 +52,44 @@ Los issues #38–#52 son logs automatizados (diag-verify/diag-cleanup) que
 ya no aportan: el snapshot 441705f está OVERALL: PASS. Cerrarlos con un
 comentario de archivo y mantener solo los abiertos recientes.
 
+## Revisión contra documentación de Cloudflare en vivo (2026-10-06)
+
+Nueva pasada contra developers.cloudflare.com (changelog + docs) tras el
+bump de actions. Estado: nada roto; tres ítems nuevos al backlog.
+
+### P7 — Actualizar compatibility_date (2024-09-23 -> actual)
+El worker usa `compatibility_date = "2024-09-23"` (~2 años). No es un
+bug: los cambios de compat date alteran el runtime, así que el bump debe
+hacerse deliberado y con CI + smoke test de staging en verde. Cambios
+relevantes que se ganarían:
+- DO `deleteAll()` borra TAMBIÉN el alarm del objeto (compat >= 2026-02-24);
+  hoy la retención P2 debe cancelar alarms a mano al limpiar estado.
+- Para compat >= 2026-08-04, `nodejs_compat` viene activado por defecto.
+- Límite de 1000 subrequests por invocación ELIMINADO (2026-02-11).
+Requisito: confirmar que workers-rs 0.8 soporta la fecha objetivo antes.
+
+### P8 — WebAssembly Exception Handling (futuro, WASM 3.0)
+Changelog de Workers: hoy wasm-bindgen trata un panic como estado
+inválido del módulo WASM (el runtime reinicializa). El repo ya maneja
+panics (hook en lib.rs, sin unwrap() en el path de request). La propuesta
+WASM 3.0 permitirá panics recuperables sin reinicialización: reevaluar
+cuando Cloudflare lo soporte en producción (no adelantarse: NO_LLM_POLICY
+aplica igual, es solo runtime).
+
+### P9 — Rules of Durable Objects (guía oficial 2025-12-15)
+Cloudflare publicó una guía opinada de best practices de DO. El diseño
+actual ya sigue las reglas principales (un DO por repo como átomo de
+coordinación, storage transaccional, alarms). Acción: revisar la guía
+contra incident_state.rs en el próximo ciclo de auditoría; no hay
+incumplimientos conocidos hoy.
+
+### Ya cubierto (verificado, sin acción)
+- Pánico handler por defecto en Rust Workers: el repo ya lo tiene.
+- `[observability]` + `head_sampling_rate = 1`: hecho (P3).
+- Límite KV de namespaces: ahora 1000 por cuenta (usamos 6, sobra margen).
+- Workers Builds: Root directory worker + build.sh + wrangler deploy,
+  documentado en wrangler.toml (NO recrear config en raíz).
+
 ## No-hacer (decisión explícita)
 
 - NO migrar a D1: el estado transaccional por repo encaja en DO SQLite.
