@@ -51,9 +51,13 @@ no del repo. Guardas activas y de proceso:
    `cd worker && bash build.sh && npx wrangler deploy`.
 2. **Guarda en build.sh**: si no encuentra wrangler.toml/Cargo.toml a su
    lado, aborta con mensaje explicito (nunca un deploy sin bindings).
-3. **Guarda estructural del repo**: wrangler.toml/build.sh PROHIBIDOS en la
-   raiz (commit 2ad38a8). Si reaparecen, el deploy de raiz vuelve a salir
-   sin KV/DO/Queues: webhook fail-closed en cada request.
+3. **Guarda estructural del repo (ACTUALIZADA 2026-10-06)**: la raiz tiene
+   ahora un wrangler.toml ESPEJO COMPLETO de worker/wrangler.toml (decision
+   del dueno; main=worker/build/..., [build] cwd=worker) para que
+   `npx wrangler deploy` en la raiz despliegue con TODOS los bindings SIN
+   tocar el dashboard. validate-preflight.sh guard 6 exige equivalencia de
+   claves criticas (ids KV, colas, DO, crons, vars): divergencia = CI rojo.
+   build.sh sigue PROHIBIDO en la raiz.
 4. **Watch paths** (dashboard > Build > watch paths): `worker/**` para que
    solo los cambios del worker disparen builds (menos builds fallidos por
    pushes de docs).
