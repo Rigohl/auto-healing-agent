@@ -1,6 +1,6 @@
 # Auto-Healing Agent: Implementation Progress (Rust/WASM)
 
-> **Last Updated**: 2026-10-05
+> **Last Updated**: 2026-10-06
 > **Status**: In Progress (Target: 100% Auto-Repair in Rust/WASM)
 > **Compatibility**: Cloudflare Workers + Tokyo Night Theme
 
@@ -42,7 +42,8 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
   pub fn generate_diff(incident: &Incident, action: &RepairAction) -> Option<String> {
       match action.repair_operator {
           OperatorId::SyntaxFix => generate_syntax_diff(incident, action),
-          OperatorId::DependencyRepair => generate_deps_diff(incident),
+          OperatorId::DependencyRepair => gen
+erate_deps_diff(incident),
           // ...
       }
   }
@@ -81,7 +82,8 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
 
 ### 4. **GitHub Actions Callback**
 - **File**: `worker/src/lib.rs`
-- **Status**: ✅ **Done (2026-10-05)** — POST /github/callback in worker/src/lib.rs: same fail-closed secret auth as /webhook; parses verify_status pass|fail|blocked and records it in the DO via /result. Never declares PASS itself.
+- **Status**: ✅ **Done (2026-10-05)** — POST /github/callback in worker/src/lib.rs: same fail-closed secret auth as /webhook; parses verify_status pass
+|fail|blocked and records it in the DO via /result. Never declares PASS itself.
 - **Goal**: Receive CI results and update Durable Object.
 - **Approach**:
   - Add endpoint: `POST /github/callback`.
@@ -130,9 +132,13 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
 | CI in main | 100% green after PR #29 (MONITOR, merge `3136ea8a`) and PR #30 (panic=unwind, merge `f123f12`); only Workers Builds red (item 56, human action) |
 | panic=unwind | `worker/build.sh` in main compiles with `worker-build --release --panic-unwind` (blob `aa7f10cf`, verified) |
 | PR #32 (open) | New job `worker-build-artifact` in ci.yml: FIRST CI job that compiles the real worker WASM |
-| Worker deploy | ❌ PENDING: the deployed Cloudflare script is a 275-byte "Hello world" placeholder; the real worker has NEVER been deployed (runbook docs §23.2) |
+| Worker deploy | ❌ PENDING: the deployed Cloudflare script is a 275-byte "Hello world" placeholder; the rea
+l worker has NEVER been deployed (runbook docs §23.2) |
 | Branches | Repo has ONLY `main` (cleanup-branches.yml auto-deletes fully merged branches) |
 | Mem0 | Workspace connector OPERATIONAL (verified live 2026-10-05: add/search/get memories); no usage from the worker yet |
+| REPAIR_CASES_KV | Namespace exists in the Cloudflare account (verified live via API 2026-10-06): id `996211a015f14c54b85ea4b47e79fdf9`, bound in `worker/wrangler.toml` (prod + staging) |
+| Worker script | `auto-healing-agent` exists in Cloudflare (modified 2026-10-05T18:03Z); DEPLOY of the real Rust/WASM build still pending (placeholder) |
+| CI main | Green on `662a929` (2026-10-06): verify PASS 49/50 confirmed, red was BRANCH_DRIFT (commit message) |
 
 ---
 
@@ -149,7 +155,7 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
 
 ## 🎉 **Next Steps**
 
-1. **Implement `generate_diff()`** in `repair_operators`.
+1. ✅ **Implement `generate_diff()`** in `repair_operators` — DONE: `crates/repair_operators/src/diff.rs` (`generate_edit` + `unified_diff` + `generate_diff`, 2026-10-05).
 2. ✅ **Add GitHub API calls** in `queue_consumer.rs` — DONE: `github_client.rs` + `attempt_repair()` (2026-10-05).
 3. ✅ **Configure KV** for `RepairCase` persistence — DONE: `REPAIR_CASES_KV` (2026-10-05).
 4. ✅ **Add `/github/callback`** endpoint — DONE (2026-10-05).
