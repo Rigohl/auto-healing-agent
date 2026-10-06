@@ -1,0 +1,27 @@
+name: diag-verify-output
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  issues: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python scripts/verify_repo.py 2>&1 | tee /tmp/verify.log || true
+      - name: Post to issue
+        run: |
+          {
+            echo "diag-verify @${GITHUB_SHA}"
+            echo '```'
+            tail -c 6000 /tmp/verify.log
+            echo '```'
+          } > /tmp/body.md
+          gh issue create --title "diag-verify ${GITHUB_SHA::7}" --body-file /tmp/body.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
