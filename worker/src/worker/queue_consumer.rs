@@ -16,8 +16,7 @@ use repair_types::{
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
-    model,
-    param_derive,
+    model, param_derive,
     quota::QuotaConfig,
     rules,
     security::{fnv1a64, urlencode},
@@ -468,7 +467,7 @@ async fn attempt_repair(
     };
 
     // PASO 3: RepairCase persistible en KV (alternativa sin Mongo).
-    persist_case(env, task, incident, action, &pr_url).await;
+    persist_case(env, task, incident, &action, &pr_url).await;
 
     console_log!("repair pr opened: {} {}", task.correlation_id, pr_url);
     Ok(RepairOutcome::Repaired { pr_url })

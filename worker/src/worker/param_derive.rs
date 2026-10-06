@@ -212,7 +212,10 @@ mod tests {
             a.parameters.get(P_DEPENDENCY).map(String::as_str),
             Some("react")
         );
-        assert_eq!(a.parameters.get(P_VERSION).map(String::as_str), Some("18.0.0"));
+        assert_eq!(
+            a.parameters.get(P_VERSION).map(String::as_str),
+            Some("18.0.0")
+        );
     }
 
     #[test]
@@ -236,7 +239,10 @@ mod tests {
             a.parameters.get(P_DEPENDENCY).map(String::as_str),
             Some("left-pad")
         );
-        assert_eq!(a.parameters.get(P_VERSION).map(String::as_str), Some("1.3.0"));
+        assert_eq!(
+            a.parameters.get(P_VERSION).map(String::as_str),
+            Some("1.3.0")
+        );
     }
 
     #[test]
