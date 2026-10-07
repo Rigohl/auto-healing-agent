@@ -250,7 +250,7 @@ pub async fn render(env: &Env) -> Result<Response> {
     }
     let stats = aggregate(&cases);
     let html = render_html(&stats, !list.list_complete);
-    let headers = Headers::new()?;
+    let headers = Headers::new();
     headers.set("content-type", "text/html; charset=utf-8")?;
     Ok(Response::from_bytes(html.into_bytes())?.with_headers(headers))
 }
