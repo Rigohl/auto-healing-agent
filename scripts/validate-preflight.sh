@@ -59,7 +59,10 @@ if [ -e wrangler.toml ] || [ -L wrangler.toml ]; then
     fail "wrangler.toml (raiz) tiene un REPLACE_WITH activo"
   fi
 else
-  pass "sin wrangler.toml raiz (Root directory = /, fail-closed)"
+  # Decision dueno 2026-10-06: la raiz DEBE tener wrangler.toml (espejo
+  # completo). Si desaparece, Workers Builds vuelve a fallar con "static
+  # files" en el proximo deploy: fail-closed aqui, no en produccion.
+  fail "falta wrangler.toml raiz (espejo obligatorio desde 2026-10-06): sin el, npx wrangler deploy en la raiz falla con 'Could not detect a directory containing static files'"
 fi
 
 # 3. Un placeholder en una linea activa se detecta.
@@ -132,7 +135,7 @@ elif [ -f wrangler.toml ]; then
     fi
   fi
 else
-  pass "sin wrangler.toml raiz (Root directory = /, fail-closed)"
+  fail "falta wrangler.toml raiz (espejo obligatorio desde 2026-10-06)"
 fi
 
 if [ "$FAILED" -ne 0 ]; then
