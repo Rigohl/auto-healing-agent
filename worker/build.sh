@@ -31,6 +31,29 @@ if [ ! -f wrangler.toml ] || [ ! -f Cargo.toml ]; then
   exit 1
 fi
 
+# PROVISION DE COLAS (2026-10-07, tras el build d92fc568: "Queue
+# auto-healing-repairs-dlq does not exist"). wrangler deploy valida que las
+# colas de wrangler.toml existan ANTES de subir el script. Workers Builds
+# inyecta CLOUDFLARE_API_TOKEN al entorno del build (con el autentica el
+# propio deploy command); este paso asegura las 4 colas de forma idempotente
+# con ese mismo token. En local y GitHub Actions (sin token en el entorno)
+# el paso se salta sin error. No es fail-closed a proposito: si el token no
+# puede crear colas, el veredicto final lo da el deploy (que falla igual que
+# hoy con "does not exist"), y el WARN del log queda como diagnostico.
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+  for q in auto-healing-repairs auto-healing-repairs-dlq \
+           auto-healing-repairs-staging auto-healing-repairs-dlq-staging; do
+    if npx --yes wrangler queues create "$q" >"/tmp/queue-$q.log" 2>&1; then
+      echo "[build.sh] cola $q creada"
+    elif grep -qiE "already exist|ya existe" "/tmp/queue-$q.log"; then
+      echo "[build.sh] cola $q ya existe"
+    else
+      echo "[build.sh] WARN: no se pudo asegurar la cola $q (el deploy dira si es bloqueante):"
+      sed "s/^/[build.sh]   /" "/tmp/queue-$q.log" || true
+    fi
+  done
+fi
+
 export PATH="$HOME/.cargo/bin:$PATH"
 
 if ! command -v cargo >/dev/null 2>&1; then
