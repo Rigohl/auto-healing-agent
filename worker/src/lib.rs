@@ -43,8 +43,7 @@ use repair_types::{compute_idempotency_key, FailureSignature};
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
-    dashboard,
-    model, monitor,
+    dashboard, model, monitor,
     queue_consumer::{self, QueueTask, WebhookPayload},
     quota::QuotaConfig,
     security::{fnv1a64, urlencode, verify_webhook_secret},
