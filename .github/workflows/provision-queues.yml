@@ -6,6 +6,7 @@ name: Provision Queues
 #   produccion: auto-healing-repairs, auto-healing-repairs-dlq
 #   staging:    auto-healing-repairs-staging, auto-healing-repairs-dlq-staging
 # Requiere los secrets CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID
+# (re-disparado 2026-10-07 para verificar secrets tras eleccion del dueño)
 # (Settings > Secrets and variables > Actions), los mismos de deploy.yml.
 
 on:
