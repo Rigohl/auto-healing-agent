@@ -152,6 +152,29 @@ Runbook Notion actualizado con esta firma.
   paso decisivo: copiar la PRIMERA línea de error del log.
 - Worker sigue placeholder (modified 2026-10-05T18:03Z) → PYH-61 sigue abierto.
 
+## Root cause del build 02:29 UTC del 2026-10-07 — colas no provisionadas
+
+- El log del build `d92fc568` (pegado por el dueño) confirma que el build Rust
+  funciona de punta a punta: rustup 1.99 + toolchain wasm32 + nightly
+  panic=unwind + wasm-bindgen 0.2.129 + wasm-opt + esbuild (index.js 30.2 KB,
+  "Your wasm pkg is ready"). La ÚNICA falla es de infraestructura:
+  `✘ Queue "auto-healing-repairs-dlq" does not exist` — `wrangler deploy`
+  valida que las colas referenciadas existan antes de subir el script.
+- Las 4 colas del wrangler.toml (prod: `auto-healing-repairs` +
+  `auto-healing-repairs-dlq`; staging: `auto-healing-repairs-staging` +
+  `auto-healing-repairs-dlq-staging`) NUNCA se crearon en la cuenta — era el
+  "colas por crear" anticipado; también explica el fallo del build anterior
+  `77aeb795` (misma validación).
+- **Fix**: `.github/workflows/provision-queues.yml` — workflow idempotente
+  (dispatch + push con paths a sí mismo) que crea las colas que falten vía API
+  de Cloudflare con los secrets `CLOUDFLARE_API_TOKEN` /
+  `CLOUDFLARE_ACCOUNT_ID` (los mismos de deploy.yml). Si faltan los secrets,
+  el job hace `::error` con instrucciones.
+- Tras crear las colas, el siguiente build de Workers Builds ya puede completar
+  el deploy (KV reales + DO + colas existen). Verificación post-deploy: tamaño
+  del worker >100 KB y GET /health = 200; después siguen los secrets del
+  runtime (PYH-62).
+
 ## Historial de este documento (actualizado)
 - 2026-10-06 (tarde): reparación del bump de actions — el push 0a2dee1 dejó YAML inválido en 7 workflows (deploy-staging, cleanup-branches + 5 más con "Invalid workflow file"). Se reconstruyeron desde 5337044 (último verde) aplicando solo checkout@v5 (commits b109e04, 5b38422, be3ccad, 0a4585a, 04fe0c5, 9c8b6b3, 0b76945). En 0b76945: CI ✅, Consistency ✅ (verify 50 claims), Security ✅, Branch cleanup ✅. Nota técnica: el "content viewer" open_url parte líneas al azar al mostrar YAML — verificación de contenido siempre vía raw fetch (apify web-fetch), nunca open_url.
 - 2026-10-06: sección CI/CD completa (dashboard + secrets + vars, valores exactos); inventario KV actualizado a 6 namespaces; referencias a commits que fijaron cada decisión.
