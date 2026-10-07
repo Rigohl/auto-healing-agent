@@ -121,6 +121,29 @@ Runbook Notion actualizado con esta firma.
 - 2026-10-07 00:38 UTC: build caido con la misma firma "static files". Diagnostico: RETRY de un snapshot PRE-98076b6, no un build del main actual. Evidencia: (a) main actual tiene wrangler.toml raiz valido (guard 6 verde, CI 9/9 en 399f846) y wrangler 4.148 lo habria usado; (b) el log no ejecuto ningun Build command y clono un arbol sin wrangler.toml raiz → snapshot viejo (los Retry re-ejecutan el commit del build original, changelog 2025-03-17). Verificacion decisiva (humano, dashboard): el SHA del commit que lista ese build. Accion: NO volver a Retry del build viejo; disparar un build NUEVO ("Run build" sobre main) o dejar que un push lo dispare.
   Notas verificadas hoy contra docs de Cloudflare: (a) la imagen de Workers Builds NO incluye Rust/cargo (solo Node, Python, Go, Ruby, Bun, etc. — build-image, actualizada 2026-07-30); worker/build.sh YA auto-instala rustup minimal si falta cargo, y rustup instala el toolchain de rust-toolchain.toml. (b) `npx wrangler deploy` SI ejecuta [build] del wrangler.toml (custom-builds docs) aunque Workers Builds como Build step NO lo honra; con el dashboard sin Build command, el build Rust ocurre dentro del deploy command via [build] cwd=worker. Primer build esperado: largo (rustup + toolchain + cargo install worker-build + nightly para --panic-unwind); no confundir timeout con error de config.
 
+## Build 02:15 UTC del 2026-10-07 (post-ddcb3619) — falla RÁPIDA, log pendiente (humano)
+
+- Push `ddcb3619` (docs/INVENTORY.md: inventario profundo 2026-10-07 + corrección del
+  falso positivo de tests del contrato) → CI / Consistency ×2 / Security ×2 / Branch
+  cleanup TODO VERDE sobre ese commit (15/15 checks).
+- El check "Workers Builds: auto-healing-agent" del commit corrió y FALLÓ a los ~5 min
+  del push (build `77aeb795-32b6-4c6e-8870-7226d578a86d`, producción). Es el PRIMER
+  build disparado sobre un árbol con `wrangler.toml` raíz: ya NO puede ser el error
+  "Could not detect a directory containing static files" (eso ocurría sin config en el
+  CWD; hoy existe).
+- ~5 min es demasiado corto para el build Rust completo (rustup + toolchain +
+  worker-build ≈ 10–15 min la primera vez, sin cache) → la falla ocurrió ANTES o al
+  inicio del paso de build. Candidatos, en orden:
+  (a) validación de esquema de Wrangler sobre el espejo raíz — primera vez que
+      wrangler lee esa config en contexto de deploy; tomllib + guard 6 validan
+      equivalencia TOML, no el esquema de wrangler;
+  (b) fallo temprano de build.sh en la imagen (instalación de rustup/toolchain);
+  (c) mecánica skip/superseded (changelog 2026-07-24) — improbable, el check corrió.
+- El log SOLO es visible en el dashboard (requiere sesión humana): abrir el build
+  `77aeb795` del worker y copiar la primera línea de error — con eso se cierra el
+  diagnóstico. No re-retry a ciegas: el snapshot ya es el correcto (ddcb3619).
+- Worker sigue placeholder (modified 2026-10-05T18:03Z) → PYH-61 sigue abierto.
+
 ## Historial de este documento (actualizado)
 - 2026-10-06 (tarde): reparación del bump de actions — el push 0a2dee1 dejó YAML inválido en 7 workflows (deploy-staging, cleanup-branches + 5 más con "Invalid workflow file"). Se reconstruyeron desde 5337044 (último verde) aplicando solo checkout@v5 (commits b109e04, 5b38422, be3ccad, 0a4585a, 04fe0c5, 9c8b6b3, 0b76945). En 0b76945: CI ✅, Consistency ✅ (verify 50 claims), Security ✅, Branch cleanup ✅. Nota técnica: el "content viewer" open_url parte líneas al azar al mostrar YAML — verificación de contenido siempre vía raw fetch (apify web-fetch), nunca open_url.
 - 2026-10-06: sección CI/CD completa (dashboard + secrets + vars, valores exactos); inventario KV actualizado a 6 namespaces; referencias a commits que fijaron cada decisión.
