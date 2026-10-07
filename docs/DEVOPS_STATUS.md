@@ -175,6 +175,27 @@ Runbook Notion actualizado con esta firma.
   del worker >100 KB y GET /health = 200; después siguen los secrets del
   runtime (PYH-62).
 
+## Deploy completado — build `91a62b9d` SUCCESS (2026-10-07)
+
+- **El worker real quedó desplegado**: el build `91a62b9d` de Workers Builds terminó
+  SUCCESS y el worker `auto-healing-agent` (id `7c6b8ec9534b4e97bafa2e2fa79de066`) pasó
+  del placeholder del 2026-10-05 a código real, con `modified_on` = 2026-10-07T03:10:08Z.
+  **PYH-61 (deploy real) queda resuelto.**
+- **Fix definitivo (commit `6b39c2d3`)**: prólogo de provisioning en `worker/build.sh` que
+  crea de forma idempotente las 4 colas (`auto-healing-repairs`, `auto-healing-repairs-dlq`,
+  `auto-healing-repairs-staging`, `auto-healing-repairs-dlq-staging`) vía API de Cloudflare
+  usando el `CLOUDFLARE_API_TOKEN` que Workers Builds inyecta al entorno del build, ANTES
+  de que corra `npx wrangler deploy`. Cero pasos manuales en el dashboard; cualquier build
+  futuro re-valida la existencia de las colas.
+- El workflow `provision-queues.yml` (commit `60a8d75c`) queda como ruta de respaldo: falló
+  con el `::error` previsto porque los secrets `CLOUDFLARE_API_TOKEN` /
+  `CLOUDFLARE_ACCOUNT_ID` no existen en GitHub (deploy.yml tampoco los tiene). No son
+  necesarios para Workers Builds: el token lo inyecta el propio build.
+- **Pendiente humano único (PYH-62)**: secrets del runtime, ~30 s desde `worker/`:
+  `npx wrangler secret put GITHUB_TOKEN` y `npx wrangler secret put WEBHOOK_SECRET`.
+  Sin ellos `/webhook` responde 503 (fail-closed por diseño) y el flujo E2E incidente →
+  PR → CI → callback (PYH-63) no puede cerrarse.
+
 ## Historial de este documento (actualizado)
 - 2026-10-06 (tarde): reparación del bump de actions — el push 0a2dee1 dejó YAML inválido en 7 workflows (deploy-staging, cleanup-branches + 5 más con "Invalid workflow file"). Se reconstruyeron desde 5337044 (último verde) aplicando solo checkout@v5 (commits b109e04, 5b38422, be3ccad, 0a4585a, 04fe0c5, 9c8b6b3, 0b76945). En 0b76945: CI ✅, Consistency ✅ (verify 50 claims), Security ✅, Branch cleanup ✅. Nota técnica: el "content viewer" open_url parte líneas al azar al mostrar YAML — verificación de contenido siempre vía raw fetch (apify web-fetch), nunca open_url.
 - 2026-10-06: sección CI/CD completa (dashboard + secrets + vars, valores exactos); inventario KV actualizado a 6 namespaces; referencias a commits que fijaron cada decisión.
