@@ -248,3 +248,42 @@ re-dispatch de `consistency.yml`. Objetivo: `BRANCH_DRIFT` verde sin
 - `RepairCase`/`TrainingExample` (`repair_types`) documentados en el
   código como contrato PART4 (persistencia Mongo, PYH-32): dead code a
   propósito hasta que exista el consumidor de entrenamiento.
+
+
+## Actualización 2026-10-07 (inventario profundo de todas las carpetas)
+
+Inventario completo carpeta por carpeta contra main `2786af7` (CI 9/9 verde,
+Consistency/Security/Branch cleanup SUCCESS, 0 issues abiertos, solo `main`).
+
+- **Corrección de un falso positivo del propio inventario**:
+  `crates/repair_types/tests/contract_tests.rs` (14 B, `mod contract;\n`)
+  NO es un test degradado: es el cableado estándar de los **11 tests
+  reales** que viven en `tests/contract/mod.rs` — round-trip serde del
+  `RepairEvent`, payload parcial (defaults), campos desconocidos ignorados,
+  versión mayor no soportada, idempotencia FNV-1a determinista, respuesta a
+  duplicados (`return_existing_pr`), `VerificationResult::Pass` exige
+  evidencia de Actions, matriz `get_error_policy` 9/9 códigos, serialización
+  de `GitHubEventType`, `CandidatePatch::is_blocked` y permisos mínimos.
+  **El repo queda sin gaps de tests.**
+- **Raíz**: `wrangler.toml` espejo completo verificado íntegro (guards 2/6
+  de `validate-preflight.sh` exigen existencia y equivalencia exacta de
+  bindings raíz ↔ worker).
+- **`worker/`**: 11 módulos saneados (Axum 0.8, idempotencia real de
+  `open_repair_pr`, sin unwrap en el path de request). Único backlog
+  técnico: `compat_date = 2024-09-23` (P7, bump acompañado de prueba de
+  regresión).
+- **`model/`**: `current.txt` = payload KV real (2863 f32);
+  `current.json`/`stable.json` siguen como placeholders de metadata
+  **intencionales** (nadie los consume; el worker carga `model/current`
+  desde `MODEL_KV`, no desde JSON).
+- **`docs/`** (29 .md + prompts/) y **`.github/workflows/`** (11, todos
+  `checkout@v5`): sin corrupción residual; `verify_repo.py` 50 claims en
+  verde.
+- **Cloudflare (API en vivo)**: 6 KV namespaces — 2 en config (`MODEL_KV`,
+  `REPAIR_CASES_KV`) y **4 huérfanos sin uso**: `STATE`,
+  `neural-net-weights`, `CACHE`, `agent-config` (decisión del dueño
+  pendiente: borrar o adoptar). El worker desplegado sigue siendo el
+  placeholder de 275 B → PYH-61.
+- **Bloqueadores humanos sin cambio**: deploy real (PYH-61) + secrets
+  `GITHUB_TOKEN`/`WEBHOOK_SECRET` (PYH-62). Nada más automatable pendiente
+  en el árbol.
