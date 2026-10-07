@@ -142,6 +142,14 @@ Runbook Notion actualizado con esta firma.
 - El log SOLO es visible en el dashboard (requiere sesión humana): abrir el build
   `77aeb795` del worker y copiar la primera línea de error — con eso se cierra el
   diagnóstico. No re-retry a ciegas: el snapshot ya es el correcto (ddcb3619).
+- **Segundo build (`d92fc568`) también FALLÓ** (check completado 02:29:33 UTC; corrida
+  ~02:22:52→02:29:33, ~7 min): la duración YA es compatible con el build Rust en
+  ejecución (rustup + toolchain + worker-build + cargo), no con un rechazo
+  instantáneo de config. Candidatos nuevos: timeout del paso de build en la
+  imagen, o límite de tamaño del script WASM (free tier: 3 MB comprimido;
+  `--panic-unwind` engorda el binario). Con 2 builds fallidos sobre el árbol
+  correcto, el log del dashboard del build `d92fc568` (el más reciente) es el
+  paso decisivo: copiar la PRIMERA línea de error del log.
 - Worker sigue placeholder (modified 2026-10-05T18:03Z) → PYH-61 sigue abierto.
 
 ## Historial de este documento (actualizado)
