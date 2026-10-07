@@ -69,7 +69,11 @@ pub fn aggregate(cases: &[serde_json::Value]) -> Stats {
     let mut days: Vec<(String, u32)> = Vec::new();
     for case in cases {
         stats.total += 1;
-        let verification = case.get("verification").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+        let verification = case
+            .get("verification")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_lowercase();
         if verification.contains("pass") {
             stats.verified_pass += 1;
         } else if verification.contains("fail") {
@@ -77,12 +81,19 @@ pub fn aggregate(cases: &[serde_json::Value]) -> Stats {
         } else {
             stats.verification_skipped += 1;
         }
-        let has_pr = case.get("pr_url").and_then(|v| v.as_str()).is_some_and(|u| !u.is_empty());
+        let has_pr = case
+            .get("pr_url")
+            .and_then(|v| v.as_str())
+            .is_some_and(|u| !u.is_empty());
         if has_pr {
             stats.with_pr += 1;
         }
         bump(&mut operators, operator_label(case));
-        if let Some(day) = case.get("created_at_unix").and_then(|v| v.as_u64()).and_then(day_bucket) {
+        if let Some(day) = case
+            .get("created_at_unix")
+            .and_then(|v| v.as_u64())
+            .and_then(day_bucket)
+        {
             bump(&mut days, day);
         }
     }
@@ -323,7 +334,10 @@ mod tests {
 
     #[test]
     fn escape_html_neutralizes_markup() {
-        assert_eq!(escape_html("<b>&\"'</b>"), "&lt;b&gt;&amp;&quot;&#39;&lt;/b&gt;");
+        assert_eq!(
+            escape_html("<b>&\"'</b>"),
+            "&lt;b&gt;&amp;&quot;&#39;&lt;/b&gt;"
+        );
     }
 
     #[test]
