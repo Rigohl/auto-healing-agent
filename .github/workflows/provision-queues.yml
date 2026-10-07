@@ -1,0 +1,52 @@
+name: Provision Queues
+
+# Crea las colas que exige wrangler deploy (y deploy-staging) si faltan.
+# Idempotente: si la cola ya existe, no hace nada.
+# El wrangler.toml espera 4 colas (ver comentarios del propio wrangler.toml):
+#   produccion: auto-healing-repairs, auto-healing-repairs-dlq
+#   staging:    auto-healing-repairs-staging, auto-healing-repairs-dlq-staging
+# Requiere los secrets CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID
+# (Settings > Secrets and variables > Actions), los mismos de deploy.yml.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/provision-queues.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  queues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Crear colas si faltan (idempotente)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -eu
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "::error::Faltan secrets CLOUDFLARE_API_TOKEN o CLOUDFLARE_ACCOUNT_ID (Settings > Secrets and variables > Actions). Sin ellos hay que crear las colas a mano en el dashboard (Queues) o con npx wrangler queues create <nombre>."
+            exit 1
+          fi
+          api="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/queues"
+          existing="$(curl -sS -f -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "${api}" | jq -r '.result[].name')"
+          echo "Colas existentes: ${existing:-ninguna}"
+          for q in auto-healing-repairs auto-healing-repairs-dlq auto-healing-repairs-staging auto-healing-repairs-dlq-staging; do
+            if printf '%s\n' "${existing}" | grep -qxF "$q"; then
+              echo "cola $q ya existe"
+            else
+              echo "creando cola $q..."
+              curl -sS -f -X POST \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                -d "{\"name\": \"$q\"}" \
+                "${api}" > /dev/null
+              echo "cola $q creada"
+            fi
+          done
+          echo "Estado final:"
+          curl -sS -f -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "${api}" | jq -r '.result[].name'
