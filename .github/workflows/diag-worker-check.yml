@@ -1,0 +1,39 @@
+name: diag-worker-check
+on:
+  push:
+    branches: [feat/dashboard-route]
+    paths: [.github/workflows/diag-worker-check.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Run checks and capture output
+        working-directory: worker
+        run: |
+          {
+            echo '=== cargo check --all-targets ==='
+            cargo check --all-targets 2>&1
+            echo "CHECK_EXIT=$?"
+            echo '=== cargo clippy --all-targets -D warnings ==='
+            cargo clippy --all-targets -- -D warnings 2>&1
+            echo "CLIPPY_EXIT=$?"
+            echo '=== cargo fmt --check ==='
+            cargo fmt -- --check 2>&1
+            echo "FMT_EXIT=$?"
+          } > /tmp/diag.log 2>&1 || true
+          cat /tmp/diag.log
+      - name: Publish to issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "diag: worker checks en feat/dashboard-route ($(git rev-parse --short HEAD))" \
+            --body-file /tmp/diag.log
