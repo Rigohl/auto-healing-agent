@@ -19,6 +19,8 @@ pub mod candidate;
 pub mod circuit;
 #[path = "config_store.rs"]
 pub mod config_store;
+#[path = "dashboard.rs"]
+pub mod dashboard;
 #[path = "github_client.rs"]
 pub mod github_client;
 #[path = "incident_state.rs"]

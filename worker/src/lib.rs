@@ -43,7 +43,7 @@ use repair_types::{compute_idempotency_key, FailureSignature};
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
-    candidate, circuit, config_store, ledger, model, monitor,
+    candidate, circuit, config_store, dashboard, ledger, model, monitor,
     queue_consumer::{self, QueueTask, WebhookPayload},
     security::{fnv1a64, urlencode, verify_webhook_secret},
     MAX_RISK, MIN_CONFIDENCE,
@@ -74,6 +74,7 @@ fn router(env: Env) -> Router {
         .route("/health", get(|| async { "ok" }))
         .route("/model", get(model_report))
         .route("/model/candidate", get(candidate_report))
+        .route("/dashboard", get(dashboard_report))
         .route("/webhook", post(handle_webhook))
         .route("/github/callback", post(handle_github_callback))
         .with_state(env)
@@ -132,6 +133,52 @@ async fn candidate_report(State(env): State<Env>) -> AxumResponse {
         Err(e) => {
             console_error!("candidate report body failed: {e}");
             internal_error("candidate_report_failed")
+        }
+    }
+}
+
+/// GET /dashboard: observabilidad de negocio (FASE 1, docs/DASHBOARD.md).
+/// Agrega los RepairCases de REPAIR_CASES_KV y pinta HTML+SVG server-side
+/// (runtime::dashboard). Autorizacion fail-closed identica a /webhook pero
+/// con su propio secret: sin DASHBOARD_TOKEN configurado -> 503; token
+/// incorrecto -> 401 (comparacion en tiempo constante). Solo lectura:
+/// nunca repara, nunca encola, nunca toca la autoridad de VERIFY.
+#[worker::send]
+async fn dashboard_report(State(env): State<Env>, headers: HeaderMap) -> AxumResponse {
+    let secret = match env.secret("DASHBOARD_TOKEN") {
+        Ok(s) => s.to_string(),
+        Err(_) => return svc_unavailable("dashboard_token_not_configured"),
+    };
+    if secret.is_empty() {
+        return svc_unavailable("dashboard_token_not_configured");
+    }
+    let header = headers
+        .get("x-dashboard-token")
+        .and_then(|v| v.to_str().ok());
+    if !verify_webhook_secret(header, &secret) {
+        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+    }
+    let mut report = match dashboard::render(&env).await {
+        Ok(r) => r,
+        Err(e) => {
+            console_error!("dashboard render failed: {e}");
+            return internal_error("dashboard_render_failed");
+        }
+    };
+    let code = report.status_code();
+    let status = StatusCode::from_u16(code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    match report.text().await {
+        Ok(html) => {
+            let mut resp = (status, html).into_response();
+            resp.headers_mut().insert(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("text/html; charset=utf-8"),
+            );
+            resp
+        }
+        Err(e) => {
+            console_error!("dashboard body failed: {e}");
+            internal_error("dashboard_render_failed")
         }
     }
 }
