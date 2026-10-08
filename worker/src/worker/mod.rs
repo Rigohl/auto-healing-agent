@@ -45,6 +45,8 @@ pub mod rules;
 pub mod security;
 #[path = "self_guard.rs"]
 pub mod self_guard;
+#[path = "web_research.rs"]
+pub mod web_research;
 
 /// Umbrales del gate: fuente de verdad docs/GOVERNANCE.md (0.55 / 0.45).
 pub const MIN_CONFIDENCE: f32 = 0.55;

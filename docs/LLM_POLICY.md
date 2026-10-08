@@ -67,3 +67,30 @@ CHANGE -> POLICY (gate + self_guard + circuit) -> PATCH VALIDATION
 -> CI -> VERIFY -> PUSH AUTHORIZATION -> main (ref efimera de PR se borra).
 
 Una sola rama persistente: main.
+
+
+## Investigacion web en paralelo (PART5, 2026-10-08)
+
+Decision del dueno: el agente tambien investiga en internet mientras repara.
+`worker/src/worker/web_research.rs` consulta fuentes PUBLICAS y gratuitas en
+paralelo a la decision del fallback LLM:
+
+- `registry.npmjs.org/{dep}/latest`: version vigente REAL de la dependencia
+  citada por el error (contexto accionable para DEPENDENCY_REPAIR/VERSION_PIN).
+- `doc.rust-lang.org/error_codes/E0xxx.html`: explicacion oficial del codigo
+  de error de rustc (DevOps: errores de compilacion del repo monitoreado).
+
+Reglas:
+- La investigacion es CONTEXTO, nunca autoridad: entra al prompt del LLM y a
+  la evidencia de auditoria (`research:{correlation_id}` en REPAIR_CASES_KV);
+  NO abre el gate ni repara sola. El gate (0.55/0.45) y VERIFY (Actions)
+  siguen intactos.
+- Fail-open: sin red o con `RESEARCH_ENABLED=false` el reporte llega vacio y
+  la reparacion sigue igual. El presupuesto LLM (10.000 Neurons) no se
+  toca: la investigacion no usa Workers AI.
+- Lista blanca de dominios (registry.npmjs.org, doc.rust-lang.org), sin API
+  keys, solo HTTPS GET. Nada de navegacion arbitraria.
+- DevOps repair: `param_derive.rs` reconoce las anotaciones de GitHub Actions
+  (`::error file=.github/workflows/ci.yml,line=N::`) y admite paths
+  `.github/workflows/*` como target del edit acotado (traversal y dotfiles
+  siguen rechazados).

@@ -115,6 +115,7 @@ fn file_from_message(chars: &[char]) -> Option<String> {
     rustc_location(chars)
         .or_else(|| stack_location(chars))
         .or_else(|| webpack_in_location(chars))
+        .or_else(|| actions_annotation_location(chars))
 }
 
 /// rustc: "--> src/foo.rs:27:5". El token tras la flecha.
@@ -147,6 +148,27 @@ fn webpack_in_location(chars: &[char]) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Anotacion de GitHub Actions: "::error file=ci.yml,line=12,col=3::msg"
+/// (el formato oficial con que CI reporta los fallos). Extrae SOLO el file=;
+/// el path puede ser un workflow (".github/workflows/..."), que la
+/// validacion admite explicitamente (DevOps repair, PART5).
+fn actions_annotation_location(chars: &[char]) -> Option<String> {
+    for needle in ["::error file=", "::warning file="] {
+        if let Some(i) = find_ci(chars, needle) {
+            let mut j = i + needle.chars().count();
+            let mut file = String::new();
+            while j < chars.len() && chars[j] != ',' && !chars[j].is_whitespace() {
+                file.push(chars[j]);
+                j += 1;
+            }
+            if valid_file_path(&file) {
+                return Some(file);
+            }
+        }
+    }
+    None
 }
 
 /// Token tipo "path:linea:columna" a partir de "from". Fail-closed: exige
@@ -194,8 +216,12 @@ fn unresolved_specifier(chars: &[char]) -> Option<String> {
 /// Ruta relativa segura para el edit acotado: sin absolutos, traversal,
 /// comillas, contrabarras ni espacios; debe parecer un archivo del repo.
 fn valid_file_path(path: &str) -> bool {
+    // ".github/" es el UNICO prefijo con punto admitido (DevOps repair,
+    // PART5): los workflows de CI son targets legitimos del edit acotado.
+    // Cualquier otro "." inicial sigue rechazado (dotfiles, traversal).
+    let trusted_dot_github = path.starts_with(".github/");
     !path.is_empty()
-        && !path.starts_with(['-', '.'])
+        && (trusted_dot_github || !path.starts_with(['-', '.']))
         && !path.contains("..")
         && path.contains(['.', '/'])
         && path
@@ -509,5 +535,34 @@ mod tests {
         // Sin arroba peer_parts exige el formato "peer <dep>@...":
         // nada derivado (fail-closed).
         assert!(a.parameters.is_empty());
+    }
+
+    #[test]
+    fn config_repair_derives_file_from_actions_annotation() {
+        let mut a = action(OperatorId::ConfigRepair, &[]);
+        ensure_params(
+            &mut a,
+            &incident(
+                "::error file=.github/workflows/ci.yml,line=12,col=3::unrecognized key `permisions`",
+            ),
+        );
+        assert_eq!(
+            a.parameters.get(P_FILE).map(String::as_str),
+            Some(".github/workflows/ci.yml")
+        );
+    }
+
+    #[test]
+    fn github_prefixed_traversal_is_rejected() {
+        let mut a = action(OperatorId::SyntaxFix, &[]);
+        ensure_params(
+            &mut a,
+            &incident("::error file=.github/../secrets.yml,line=1::x"),
+        );
+        assert!(!a.parameters.contains_key(P_FILE));
+        // Un dotfile que no es .github/ sigue fuera de alcance.
+        let mut b = action(OperatorId::SyntaxFix, &[]);
+        ensure_params(&mut b, &incident("::error file=.env,line=1::x"));
+        assert!(!b.parameters.contains_key(P_FILE));
     }
 }

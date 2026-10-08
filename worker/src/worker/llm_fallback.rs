@@ -44,7 +44,7 @@ pub const DEFAULT_DAILY_BUDGET: i64 = 8_000;
 /// Estimacion conservadora por llamada (Neurons) del modelo pequeno.
 pub const DEFAULT_COST_PER_CALL: i64 = 300;
 
-const SYSTEM_PROMPT: &str = "You are a build-repair action classifier. Reply with ONLY a JSON object, no prose, no markdown fences. Schema: {\"operator\": <int>, \"parameters\": {\"dependency\": string?, \"version\": string?, \"file\": string?, \"from\": string?, \"to\": string?}, \"confidence\": <float 0..1>, \"risk\": <float 0..1>}. Allowed operators ONLY: 1 = DEPENDENCY_REPAIR (fix a failing dependency in package.json), 9 = VERSION_PIN (pin an exact version), 2 = SYNTAX_FIX, 8 = IMPORT_PATH_FIX. Operators 2 and 8 are ONE bounded single-substitution edit and REQUIRE all of: \"file\" (repo-relative path taken verbatim from the diagnostic), \"from\" (exact text currently in that file), \"to\" (replacement text). Propose from/to only from the compiler diagnostic; minimal edit only; never invent file paths or code. If the incident is not fixable by these operators, reply {\"operator\": 0, \"parameters\": {}, \"confidence\": 0.0, \"risk\": 1.0}.";
+const SYSTEM_PROMPT: &str = "You are a build-repair action classifier. Reply with ONLY a JSON object, no prose, no markdown fences. Schema: {\"operator\": <int>, \"parameters\": {\"dependency\": string?, \"version\": string?, \"file\": string?, \"from\": string?, \"to\": string?}, \"confidence\": <float 0..1>, \"risk\": <float 0..1>}. Allowed operators ONLY: 1 = DEPENDENCY_REPAIR (fix a failing dependency in package.json), 9 = VERSION_PIN (pin an exact version), 2 = SYNTAX_FIX, 8 = IMPORT_PATH_FIX. Operators 2 and 8 are ONE bounded single-substitution edit and REQUIRE all of: \"file\" (repo-relative path taken verbatim from the diagnostic; DevOps targets like .github/workflows/*.yml or Dockerfile are valid), \"from\" (exact text currently in that file), \"to\" (replacement text). Propose from/to only from the compiler diagnostic; minimal edit only; never invent file paths or code. Use the live web research context (npm registry latest versions, official error docs) when choosing dependency or version values; never fetch or invent URLs yourself. If the incident is not fixable by these operators, reply {\"operator\": 0, \"parameters\": {}, \"confidence\": 0.0, \"risk\": 1.0}.";
 
 /// Propone una accion estructurada. None = fail-closed (escalacion humana).
 #[worker::send]
@@ -52,6 +52,7 @@ pub async fn propose(
     env: &Env,
     incident: &Incident,
     signature: &FailureSignature,
+    research: &crate::runtime::web_research::ResearchReport,
 ) -> Option<RepairAction> {
     if env.var(VAR_ENABLED).map(|v| v.to_string()).ok().as_deref() != Some("true") {
         console_warn!("llm fallback disabled: LLM_ENABLED != true");
@@ -70,7 +71,7 @@ pub async fn propose(
     let request = serde_json::json!({
         "messages": [
             { "role": "system", "content": SYSTEM_PROMPT },
-            { "role": "user", "content": build_prompt(incident, signature) }
+            { "role": "user", "content": build_prompt(incident, signature, research) }
         ],
         "max_tokens": 512,
         "temperature": 0.2
@@ -159,11 +160,17 @@ pub fn utc_date_from_unix_ms(ms: i64) -> String {
     format!("{:04}-{:02}-{:02}", y, m, d)
 }
 
-/// Prompt de usuario: incidente + firma, SIN codigo fuente del repo (el LLM
-/// jamas ve el arbol; solo el contexto acotado del incidente).
-pub fn build_prompt(incident: &Incident, signature: &FailureSignature) -> String {
-    format!(
-        "Incident:\n- error_code: {}\n- error_step: {}\n- command: {}\n- message: {}\n- stack_hint: {}\n- language_hint: {}\n- framework_hint: {}\n- signature: {}\n\nPropose the repair action JSON.",
+/// Prompt de usuario: incidente + firma + investigacion web viva (PART5),
+/// SIN codigo fuente del repo (el LLM jamas ve el arbol; solo el contexto
+/// acotado del incidente). La investigacion es CONTEXTO (fail-open): sin
+/// red llega vacia y el prompt queda identico al de antes.
+pub fn build_prompt(
+    incident: &Incident,
+    signature: &FailureSignature,
+    research: &crate::runtime::web_research::ResearchReport,
+) -> String {
+    let mut prompt = format!(
+        "Incident:\n- error_code: {}\n- error_step: {}\n- command: {}\n- message: {}\n- stack_hint: {}\n- language_hint: {}\n- framework_hint: {}\n- signature: {}",
         incident.error_code,
         incident.error_step,
         incident.command,
@@ -172,7 +179,13 @@ pub fn build_prompt(incident: &Incident, signature: &FailureSignature) -> String
         incident.language_hint,
         incident.framework_hint,
         signature.fingerprint
-    )
+    );
+    if !research.is_empty() {
+        prompt.push_str("\n\nLive web research (public registries/docs, fetched now):\n");
+        prompt.push_str(&research.render());
+    }
+    prompt.push_str("\n\nPropose the repair action JSON.");
+    prompt
 }
 
 /// Extrae el primer objeto JSON balanceado por llaves de un texto libre.
@@ -317,9 +330,30 @@ mod tests {
             status: String::from("open"),
         };
         let signature = FailureSignature::from_incident(&incident);
-        let prompt = build_prompt(&incident, &signature);
+        let prompt = build_prompt(
+            &incident,
+            &signature,
+            &crate::runtime::web_research::ResearchReport::default(),
+        );
         assert!(prompt.contains("E404"));
         assert!(prompt.contains("npm install"));
         assert!(prompt.contains("stack_hint"));
+    }
+
+    #[test]
+    fn research_context_reaches_the_prompt() {
+        let incident = Incident::default();
+        let signature = FailureSignature::from_incident(&incident);
+        let report = crate::runtime::web_research::ResearchReport {
+            npm_latest: Some(String::from("5.2.1")),
+            error_docs: Some(String::from(
+                "https://doc.rust-lang.org/error_codes/E0432.html",
+            )),
+            ..Default::default()
+        };
+        let prompt = build_prompt(&incident, &signature, &report);
+        assert!(prompt.contains("Live web research"));
+        assert!(prompt.contains("5.2.1"));
+        assert!(prompt.contains("E0432.html"));
     }
 }
