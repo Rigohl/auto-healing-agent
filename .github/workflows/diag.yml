@@ -1,7 +1,9 @@
 name: Diag (temporal)
 
-# Workflow TEMPORAL de diagnostico (sin issues): captura el output completo
-# de verify_repo.py y lo commitea. Autolimitado: solo dispara si cambia .diag.
+# Workflow TEMPORAL (sin issues): aplica la politica de una sola rama
+# (docs/BRANCH_POLICY.md) borrando la rama extraviada feat/real-learning-loop
+# (intento paralelo superseded por el PR #132) y commitea la evidencia de
+# verify. Autolimitado: solo dispara si cambia .diag.
 
 on:
   push:
@@ -27,6 +29,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Borrar rama extraviada (politica: solo main persiste)
+        run: |
+          set +e
+          git push origin --delete feat/real-learning-loop >/tmp/branch-del.txt 2>&1
+          echo "del_exit=$?" >>"$GITHUB_ENV"
+          exit 0
       - name: verify_repo.py
         id: verify
         run: |
@@ -39,14 +47,14 @@ jobs:
           git config user.name "diag-bot"
           git config user.email "actions@users.noreply.github.com"
           {
-            echo "diag2: output completo de verify"
+            echo "diag3: limpieza de rama + verify"
+            echo ""
+            echo "branch delete exit: ${DEL_EXIT}"
+            tail -n 3 /tmp/branch-del.txt
             echo ""
             echo "verify exit: ${{ steps.verify.outputs.verify_exit }}"
-            echo "--- verify.txt (tail 3500 bytes) ---"
-            tail -c 3500 /tmp/verify.txt
-            echo ""
-            echo "--- refs origin ---"
-            git for-each-ref --format="%(refname)" refs/remotes/origin || true
+            echo "--- verify.txt (tail 1200) ---"
+            tail -c 1200 /tmp/verify.txt
           } >/tmp/commit-msg.txt
           git commit --allow-empty -F /tmp/commit-msg.txt
           git push
