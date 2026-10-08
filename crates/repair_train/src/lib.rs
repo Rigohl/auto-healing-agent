@@ -410,8 +410,7 @@ pub fn evaluate(weights: &[f32], samples: usize, seed: u64) -> Result<Metrics, &
     let mut conf_sum = 0.0f32;
     let mut risk_sum = 0.0f32;
     // PART6: conteo por categoria (error_category) para el breakdown.
-    let mut cat_total: std::collections::BTreeMap<&str, usize> =
-        std::collections::BTreeMap::new();
+    let mut cat_total: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
     let mut cat_correct: std::collections::BTreeMap<&str, usize> =
         std::collections::BTreeMap::new();
 
@@ -421,9 +420,7 @@ pub fn evaluate(weights: &[f32], samples: usize, seed: u64) -> Result<Metrics, &
         *cat_total.entry(item.error_category.as_str()).or_insert(0) += 1;
         if action.repair_operator == OperatorId::from_u8(item.ground_truth_operator) {
             correct += 1;
-            *cat_correct
-                .entry(item.error_category.as_str())
-                .or_insert(0) += 1;
+            *cat_correct.entry(item.error_category.as_str()).or_insert(0) += 1;
         }
         if action.is_actionable(MIN_CONFIDENCE, MAX_RISK) {
             actionable += 1;

@@ -276,10 +276,7 @@ async fn process(
     // PART6 (repurpose): el PipelineReport del gate deja de descartarse.
     // Su razon de denegacion viaja al DO (antes: "gate_denied" generico) y
     // el plan del operador (apply, antes codigo muerto) explica cada PR.
-    let gate_denial = match gate(&action, MIN_CONFIDENCE, MAX_RISK) {
-        Ok(()) => None,
-        Err(report) => Some(report),
-    };
+    let gate_denial = gate(&action, MIN_CONFIDENCE, MAX_RISK).err();
     let gate_ok = gate_denial.is_none();
 
     // 2.6 Evaluacion declarativa: las reglas solo restringen (block) u
