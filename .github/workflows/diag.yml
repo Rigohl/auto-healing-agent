@@ -1,8 +1,5 @@
 name: Diag (temporal)
 
-# Captura la salida REAL de cargo check/clippy del worker y la commitea
-# (los logs de Actions requieren auth). Autolimitado: solo .diag lo dispara.
-
 on:
   push:
     branches: [feat/devops-research]
@@ -25,24 +22,36 @@ jobs:
           ref: feat/devops-research
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
           targets: wasm32-unknown-unknown
-      - name: "cargo check worker (all targets)"
+      - name: "clippy worker + fmt-check + wasm32 check"
         run: |
           set +e
-          cargo check --manifest-path worker/Cargo.toml --all-targets >/tmp/chk.txt 2>&1
-          echo "chk_exit=$?" >>"$GITHUB_ENV"
+          cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings >/tmp/clp.txt 2>&1
+          echo "clippy_exit=$?" >>"$GITHUB_ENV"
+          cargo fmt --manifest-path worker/Cargo.toml -- --check >/tmp/fmt.txt 2>&1
+          echo "fmt_exit=$?" >>"$GITHUB_ENV"
+          cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release >/tmp/w32.txt 2>&1
+          echo "w32_exit=$?" >>"$GITHUB_ENV"
           exit 0
       - name: "Commit con la evidencia"
         run: |
           git config user.name "diag-bot"
           git config user.email "actions@users.noreply.github.com"
           {
-            echo "diag: salida de cargo check del worker"
+            echo "diag2: clippy/fmt/wasm32 del worker"
             echo ""
-            echo "check exit: ${CHK_EXIT}"
-            echo "--- output (tail 3500) ---"
-            tail -c 3500 /tmp/chk.txt
+            echo "clippy exit: ${CLIPPY_EXIT}"
+            echo "--- clippy output ---"
+            grep -v -e "^ *Checking" -e "^ *Compiling" -e "Finished" /tmp/clp.txt | tail -c 3000
+            echo ""
+            echo "fmt exit: ${FMT_EXIT}"
+            echo "--- fmt output ---"
+            tail -c 1000 /tmp/fmt.txt
+            echo ""
+            echo "wasm32 exit: ${W32_EXIT}"
+            echo "--- wasm32 output (errores) ---"
+            grep -e "^error" -e "^warning" -A 4 /tmp/w32.txt | tail -c 1500 || true
           } >/tmp/commit-msg.txt
           git commit --allow-empty -F /tmp/commit-msg.txt
           git push
