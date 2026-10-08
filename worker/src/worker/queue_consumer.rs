@@ -332,7 +332,7 @@ async fn process(
     //    rama -> commit -> PR abierto -> RepairCase en KV. VERIFY nunca
     //    se declara aqui: GitHub Actions reporta a /github/callback.
     let (decision, verify_status, evidence_ref, reason) = if gate_ok {
-        match attempt_repair(&env, &task, &action, &incident, &features, "nn").await? {
+        match attempt_repair(&env, &task, &action, &incident, &features.values, "nn").await? {
             RepairOutcome::Repaired { pr_url } => ("allow", "pending_ci", pr_url, String::new()),
             RepairOutcome::Blocked { reason } => {
                 ("blocked_by_policy", "blocked", String::new(), reason)
@@ -350,7 +350,7 @@ async fn process(
             && !crate::runtime::self_guard::is_own_repo(&env, &task.repo)
             && !circuit::is_open(&env, llm_action.repair_operator).await
         {
-            match attempt_repair(&env, &task, &llm_action, &incident, &features, "llm").await? {
+            match attempt_repair(&env, &task, &llm_action, &incident, &features.values, "llm").await? {
                 // Distilacion: el caso queda marcado origin=llm en KV; si CI
                 // verifica PASS, el entrenamiento offline aprende de el y la
                 // NN pasa a resolver esta clase de firmas sin consultar al

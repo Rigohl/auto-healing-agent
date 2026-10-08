@@ -1,0 +1,43 @@
+name: diag-pr (temporal, borrar al mergear)
+on:
+  push:
+    branches: [feat/real-learning-loop]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Diagnostico
+        run: |
+          {
+            echo '### fmt diff'
+            echo '```diff'
+            cargo fmt --all -- --check 2>&1 | head -160
+            echo '```'
+            echo '### clippy workspace'
+            echo '```'
+            cargo clippy --workspace --all-targets 2>&1 | grep -v Compiling | head -100
+            echo '```'
+            echo '### worker check'
+            echo '```'
+            cargo check --manifest-path worker/Cargo.toml --all-targets 2>&1 | tail -50
+            echo '```'
+            echo '### wasm-pack test node'
+            echo '```'
+            curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+            export PATH="$HOME/.cargo/bin:$PATH"
+            wasm-pack test --node crates/repair_nn_wasm 2>&1 | tail -50
+            echo '```'
+          } > /tmp/diag.md || true
+      - name: Comentar en el PR (sin crear issues)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment 131 --body-file /tmp/diag.md || cat /tmp/diag.md
