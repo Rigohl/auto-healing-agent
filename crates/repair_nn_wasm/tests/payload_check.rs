@@ -18,7 +18,11 @@ fn current_payload_loads_across_wasm_boundary() {
     let raw = std::fs::read_to_string(&path).expect("model/current.txt debe existir");
     let weights: Vec<f32> = raw
         .split_whitespace()
-        .map(|token| token.parse::<f32>().expect("token f32 valido en el payload"))
+        .map(|token| {
+            token
+                .parse::<f32>()
+                .expect("token f32 valido en el payload")
+        })
         .collect();
     assert_eq!(
         weights.len(),
