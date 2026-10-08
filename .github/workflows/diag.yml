@@ -1,0 +1,32 @@
+name: diag
+on:
+  push:
+    paths: [".diag"]
+permissions:
+  contents: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: fmt check
+        run: cargo fmt --all -- --check > /tmp/fmt.log 2>&1 || true
+      - name: clippy worker
+        run: cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings > /tmp/clippy.log 2>&1 || true
+      - name: commit diag output
+        run: |
+          git config user.name diag-bot
+          git config user.email diag@users.noreply.github.com
+          {
+            echo "DIAG-FMT-BEGIN"
+            cat /tmp/fmt.log
+            echo "DIAG-FMT-END"
+            echo "DIAG-CLIPPY-BEGIN"
+            tail -n 120 /tmp/clippy.log
+            echo "DIAG-CLIPPY-END"
+          } > /tmp/msg.txt
+          git commit --allow-empty -F /tmp/msg.txt
+          git push
