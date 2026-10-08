@@ -13,7 +13,9 @@
 use repair_nn_wasm::RepairModel;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
-wasm_bindgen_test_configure!(run_in_node);
+// El modo de ejecucion (node) lo elige `wasm-pack test --node`; el macro
+// de wasm-bindgen-test 0.2.50 solo acepta run_in_browser.
+wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 fn dims_and_weight_count_are_exported() {
