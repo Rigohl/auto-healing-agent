@@ -1,4 +1,4 @@
-# Politica LLM â fallback acotado con presupuesto Always Free (canonica)
+# Politica LLM — fallback acotado con presupuesto Always Free (canonica)
 
 > Sustituye a docs/NO_LLM_POLICY.md (decision del dueno, 2026-10-08: el
 > auto-repair completo vive en este repo y el LLM deja de estar prohibido).
@@ -18,17 +18,17 @@
 
 ## Regla de oro
 
-El LLM solo propone `{operator, parameters, confidence, risk}`. Operadores
-permitidos: 1 DEPENDENCY_REPAIR y 9 VERSION_PIN (params dependency/version)
-y, desde el PR de code-repair, los de edicion acotada 2 SYNTAX_FIX,
-8 IMPORT_PATH_FIX y 12 SOURCE_REPAIR (params `file`, `from`, `to`): el LLM
-nombra un archivo y dos literales cortos; el operador DETERMINISTA
-(`repair_operators::diff`) aplica el find/replace, valida el ancla y
-respeta MAX_FILE_BYTES. Sin `file`/`from`/`to`, con `from == to` o con
-`from` vacio, la propuesta se rechaza (fail-closed en `llm_fallback.rs`).
-Cualquier salida que no pase el gate, el self_guard o el circuit breaker
-=> `llm_gate_denied` / blocked. El LLM jamas ve el arbol del repo y jamas
-produce diffs ni archivos nuevos.
+El LLM solo propone `{operator, parameters, confidence, risk}` (ids 1
+DEPENDENCY_REPAIR, 9 VERSION_PIN, 2 SYNTAX_FIX y 8 IMPORT_PATH_FIX). Los
+operadores 2 y 8 son UNA edicion acotada de sustitucion unica y exigen los
+parametros `file` (ruta copiada del diagnostico), `from` (texto exacto
+presente en el archivo) y `to` (texto de reemplazo): edicion minima, sin
+codigo libre. La localizacion determinista (`file`/`from` extraibles del
+diagnostico) la aporta param_derive.rs y tambien rellena la propuesta del
+LLM; `to` es lo unico que el LLM aporta y jamas se deriva sin el. Cualquier
+salida que no pase el gate, el self_guard o el circuit breaker =>
+`llm_gate_denied` / blocked. El LLM jamas ve el arbol del repo y jamas
+produce diffs.
 
 ## Always Free: presupuesto y fail-closed
 
@@ -67,4 +67,3 @@ CHANGE -> POLICY (gate + self_guard + circuit) -> PATCH VALIDATION
 -> CI -> VERIFY -> PUSH AUTHORIZATION -> main (ref efimera de PR se borra).
 
 Una sola rama persistente: main.
-

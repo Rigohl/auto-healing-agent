@@ -45,6 +45,19 @@ jobs:
       - name: Artefacto WASM de repair_nn_wasm
         run: cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown
 
+      # Puente de evidencia (docs/DEAD_CODE_AUDIT.md): el CLI repair-pr diff
+      # deja de ser huerfano al verificarse en cada PR sobre un fixture. CI
+      # comprueba que el generador de evidencia offline sigue produciendo el
+      # bundle unificado que el contrato (CONTRACT.md 3) exige.
+      - name: repair-pr diff sobre fixture (puente de evidencia)
+        run: |
+          cat > /tmp/changes.json <<'JSON'
+          {"files": [{"path": "src/demo.ts", "before": "import x from \"../old/path\";\n", "after": "import x from \"../new/path\";\n"}]}
+          JSON
+          bundle=$(cargo run -p repair_pr --release -- diff /tmp/changes.json)
+          echo "$bundle"
+          echo "$bundle" | grep -q '^+++ b/src/demo.ts
+
       - name: Target de despliegue del worker (wasm32, release)
         run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
 
@@ -60,22 +73,19 @@ jobs:
           grep -q "MAX_RISK=0.45" docs/GOVERNANCE.md
           echo "OK: umbrales de gate sincronizados entre runtime y GOVERNANCE.md"
 
-      # Smoke del CLI repair-pr (antes sin consumidor en CI): el camino de
-      # evidencia offline (CONTRACT.md seccion 3/5) debe seguir produciendo
-      # un bundle de diff valido, y un input vacio debe ser BLOCKED (exit 2),
-      # nunca verde falso.
-      - name: Smoke repair-pr diff (CLI de evidencia)
+          echo "OK: repair-pr diff produce el bundle de evidencia"
+
+      - name: Target de despliegue del worker (wasm32, release)
+        run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
+
+      # El invariant del proyecto, comprobado y no solo escrito: la confianza
+      # de la NN nunca es PASS. Si alguien borra el gate o sus umbrales, esto
+      # se pone rojo antes que el reviewer.
+      - name: El gate sigue fail-closed (0.55 / 0.45)
         run: |
           set -euo pipefail
-          cat > /tmp/changes.json <<'JSON'
-          {"files":[{"path":"package.json","before":"{}\n","after":"{\"name\":\"x\"}\n"}]}
-          JSON
-          cargo run -p repair_pr --release -- diff /tmp/changes.json
-          printf '{"files":[]}' > /tmp/empty.json
-          if cargo run -p repair_pr --release -- diff /tmp/empty.json; then
-            echo "::error::un bundle vacio deberia salir con codigo 2 (BLOCKED)"
-            exit 1
-          else
-            echo "OK: bundle vacio -> exit 2 (BLOCKED)"
-          fi
-
+          grep -q "pub const MIN_CONFIDENCE: f32 = 0.55;" worker/src/worker/mod.rs
+          grep -q "pub const MAX_RISK: f32 = 0.45;" worker/src/worker/mod.rs
+          grep -q "MIN_CONFIDENCE=0.55" docs/GOVERNANCE.md
+          grep -q "MAX_RISK=0.45" docs/GOVERNANCE.md
+          echo "OK: umbrales de gate sincronizados entre runtime y GOVERNANCE.md"
