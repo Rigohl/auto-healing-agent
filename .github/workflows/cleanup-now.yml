@@ -1,0 +1,25 @@
+name: cleanup-now
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/cleanup-now.yml"]
+permissions:
+  contents: write
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Borra toda rama distinta de main
+        run: |
+          for b in $(git ls-remote --heads origin | awk '{print $2}' | sed 's|refs/heads/||' | grep -v '^main$'); do
+            echo "borrando $b"
+            git push origin --delete "$b" || true
+          done
+      - name: Autodestruye este workflow
+        run: |
+          git config user.name "cleanup-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/cleanup-now.yml
+          git commit -m "chore: autodestruye cleanup-now (politica una sola rama aplicada)"
+          git push origin main
