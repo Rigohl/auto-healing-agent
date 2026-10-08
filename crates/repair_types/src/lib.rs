@@ -188,10 +188,13 @@ pub enum VerificationResult {
 
 /// Caso de reparacion persistible: incidente + firma + accion +
 /// verificacion + parche + reward. CONTRATO PART4: este struct es el
-/// schema de la persistencia Mongo (Atlas `auto_healing_agent`, PYH-32)
-/// y del ciclo de aprendizaje. Hoy no tiene consumidores en el
-/// workspace: es contrato versionado, no dead code accidental
-/// (auditoria 2026-10-03, DISCREPANCIES item 74). No eliminar.
+/// schema de la persistencia (diseño original: Mongo Atlas PYH-32; V1
+/// implementada como KV `REPAIR_CASES_KV`, ver
+/// `worker/src/worker/queue_consumer.rs` `persist_case`) y del ciclo de
+/// aprendizaje. Consumidor real desde el 2026-10-05: el consumidor de
+/// cola persiste el RepairCase tras abrir el PR. Hasta esa fecha fue
+/// contrato versionado sin consumidores (DISCREPANCIES item 74).
+/// No eliminar.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepairCase {
     pub incident_id: String,

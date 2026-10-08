@@ -287,3 +287,18 @@ Consistency/Security/Branch cleanup SUCCESS, 0 issues abiertos, solo `main`).
 - **Bloqueadores humanos sin cambio**: deploy real (PYH-61) + secrets
   `GITHUB_TOKEN`/`WEBHOOK_SECRET` (PYH-62). Nada más automatable pendiente
   en el árbol.
+
+## Actualización 2026-10-08 (doc-sync post-deploy)
+
+- **Gaps de la tabla anterior YA CERRADOS** por la ola 2026-10-05/06:
+  abrir PR efímera (`github_client.rs`), diff real (`repair_operators/src/diff.rs`),
+  persistencia de `RepairCase` (`REPAIR_CASES_KV`, `persist_case`), `/github/callback`,
+  MONITOR (cron), reglas declarativas (`rules.rs`), `param_derive.rs` y Router Axum.
+- `crates/` tiene **7 miembros** (se añadió `repair_pr`, CLI offline; el path del
+  worker no lo usa: worker usa `repair_operators::diff` + `github_client.rs`).
+- Docs sincronizadas con esa realidad: ARCHITECTURE, CODEMAP, INDEX y el comentario
+  de `RepairCase` en `repair_types` (ya tiene consumidor real, no es contrato huérfano).
+- Dead code restante, todo documentado y deliberado: `repair_pr` (superseded, CLI),
+  `repair_nn_wasm` (adaptador wasm-bindgen sin consumidor en runtime, se compila en CI),
+  `model/current.json`/`stable.json` (placeholders de metadata), tipos de contrato
+  `RepairEvent`/`OutboundPRRequest` en `contract.rs` (contrato versionado P1, ítem 74).

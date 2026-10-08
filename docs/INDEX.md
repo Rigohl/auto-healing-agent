@@ -31,14 +31,12 @@
 5. Regla Context7: verificar API antes de escribir código.
 
 ## Estado resumido
-- crates: types (+ `contract`) / feature_engine (V1) / nn_core / nn_wasm / operators / train (V1) → ✅
-- worker → runtime PART3 async: webhook fail-closed → DO (dedup, quota, anti-loop) → Queue → 202
-- model/ → `current.txt` = payload KV real 
-
-(2863 `f32`, entrenado por `repair_train`); `current.json`/`stable.json` siguen como placeholders de metadata
+- crates: types (+ `contract`) / feature_engine (V1) / nn_core / nn_wasm / operators (apply + gate + diff) / train (V1) / repair_pr (CLI offline, sin cablear) → ✅
+- worker → runtime PART3 async (Axum): /webhook fail-closed → DO (dedup, quota, anti-loop) → Queue → 202 → pipeline real (param_derive + diff + github_client abre PR) → RepairCase en REPAIR_CASES_KV; /github/callback registra el veredicto de Actions; MONITOR (cron) barre retención y observa el registro de modelo
+- model/ → `current.txt` = payload KV real (2863 `f32`, entrenado por `repair_train`); `current.json`/`stable.json` siguen como placeholders de metadata
 - docs/verification_evidence.json → artefacto de CI, no versionado
 - legacy/ → eliminado del repo el 2026-10-05 (archivo V0 no ejecutable, decisión del dueño)
-- Mem0 → pendiente de conector
+- Mem0 → conector de workspace OPERACIONAL (2026-10-05); el worker aún no lo llama
 
 ## Comprobaciones ejecutables
 

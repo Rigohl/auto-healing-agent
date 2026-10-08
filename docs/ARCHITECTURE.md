@@ -23,7 +23,7 @@ Deterministic Operator (repair_operators)   CandidatePatch — no free-form code
    ↓
 GitHub PR → Actions CI/wasm = VERIFY (PASS / FAIL / BLOCKED)
    ↓
-RepairCase → MongoDB (memory, diseñado) + TrainingExample (offline `repair_train`)
+RepairCase → KV `REPAIR_CASES_KV` (V1; Mongo diseñado, sin driver WASM) + TrainingExample (offline `repair_train`)
 ```
 
 ## Crates
@@ -34,9 +34,9 @@ RepairCase → MongoDB (memory, diseñado) + TrainingExample (offline `repair_tr
 | `feature_engine` | `Incident` + `FailureSignature` → `[f32; 64]` | ✅ |
 | `repair_nn_core` | MLP inference, `no_std` + alloc, 2863 weights | ✅ |
 | `repair_nn_wasm` | wasm-bindgen adapter: `RepairModel` | ✅ (build in CI) |
-| `repair_operators` | `apply()` + `gate()` deterministic stubs | ✅ partial (AST real = later) |
-| `repair_pr` | GATE→PR V1: unified diff real (`similar`) + PR opener (`octocrab`), bin `repair-pr` | ✅ V1 (sin cablear al worker) |
-| `worker` | CF Worker: `/health`, `/model` (KV pointer), `/webhook` + consumidor de cola + Durable Object de estado | ✅ runtime asíncrono PART3 (webhook fail-closed → DO → Queue → pipeline) |
+| `repair_operators` | `apply()` + `gate()` + `diff` (edit acotado → unified diff determinista) | ✅ (AST real = later) |
+| `repair_pr` | GATE→PR V1: unified diff real (`similar`) + PR opener (`octocrab`), bin `repair-pr` | ✅ V1 CLI offline — superseded en el path del worker por `repair_operators::diff` + `worker/src/worker/github_client.rs` (sin `octocrab`) |
+| `worker` | CF Worker (Axum): `/health`, `/model` (KV pointer), `/webhook`, `/github/callback` + consumidor de cola + Durable Object de estado + MONITOR (cron) | ✅ runtime asíncrono PART3: webhook fail-closed → DO → Queue → pipeline → PR real vía `github_client.rs` |
 
 ## Inference path (edge)
 
@@ -46,9 +46,9 @@ RepairCase → MongoDB (memory, diseñado) + TrainingExample (offline `repair_tr
 4. `RepairNet::predict` (or WASM `RepairModel::predictFromFeatures`) → `RepairAction`.
 5. Gate on `c
 onfidence >= 0.55` / `risk <= 0.45`.
-6. If actionable → `repair_operators::apply` → `CandidatePatch`.
-7. If actionable, `repair_pr` builds the unified diff (`similar`) and opens the PR (`octocrab`, fail-closed); GitHub Actions verifies (PASS / FAIL / BLOCKED) — **CI is VERIFY authority, never model confidence**.
-8. Persist `RepairCase`.
+6. If actionable → `repair_operators::apply` → `CandidatePatch`; `worker/src/worker/param_derive.rs` deriva `dependency`/`version` de forma determinista (fail-closed).
+7. If actionable, the worker builds the bounded edit + unified diff (`repair_operators::diff`) and opens the PR via `github_client.rs` (GitHub REST con `worker::Fetch`, sin `octocrab`, fail-closed: errores permanentes = Blocked, transitorios = retry de cola → DLQ); GitHub Actions verifies (PASS / FAIL / BLOCKED) and reports to `POST /github/callback` — **CI is VERIFY authority, never model confidence**.
+8. Persist `RepairCase` in `REPAIR_CASES_KV` (best-effort tras abrir el PR).
 
 ## Training path (offline)
 
@@ -74,6 +74,7 @@ Layer arithmetic (from `crates/repair_nn_core/src/lib.rs:18`):
 | Notion | Architecture, runbooks, human decisions |
 | MongoDB | incidents, signatures, repair cases, audit, training examples |
 | KV (`MODEL_KV`) | Model pointers (current/stable) |
+| KV (`REPAIR_CASES_KV`) | RepairCases persistidos (V1: alternativa a MongoDB sin driver WASM) |
 | R2 | WASM artifacts / checkpoints (when real artifact exists) |
-| Mem0 / D1 | Deferred — not provisioned |
+| Mem0 | Conector de workspace OPERACIONAL (2026-10-05); el worker aún no lo llama (ver MEM0_STATUS.md). D1: deferred |
 | DO SQLite | **Provisioned** (binding `INCIDENT_STATE`, clase `IncidentState`) |

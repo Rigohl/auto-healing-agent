@@ -16,7 +16,7 @@ crates/repair_nn_core
 crates/repair_nn_wasm
 crates/repair_operators
 crates/repair_train   (trainer offline, bin repair-train)
-crates/repair_pr      (GATE→PR V1: diff real con similar + PR con octocrab, bin repair-pr)
+crates/repair_pr      (CLI offline: diff con similar + PR con octocrab; el path del worker NO lo usa)
 worker/   (CF, build con wrangler)
 ```
 
@@ -28,10 +28,12 @@ repair_types::Incident
   → feature_engine::extract → [f32; 64]
   → repair_nn_core::RepairNet::predict → RepairAction
   → repair_operators::gate + apply → CandidatePatch
-  → repair_pr::patch_bundle (diff real, similar) + PR (octocrab) → Actions VERIFY
+  → repair_operators::diff (edit acotado + unified diff)
+  → worker github_client (rama auto-heal/* → commit → PR) → Actions VERIFY
+  → POST /github/callback registra el veredicto en el DO
 ```
 
 WASM: `repair_nn_wasm::RepairModel`  
-Edge: `worker` Router `/health` `/model` `/webhook`
+Edge: `worker` Router (Axum) `/health` `/model` `/webhook` `/github/callback` + cron MONITOR
 
 ## Sin Pony. Sin generación libre LLM en el núcleo.
