@@ -1,14 +1,16 @@
 name: rustdiag
 
-# Diagnostico MANUAL de compilacion del worker (workflow_dispatch).
-# Publica el output de cargo check/fmt en el resumen del run; no crea
-# issues ni se dispara en push.
+# Diagnostico TEMPORAL (feat/code-repair): publica el diff de cargo fmt y
+# el output de cargo clippy del worker en un ISSUE. Se restaurara a
+# dispatch-only antes del merge.
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [feat/code-repair]
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   diag:
@@ -16,14 +18,26 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo check --manifest-path worker/Cargo.toml --all-targets 2>&1 | tee check.log
-        continue-on-error: true
-      - run: cargo fmt --manifest-path worker/Cargo.toml -- --check 2>&1 | tee -a check.log || true
-      - name: resumen
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - name: fmt y clippy del worker
+        id: diag
         run: |
+          set +e
           {
-            echo "### rustdiag output"
-            echo "~~~"
-            tail -n 200 check.log
-            echo "~~~"
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "### cargo fmt --check (worker)"
+            cargo fmt --manifest-path worker/Cargo.toml -- --check
+            echo ""
+            echo "### cargo fmt --check (workspace)"
+            cargo fmt --all -- --check
+            echo ""
+            echo "### cargo clippy (worker, -D warnings)"
+            cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings 2>&1 | tail -n 120
+          } > /tmp/diag.txt 2>&1
+          exit 0
+      - name: Publicar diagnostico en issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --title "diag: fmt/clippy feat/code-repair ${{ github.sha }}" --body-file /tmp/diag.txt --repo "$GITHUB_REPOSITORY" || echo "issue create failed (ya existe?)"
