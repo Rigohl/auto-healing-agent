@@ -1,0 +1,28 @@
+name: cleanup-now
+
+# TEMPORAL: borra la rama efimera feat/code-repair ya fusionada (PR #125).
+# Este archivo se elimina inmediatamente despues; la limpieza permanente
+# vive en cleanup-branches.yml (dispatch + cron).
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete every branch except main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --paginate repos/Rigohl/auto-healing-agent/branches?per_page=100 \
+            | jq -r '.[].name' \
+            | grep -v '^main$' \
+            | while read -r branch; do
+                echo "deleting ${branch}"
+                gh api -X DELETE "repos/Rigohl/auto-healing-agent/git/refs/heads/${branch}" || true
+              done
