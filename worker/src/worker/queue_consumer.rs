@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use worker::*;
 
 use feature_engine::extract;
-use repair_operators::{diff, gate};
+use repair_operators::{apply, diff, gate};
 use repair_types::{
     FailureSignature, FeatureVector, Incident, OperatorId, RepairAction, RepairCase,
     VerificationResult,
@@ -273,7 +273,14 @@ async fn process(
     // (dependency/version). Fail-closed: lo no derivable queda "missing_param"
     // y nunca se sobrescriben parametros existentes (param_derive.rs).
     param_derive::ensure_params(&mut action, &incident);
-    let gate_ok = gate(&action, MIN_CONFIDENCE, MAX_RISK).is_ok();
+    // PART6 (repurpose): el PipelineReport del gate deja de descartarse.
+    // Su razon de denegacion viaja al DO (antes: "gate_denied" generico) y
+    // el plan del operador (apply, antes codigo muerto) explica cada PR.
+    let gate_denial = match gate(&action, MIN_CONFIDENCE, MAX_RISK) {
+        Ok(()) => None,
+        Err(report) => Some(report),
+    };
+    let gate_ok = gate_denial.is_none();
 
     // 2.6 Evaluacion declarativa: las reglas solo restringen (block) u
     // observan (observe); NUNCA permiten saltarse el gate determinista
@@ -403,12 +410,20 @@ async fn process(
                 )
             }
         } else {
-            (
-                "blocked_by_policy",
-                "blocked",
-                String::new(),
-                String::from("gate_denied"),
-            )
+            // PART6: la denegacion de la NN llega al DO con el detalle del
+            // gate (c/r/op) en vez de un "gate_denied" opaco: auditoria real.
+            let reason = match gate_denial
+                .as_ref()
+                .and_then(|report| match &report.policy_decision {
+                    repair_types::PolicyDecision::DenyWithReason(detail) => {
+                        Some(detail.clone())
+                    }
+                    _ => None,
+                }) {
+                Some(detail) => format!("nn_gate_denied:{detail}"),
+                None => String::from("nn_gate_denied"),
+            };
+            ("blocked_by_policy", "blocked", String::new(), reason)
         }
     };
 
@@ -541,13 +556,21 @@ async fn attempt_repair(
         action.repair_operator.as_str(),
         task.correlation_id
     );
+    // PART6 (repurpose): plan del operador (repair_operators::apply, antes
+    // codigo muerto solo testeado) en el cuerpo del PR: el revisor humano
+    // lee QUE hara el operador y con que pasos acotados, ademas del diff.
+    let plan = apply(action, incident);
     let pr_body = format!(
-        "## Auto-repair (bounded, deterministic)\n\n- operator: `{}`\n- correlation_id: `{}`\n- incident: `{}`\n- confidence: `{:.3}` risk: `{:.3}`\n\n```diff\n{}\n```\n\nVERIFY authority = GitHub Actions. CI results post to `/github/callback`. This PR is never auto-approved or auto-merged.",
+        "## Auto-repair (bounded, deterministic)\n\n- operator: `{}`\n- correlation_id: `{}`\n- incident: `{}`\n- confidence: `{:.3}` risk: `{:.3}`\n\n### Operator plan\n\n- summary: {}\n- steps: {}\n- files: {}\n- advisory: {}\n\n```diff\n{}\n```\n\nVERIFY authority = GitHub Actions. CI results post to `/github/callback`. This PR is never auto-approved or auto-merged.",
         action.repair_operator.as_str(),
         task.correlation_id,
         task.incident_id,
         action.confidence,
         action.risk,
+        plan.summary,
+        plan.steps.join(" | "),
+        plan.files.join(", "),
+        plan.advisory,
         patch
     );
 
@@ -612,10 +635,13 @@ async fn persist_case(
         // HONESTO: 0.0 hasta que /github/callback actualice el caso en KV
         // con la verificacion real de Actions (repair_types::compute_reward).
         verification: VerificationResult::Skipped,
+        // PART6 (repurpose): el plan del operador queda en el RepairCase
+        // (patch_summary) para auditoria desde el dashboard.
         patch_summary: format!(
-            "{} origin={} pr={}",
+            "{} origin={} plan={} pr={}",
             action.repair_operator.as_str(),
             origin,
+            apply(action, incident).summary,
             pr_url
         ),
         pr_url: Some(pr_url.to_string()),

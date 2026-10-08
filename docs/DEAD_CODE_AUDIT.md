@@ -17,6 +17,7 @@
 | model/current.json, model/stable.json, model/schema.json | Ninguno (weights: null; el payload real es model/current.txt -> KV model/current) | Placeholders de metadata documentados (README). Mantener como metadatos o eliminar |
 | Doble CandidatePatch | repair_operators::CandidatePatch (runtime) vs repair_types::contract::CandidatePatch (contrato) | Duplicacion de nombre con roles distintos: riesgo de confusion; documentado aqui |
 | Doble generador de diff | repair_operators::diff (worker, package.json) vs repair_pr::diff (similar, generico) | Divergencia posible: el runtime usa el primero; el CLI es evidencia offline |
+| repair_operators::apply + PipelineReport del gate + SyntheticIncident.error_category | PART6 (2026-10-08): apply() genera el "Operator plan" del PR y del preview /webhook; la razon del gate viaja al DO como nn_gate_denied:{detalle}; error_category alimenta el accuracy por categoria del trainer | Reproposito con uso real desde PART6 (explainability) |
 
 ## Detalle y recomendaciones
 
@@ -83,3 +84,22 @@ pendiente jamas ensena su etiqueta como buena.
   config_store (config en caliente), neural-net-weights -> NN_WEIGHTS
   (challenger). El registro "sin uso" de arriba quedo desactualizado con
   ese merge; esta linea lo corrige.
+
+## 6. Reproposito PART6 (2026-10-08): explainability
+
+Los tres items "muertos" del analisis profundo dejan de estarlo con uso
+real de produccion (misma regla de siempre: no se borra, se cablea):
+- `repair_operators::apply()` construye el "Operator plan" (summary /
+  steps / files / advisory) que se incluye en el preview del webhook
+  (respuesta 202) y en el cuerpo del PR de reparacion: el revisor
+  humano lee QUE hara el operador antes de leer el diff. Tambien queda
+  en el patch_summary del RepairCase (auditoria via dashboard).
+- El `PipelineReport` del gate deja de descartarse: la denegacion de la
+  NN llega al DO como `nn_gate_denied:c=... r=... op=...` en vez de un
+  "gate_denied" opaco.
+- `SyntheticIncident.error_category` (feature_engine) gana consumidor:
+  `repair_train::evaluate` reporta accuracy POR CATEGORIA y el CLI la
+  imprime antes del promote (un 90% global puede esconder una categoria
+  al 50%).
+- El modo `repair-pr pr` se verifica fail-closed en CI (guarda de rama
+  no efimera, sin git/red/token): repair-validation.yml.
