@@ -50,6 +50,13 @@ ANTI_LOOP_MAX_SAME_SIGNATURE = "5"
 ANTI_LOOP_MAX_SAME_FINGERPRINT = "2"
 ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION = "3"
 ANTI_LOOP_WINDOW_SECONDS = "900"
+# LLM FALLBACK (Workers AI, Always Free; docs/LLM_POLICY.md). La NN es
+# la via principal; el LLM solo propone acciones ESTRUCTURADAS cuando el
+# gate rechaza la NN, con presupuesto diario de Neurons fail-closed.
+LLM_ENABLED = "true"
+LLM_MODEL = "@cf/meta/llama-3.2-3b-instruct"
+LLM_DAILY_BUDGET = "8000"
+LLM_COST_PER_CALL = "300"
 
 [triggers]
 crons = ["0 * * * *"]
@@ -84,6 +91,12 @@ id = "56b993b07d3c4c02903eca621271979f"
 [[kv_namespaces]]
 binding = "NN_WEIGHTS"
 id = "3c269e92364f4b59aa83c4388596eefb"
+
+# Workers AI (Always Free: 10.000 Neurons/dia incluidos). El presupuesto lo
+# vigila llm_fallback.rs con el contador llm/budget en AGENT_CONFIG
+# (fail-closed al agotarse; docs/LLM_POLICY.md).
+[ai]
+binding = "AI"
 
 [durable_objects]
 bindings = [
@@ -152,6 +165,13 @@ ANTI_LOOP_MAX_SAME_SIGNATURE = "5"
 ANTI_LOOP_MAX_SAME_FINGERPRINT = "2"
 ANTI_LOOP_MAX_SAME_FAILING_VERIFICATION = "3"
 ANTI_LOOP_WINDOW_SECONDS = "900"
+# LLM FALLBACK (Workers AI, Always Free; docs/LLM_POLICY.md). La NN es
+# la via principal; el LLM solo propone acciones ESTRUCTURADAS cuando el
+# gate rechaza la NN, con presupuesto diario de Neurons fail-closed.
+LLM_ENABLED = "true"
+LLM_MODEL = "@cf/meta/llama-3.2-3b-instruct"
+LLM_DAILY_BUDGET = "8000"
+LLM_COST_PER_CALL = "300"
 
 [[env.staging.kv_namespaces]]
 binding = "MODEL_KV"

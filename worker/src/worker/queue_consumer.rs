@@ -16,7 +16,7 @@ use repair_types::{
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
-    circuit, config_store, ledger, model, param_derive,
+    circuit, config_store, ledger, llm_fallback, model, param_derive,
     quota::QuotaConfig,
     rules,
     security::{fnv1a64, urlencode},
@@ -332,11 +332,44 @@ async fn process(
     //    rama -> commit -> PR abierto -> RepairCase en KV. VERIFY nunca
     //    se declara aqui: GitHub Actions reporta a /github/callback.
     let (decision, verify_status, evidence_ref, reason) = if gate_ok {
-        match attempt_repair(&env, &task, &action, &incident).await? {
+        match attempt_repair(&env, &task, &action, &incident, "nn").await? {
             RepairOutcome::Repaired { pr_url } => ("allow", "pending_ci", pr_url, String::new()),
             RepairOutcome::Blocked { reason } => {
                 ("blocked_by_policy", "blocked", String::new(), reason)
             }
+        }
+    } else if let Some(llm_action) = llm_fallback::propose(&env, &incident, &signature).await {
+        // LLM FALLBACK (docs/LLM_POLICY.md): la NN rechazo el caso; se pide
+        // una accion ESTRUCTURADA al modelo (Workers AI, presupuesto diario
+        // fail-closed). La salida pasa por el MISMO gate y los MISMOS
+        // operadores deterministas: el LLM nunca escribe codigo libre.
+        if gate(&llm_action, MIN_CONFIDENCE, MAX_RISK).is_ok()
+            && !crate::runtime::self_guard::is_own_repo(&env, &task.repo)
+            && !circuit::is_open(&env, llm_action.repair_operator).await
+        {
+            match attempt_repair(&env, &task, &llm_action, &incident, "llm").await? {
+                // Distilacion: el caso queda marcado origin=llm en KV; si CI
+                // verifica PASS, el entrenamiento offline aprende de el y la
+                // NN pasa a resolver esta clase de firmas sin consultar al
+                // LLM (ademas del replay inmediato del ledger).
+                RepairOutcome::Repaired { pr_url } => {
+                    console_log!(
+                        "llm fallback repaired correlation_id={} (distill target)",
+                        task.correlation_id
+                    );
+                    ("allow", "pending_ci", pr_url, String::new())
+                }
+                RepairOutcome::Blocked { reason } => {
+                    ("blocked_by_policy", "blocked", String::new(), reason)
+                }
+            }
+        } else {
+            (
+                "blocked_by_policy",
+                "blocked",
+                String::new(),
+                String::from("llm_gate_denied"),
+            )
         }
     } else {
         (
@@ -403,6 +436,7 @@ async fn attempt_repair(
     task: &QueueTask,
     action: &RepairAction,
     incident: &Incident,
+    origin: &str,
 ) -> worker::Result<RepairOutcome> {
     use crate::runtime::github_client::{GitHubClient, GitHubError};
 
@@ -501,7 +535,7 @@ async fn attempt_repair(
     };
 
     // PASO 3: RepairCase persistible en KV (alternativa sin Mongo).
-    persist_case(env, task, incident, action, &pr_url).await;
+    persist_case(env, task, incident, action, &pr_url, origin).await;
 
     console_log!("repair pr opened: {} {}", task.correlation_id, pr_url);
     Ok(RepairOutcome::Repaired { pr_url })
@@ -529,6 +563,7 @@ async fn persist_case(
     incident: &Incident,
     action: &RepairAction,
     pr_url: &str,
+    origin: &str,
 ) {
     let case = RepairCase {
         incident_id: task.incident_id.clone(),
@@ -538,7 +573,12 @@ async fn persist_case(
         // HONESTO: 0.0 hasta que /github/callback actualice el caso en KV
         // con la verificacion real de Actions (repair_types::compute_reward).
         verification: VerificationResult::Skipped,
-        patch_summary: format!("{} pr={}", action.repair_operator.as_str(), pr_url),
+        patch_summary: format!(
+            "{} origin={} pr={}",
+            action.repair_operator.as_str(),
+            origin,
+            pr_url
+        ),
         pr_url: Some(pr_url.to_string()),
         reward: repair_types::compute_reward(VerificationResult::Skipped),
         created_at_unix: crate::runtime::now_ms() as u64,
