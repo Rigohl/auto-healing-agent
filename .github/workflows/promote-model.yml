@@ -14,6 +14,9 @@ name: Promote model to KV
 # senal real con el dataset sintetico (repair-train --examples). Solo la
 # senal verificada positiva entra al entrenamiento; la promocion sigue
 # siendo humana.
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
