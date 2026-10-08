@@ -1,0 +1,29 @@
+name: rustdiag
+
+# Diagnostico MANUAL de compilacion del worker (workflow_dispatch).
+# Publica el output de cargo check/fmt en el resumen del run; no crea
+# issues ni se dispara en push.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo check --manifest-path worker/Cargo.toml --all-targets 2>&1 | tee check.log
+        continue-on-error: true
+      - run: cargo fmt --manifest-path worker/Cargo.toml -- --check 2>&1 | tee -a check.log || true
+      - name: resumen
+        run: |
+          {
+            echo "### rustdiag output"
+            echo "~~~"
+            tail -n 200 check.log
+            echo "~~~"
+          } >> "$GITHUB_STEP_SUMMARY"
