@@ -19,7 +19,7 @@
 
 use worker::*;
 
-use crate::runtime::model;
+use crate::runtime::{candidate, model};
 
 /// Var con la lista de repositorios a barrer (separados por comas).
 pub const VAR_MONITOR_REPOS: &str = "MONITOR_REPOS";
@@ -73,6 +73,11 @@ pub async fn run(env: &Env) -> Result<()> {
             health.stable
         );
     }
+    // Challenger (NN_WEIGHTS): solo observabilidad del estado del
+    // candidato; nunca sirve inferencia (promocion humana via
+    // promote-model.yml).
+    let challenger = candidate::status(env).await;
+    console_log!("MONITOR: candidate weights status={}", challenger.as_str());
     Ok(())
 }
 

@@ -36,6 +36,9 @@ head_sampling_rate = 1
 
 [vars]
 MONITOR_REPOS = "Rigohl/auto-healing-agent"
+# NO AUTO-EDITARSE (2026-10-08): el agente nunca abre PRs contra OWN_REPO
+# (worker/src/worker/self_guard.rs; bloqueo fail-closed self_edit_forbidden).
+OWN_REPO = "Rigohl/auto-healing-agent"
 REPAIR_RULES = "[]"
 QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
 QUOTA_MAX_REPAIRS_PER_REPO = "10"
@@ -58,6 +61,29 @@ id = "73014a1b32b7446397461a8d438c8ab2"
 [[kv_namespaces]]
 binding = "REPAIR_CASES_KV"
 id = "996211a015f14c54b85ea4b47e79fdf9"
+
+# KV-adoption 2026-10-08: los 4 namespaces huerfanos de la cuenta pasan a
+# tener uso real (ids verificados via API de Cloudflare). Espejo EXACTO en
+# el wrangler.toml de la raiz (guard 6 de validate-preflight.sh).
+# Config en caliente: reglas (config/rules) + cuotas (config/quota).
+[[kv_namespaces]]
+binding = "AGENT_CONFIG"
+id = "9b0fcb8a57e540c08d92ada83c752465"
+
+# Signature ledger: firma -> accion verificada PASS (replay determinista).
+[[kv_namespaces]]
+binding = "STATE"
+id = "1dc394e34570414085eb85586ec14912"
+
+# Circuit breaker por operador (senal = verificacion real de Actions).
+[[kv_namespaces]]
+binding = "CACHE"
+id = "56b993b07d3c4c02903eca621271979f"
+
+# Pesos candidatos (challenger). NUNCA sirve inferencia; promocion humana.
+[[kv_namespaces]]
+binding = "NN_WEIGHTS"
+id = "3c269e92364f4b59aa83c4388596eefb"
 
 [durable_objects]
 bindings = [
@@ -114,6 +140,7 @@ max_concurrency = 1
 
 [env.staging.vars]
 MONITOR_REPOS = "Rigohl/auto-healing-agent"
+OWN_REPO = "Rigohl/auto-healing-agent"
 REPAIR_RULES = "[]"
 QUOTA_MAX_ATTEMPTS_PER_INCIDENT = "3"
 QUOTA_MAX_REPAIRS_PER_REPO = "10"
@@ -133,6 +160,22 @@ id = "73014a1b32b7446397461a8d438c8ab2"
 [[env.staging.kv_namespaces]]
 binding = "REPAIR_CASES_KV"
 id = "996211a015f14c54b85ea4b47e79fdf9"
+
+[[env.staging.kv_namespaces]]
+binding = "AGENT_CONFIG"
+id = "9b0fcb8a57e540c08d92ada83c752465"
+
+[[env.staging.kv_namespaces]]
+binding = "STATE"
+id = "1dc394e34570414085eb85586ec14912"
+
+[[env.staging.kv_namespaces]]
+binding = "CACHE"
+id = "56b993b07d3c4c02903eca621271979f"
+
+[[env.staging.kv_namespaces]]
+binding = "NN_WEIGHTS"
+id = "3c269e92364f4b59aa83c4388596eefb"
 
 [env.staging.durable_objects]
 bindings = [

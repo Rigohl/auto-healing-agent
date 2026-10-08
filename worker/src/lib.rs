@@ -43,9 +43,9 @@ use repair_types::{compute_idempotency_key, FailureSignature};
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
+    candidate, circuit, config_store, ledger,
     model, monitor,
     queue_consumer::{self, QueueTask, WebhookPayload},
-    quota::QuotaConfig,
     security::{fnv1a64, urlencode, verify_webhook_secret},
     MAX_RISK, MIN_CONFIDENCE,
 };
@@ -74,6 +74,7 @@ fn router(env: Env) -> Router {
         .route("/", get(|| async { "AUTO-REPAIR LAB" }))
         .route("/health", get(|| async { "ok" }))
         .route("/model", get(model_report))
+        .route("/model/candidate", get(candidate_report))
         .route("/webhook", post(handle_webhook))
         .route("/github/callback", post(handle_github_callback))
         .with_state(env)
@@ -108,6 +109,30 @@ async fn model_report(State(env): State<Env>) -> AxumResponse {
         Err(e) => {
             console_error!("model report body failed: {e}");
             internal_error("model_report_failed")
+        }
+    }
+}
+
+/// GET /model/candidate: informe del challenger (NN_WEIGHTS, adopcion del
+/// namespace huerfano neural-net-weights 2026-10-08). Solo observabilidad:
+/// los pesos candidatos NUNCA sirven inferencia; la promocion la decide
+/// promote-model.yml con revision humana (AUTO_DEPLOY=false).
+#[worker::send]
+async fn candidate_report(State(env): State<Env>) -> AxumResponse {
+    let mut report = match candidate::report(&env).await {
+        Ok(report) => report,
+        Err(e) => {
+            console_error!("candidate report failed: {e}");
+            return internal_error("candidate_report_failed");
+        }
+    };
+    let code = report.status_code();
+    let status = StatusCode::from_u16(code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    match report.text().await {
+        Ok(text) => (status, text).into_response(),
+        Err(e) => {
+            console_error!("candidate report body failed: {e}");
+            internal_error("candidate_report_failed")
         }
     }
 }
@@ -187,7 +212,8 @@ async fn handle_webhook(State(env): State<Env>, headers: HeaderMap, body: Bytes)
 
     // 4. Durable Object: dedup, idempotencia, quota y anti-loop ANTES de
     //    encolar. Si el DO no responde: fail-closed 503, sin efectos.
-    let quota_cfg = QuotaConfig::from_env(&env);
+    // Cuotas en caliente (AGENT_CONFIG KV; fallback [vars] de wrangler.toml).
+    let quota_cfg = config_store::quota(&env).await;
     let anti_cfg = AntiLoopConfig::from_env(&env);
     let qs = format!(
         // Sin `delivery_id`: el DO deduplica por `idem_key`, que ya lo
@@ -363,7 +389,9 @@ async fn handle_github_callback(
         verify_status,
         urlencode(&evidence_ref)
     );
-    let do_text = match crate::runtime::call_do(env, repo, qs).await {
+    // FIX E0382 (HEAD rojo en d1cc315): env y repo se vuelven a usar ABAJO
+    // (aprendizaje en KV); el paso por valor los movia y rompia el build.
+    let do_text = match crate::runtime::call_do(env.clone(), repo.clone(), qs).await {
         Ok(t) => t,
         Err(_) => return svc_unavailable("state_store_unavailable"),
     };
@@ -391,6 +419,37 @@ async fn handle_github_callback(
                             }
                         }
                         Err(e) => console_error!("repair_case kv builder failed: {e}"),
+                    }
+                }
+            }
+        }
+    }
+    // Aprendizaje real (kv-adoption 2026-10-08): la senal VERIFICADA de
+    // Actions alimenta el circuit breaker (CACHE KV) y, en PASS, el
+    // signature ledger (STATE KV). "blocked" NO cuenta como fail del
+    // operador (el gate freno el parche; CI no lo rechazo). Best-effort
+    // total: el DO ya asento la decision autoritativa; un fallo de KV no
+    // revoca el callback.
+    if verify_status == "pass" || verify_status == "fail" {
+        if let Ok(kv) = env.kv("REPAIR_CASES_KV") {
+            let case_key = format!("repair_case:{}", correlation_id);
+            if let Ok(Some(raw)) = kv.get(&case_key).text().await {
+                if let Ok(case) = serde_json::from_str::<repair_types::RepairCase>(&raw) {
+                    let is_pass = verify_status == "pass";
+                    let operator_u8 = case.action.repair_operator as u8;
+                    circuit::record(&env, operator_u8, is_pass).await;
+                    if is_pass {
+                        let entry = ledger::LedgerEntry {
+                            operator: case.action.repair_operator as u8,
+                            parameters: case.action.parameters.clone(),
+                            confidence: case.action.confidence,
+                            risk: case.action.risk,
+                            pr_url: case.pr_url.clone().unwrap_or_default(),
+                            correlation_id: correlation_id.clone(),
+                            updated_at_unix: crate::runtime::now_ms() as u64,
+                        };
+                        ledger::record_pass(&env, &repo, &case.signature.fingerprint, entry)
+                            .await;
                     }
                 }
             }

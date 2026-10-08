@@ -16,6 +16,7 @@ use repair_types::{
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
+    circuit, config_store, ledger,
     model, param_derive,
     quota::QuotaConfig,
     rules,
@@ -152,7 +153,8 @@ pub async fn consume(batch: MessageBatch<QueueTask>, env: Env) -> Result<()> {
         return Ok(());
     }
 
-    let quota_cfg = QuotaConfig::from_env(&env);
+    // Cuotas en caliente (AGENT_CONFIG KV; fallback [vars]).
+    let quota_cfg = config_store::quota(&env).await;
     let anti_cfg = AntiLoopConfig::from_env(&env);
     for message in batch.messages()? {
         let task = message.body().clone();
@@ -220,9 +222,11 @@ async fn process(
     let features = extract(&incident, &signature);
 
     // 2.5 Reglas declarativas (P1): filtrado adicional fail-closed.
-    // REPAIR_RULES invalido => bloqueado (nunca dejar pasar por defecto);
-    // sin var o "[]" => sin reglas (no-op). Esquema y sintaxis: rules.rs.
-    let ruleset = match rules::load(&env) {
+    // Reglas en caliente: AGENT_CONFIG config/rules primero, var
+    // REPAIR_RULES de fallback (config_store.rs). Config invalida en
+    // cualquiera de las dos fuentes => bloqueado (nunca dejar pasar por
+    // defecto); sin var o "[]" => sin reglas (no-op). Sintaxis: rules.rs.
+    let ruleset = match config_store::load_ruleset(&env).await {
         Ok(r) => r,
         Err(e) => {
             console_error!("rules config invalid: {}", e);
@@ -232,16 +236,32 @@ async fn process(
         }
     };
 
-    let loaded = match model::load(&env).await {
-        Ok(m) => m,
-        Err(_) => {
-            // current y stable ausentes o malformados: BLOCKED. Nunca zeros.
-            let rqs = blocked_result_qs(&task, "blocked_model", "no_model_current_stable");
-            crate::runtime::call_do(env, task.repo.clone(), rqs).await?;
-            return Ok(());
-        }
+    // Replay determinista (STATE KV, adopcion del namespace huerfano
+    // 2026-10-08): si esta firma ya tuvo un PASS verificado por Actions,
+    // se reusa la accion conocida-buena en vez de re-inferir con la NN.
+    // Best-effort: sin ledger (o entrada corrupta) => camino normal, NN.
+    let replayed = ledger::lookup(&env, &task.repo, &signature.fingerprint).await;
+    if let Some(entry) = replayed.as_ref() {
+        console_log!(
+            "ledger replay correlation_id={} operator={}",
+            task.correlation_id,
+            entry.operator
+        );
+    }
+    let mut action = if let Some(entry) = replayed {
+        entry.to_action()
+    } else {
+        let loaded = match model::load(&env).await {
+            Ok(m) => m,
+            Err(_) => {
+                // current y stable ausentes o malformados: BLOCKED. Nunca zeros.
+                let rqs = blocked_result_qs(&task, "blocked_model", "no_model_current_stable");
+                crate::runtime::call_do(env, task.repo.clone(), rqs).await?;
+                return Ok(());
+            }
+        };
+        loaded.net.predict(&features)
     };
-    let mut action = loaded.net.predict(&features);
     // PASO 2: derivacion determinista de los parametros del edit acotado
     // (dependency/version). Fail-closed: lo no derivable queda "missing_param"
     // y nunca se sobrescriben parametros existentes (param_derive.rs).
@@ -289,6 +309,25 @@ async fn process(
         "{:x}",
         fnv1a64(format!("{}|{}", action.repair_operator as u8, task.signature).as_bytes())
     );
+
+    // 2.7 Guards fail-closed (kv-adoption 2026-10-08), ANTES de tocar la
+    //     API de GitHub: la decision es blocked_by_policy (no un error de
+    //     red: nunca retry).
+    //     a) self_guard: el agente NUNCA abre PRs contra su propio repo
+    //        (OWN_REPO; decision del dueno: no auto-editarse). El MONITOR
+    //        si puede observarlo (solo lectura: retencion + salud).
+    //     b) circuit breaker: un operador con 3 fails consecutivos
+    //        VERIFICADOS por Actions queda OPEN 1h (CACHE KV).
+    if gate_ok && crate::runtime::self_guard::is_own_repo(&env, &task.repo) {
+        let rqs = blocked_result_qs(&task, "blocked_by_policy", "self_edit_forbidden");
+        crate::runtime::call_do(env, task.repo.clone(), rqs).await?;
+        return Ok(());
+    }
+    if gate_ok && circuit::is_open(&env, action.repair_operator).await {
+        let rqs = blocked_result_qs(&task, "blocked_by_policy", "circuit_open");
+        crate::runtime::call_do(env, task.repo.clone(), rqs).await?;
+        return Ok(());
+    }
 
     // 3. PASO 2+3: reparacion real cuando el gate permite. Edit acotado ->
     //    rama -> commit -> PR abierto -> RepairCase en KV. VERIFY nunca

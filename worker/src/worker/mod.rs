@@ -13,10 +13,18 @@
 
 #[path = "anti_loop.rs"]
 pub mod anti_loop;
+#[path = "candidate.rs"]
+pub mod candidate;
+#[path = "circuit.rs"]
+pub mod circuit;
+#[path = "config_store.rs"]
+pub mod config_store;
 #[path = "github_client.rs"]
 pub mod github_client;
 #[path = "incident_state.rs"]
 pub mod incident_state;
+#[path = "ledger.rs"]
+pub mod ledger;
 #[path = "model.rs"]
 pub mod model;
 #[path = "monitor.rs"]
@@ -31,6 +39,8 @@ pub mod quota;
 pub mod rules;
 #[path = "security.rs"]
 pub mod security;
+#[path = "self_guard.rs"]
+pub mod self_guard;
 
 /// Umbrales del gate: fuente de verdad docs/GOVERNANCE.md (0.55 / 0.45).
 pub const MIN_CONFIDENCE: f32 = 0.55;
