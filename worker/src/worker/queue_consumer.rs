@@ -409,17 +409,18 @@ async fn process(
         } else {
             // PART6: la denegacion de la NN llega al DO con el detalle del
             // gate (c/r/op) en vez de un "gate_denied" opaco: auditoria real.
-            let reason = match gate_denial
-                .as_ref()
-                .and_then(|report| match &report.policy_decision {
-                    repair_types::PolicyDecision::DenyWithReason(detail) => {
-                        Some(detail.clone())
-                    }
-                    _ => None,
-                }) {
-                Some(detail) => format!("nn_gate_denied:{detail}"),
-                None => String::from("nn_gate_denied"),
-            };
+            let reason =
+                match gate_denial
+                    .as_ref()
+                    .and_then(|report| match &report.policy_decision {
+                        repair_types::PolicyDecision::DenyWithReason(detail) => {
+                            Some(detail.clone())
+                        }
+                        _ => None,
+                    }) {
+                    Some(detail) => format!("nn_gate_denied:{detail}"),
+                    None => String::from("nn_gate_denied"),
+                };
             ("blocked_by_policy", "blocked", String::new(), reason)
         }
     };
