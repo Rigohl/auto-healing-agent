@@ -124,10 +124,7 @@ pub fn npm_registry_url(dep: &str) -> Option<String> {
 /// construye, no se recibe: jamas se hace echo de URLs del incidente.
 pub fn rustc_error_docs_url(error_code: &str) -> Option<String> {
     let bytes = error_code.as_bytes();
-    if bytes.len() == 5
-        && bytes[0] == b'E'
-        && bytes[1..].iter().all(|b| b.is_ascii_digit())
-    {
+    if bytes.len() == 5 && bytes[0] == b'E' && bytes[1..].iter().all(|b| b.is_ascii_digit()) {
         Some(format!("{RUSTC_DOCS}/{error_code}.html"))
     } else {
         None
@@ -209,8 +206,7 @@ fn valid_package_name(dep: &str) -> bool {
 fn valid_version(v: &str) -> bool {
     !v.is_empty()
         && v.len() <= 64
-        && v
-            .chars()
+        && v.chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '+'))
 }
 

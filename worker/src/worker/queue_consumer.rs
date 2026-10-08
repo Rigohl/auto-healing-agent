@@ -21,8 +21,7 @@ use crate::runtime::{
     quota::QuotaConfig,
     rules,
     security::{fnv1a64, urlencode},
-    web_research,
-    MAX_RISK, MIN_CONFIDENCE,
+    web_research, MAX_RISK, MIN_CONFIDENCE,
 };
 
 pub const QUEUE_BINDING: &str = "REPAIR_QUEUE";
@@ -411,7 +410,7 @@ async fn process(
                 String::from("gate_denied"),
             )
         }
-    };;
+    };
 
     // 4. Registrar decision + verificacion en el DO.
     let rqs = format!(
