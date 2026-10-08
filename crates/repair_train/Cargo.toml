@@ -9,6 +9,7 @@ description = "Offline trainer V1: entrena la MLP sobre el dataset sintetico y e
 repair_types = { path = "../repair_types" }
 feature_engine = { path = "../feature_engine" }
 repair_nn_core = { path = "../repair_nn_core" }
+serde_json = "1"
 
 [[bin]]
 name = "repair-train"
