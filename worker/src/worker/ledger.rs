@@ -79,7 +79,12 @@ pub fn key(repo: &str, fingerprint: &str) -> String {
 /// entrada malformada => None (camino normal por la NN).
 pub async fn lookup(env: &Env, repo: &str, fingerprint: &str) -> Option<LedgerEntry> {
     let kv = env.kv(KV_BINDING).ok()?;
-    let raw = kv.get(&key(repo, fingerprint)).text().await.ok().flatten()?;
+    let raw = kv
+        .get(&key(repo, fingerprint))
+        .text()
+        .await
+        .ok()
+        .flatten()?;
     let entry: LedgerEntry = serde_json::from_str(&raw).ok()?;
     if !entry.is_replayable() {
         return None;
@@ -130,7 +135,10 @@ mod tests {
     fn to_action_marks_replay_node_id() {
         let action = entry(1, 0.9, 0.1).to_action();
         assert_eq!(action.node_id, "ledger:replay");
-        assert_eq!(action.repair_operator, repair_types::OperatorId::DependencyRepair);
+        assert_eq!(
+            action.repair_operator,
+            repair_types::OperatorId::DependencyRepair
+        );
     }
 
     #[test]

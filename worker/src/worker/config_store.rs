@@ -107,7 +107,8 @@ mod tests {
     #[test]
     fn quota_overrides_apply_only_known_keys() {
         let base = QuotaConfig::default();
-        let raw = r#"{"QUOTA_DAILY_BUDGET": 5, "QUOTA_MAX_OPEN_REPAIRS": "1", "UNKNOWN_KEY": "99"}"#;
+        let raw =
+            r#"{"QUOTA_DAILY_BUDGET": 5, "QUOTA_MAX_OPEN_REPAIRS": "1", "UNKNOWN_KEY": "99"}"#;
         let cfg = apply_quota_overrides(base, raw).expect("json objeto valido");
         assert_eq!(cfg.daily_budget, 5);
         assert_eq!(cfg.max_open_repairs, 1);

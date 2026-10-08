@@ -43,8 +43,7 @@ use repair_types::{compute_idempotency_key, FailureSignature};
 
 use crate::runtime::{
     anti_loop::AntiLoopConfig,
-    candidate, circuit, config_store, ledger,
-    model, monitor,
+    candidate, circuit, config_store, ledger, model, monitor,
     queue_consumer::{self, QueueTask, WebhookPayload},
     security::{fnv1a64, urlencode, verify_webhook_secret},
     MAX_RISK, MIN_CONFIDENCE,
@@ -448,8 +447,7 @@ async fn handle_github_callback(
                             correlation_id: correlation_id.clone(),
                             updated_at_unix: crate::runtime::now_ms() as u64,
                         };
-                        ledger::record_pass(&env, &repo, &case.signature.fingerprint, entry)
-                            .await;
+                        ledger::record_pass(&env, &repo, &case.signature.fingerprint, entry).await;
                     }
                 }
             }
