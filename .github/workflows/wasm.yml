@@ -5,7 +5,7 @@ on:
       - "crates/repair_nn_wasm/**"
       - "crates/repair_nn_core/**"
       - "crates/repair_types/**"
-      # Ambos entran en la cadena edge -> WASM; antes un cambio aquí no
+      # Ambos entran en la cadena edge -> WASM; antes un cambio aqui no
       # disparaba el build (DISCREPANCIES.md 27).
       - "crates/feature_engine/**"
       - "crates/repair_operators/**"
@@ -39,3 +39,21 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown
+
+  # Frontera JS<->WASM REAL: los exports publicos (weightCount, featureDim,
+  # predictFromFeatures, operator_name) se EJERCEN bajo Node con
+  # wasm-bindgen-test, no solo se compilan. Es el consumidor que antes no
+  # existia (docs/DEAD_CODE_AUDIT.md, opcion b elegida: superficie publica
+  # JS documentada Y verificada).
+  node-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+      - run: wasm-pack test --node crates/repair_nn_wasm

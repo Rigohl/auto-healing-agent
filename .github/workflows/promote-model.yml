@@ -7,6 +7,16 @@ name: Promote model to KV
 # secrets CLOUDFLARE_API_TOKEN (Workers KV Storage: Edit) y
 # CLOUDFLARE_ACCOUNT_ID. Alternativa sin setup: dashboard de Cloudflare
 # (KV -> MODEL_KV -> Add entry) pegando el contenido de model/current.txt.
+#
+# Aprendizaje real (PART4, loop cerrado): con retrain=true y
+# export_examples=true se exportan los TrainingExample VERIFICADOS de
+# REPAIR_CASES_KV (training_example:*) y el re-entrenamiento mezcla esa
+# senal real con el dataset sintetico (repair-train --examples). Solo la
+# senal verificada positiva entra al entrenamiento; la promocion sigue
+# siendo humana.
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
@@ -20,6 +30,11 @@ on:
         default: "model/current"
       retrain:
         description: "Re-entrenar la NN con repair_train antes de promover"
+        required: false
+        default: false
+        type: boolean
+      export_examples:
+        description: "Exportar TrainingExample* de REPAIR_CASES_KV y entrenar con ellos (requiere retrain)"
         required: false
         default: false
         type: boolean
@@ -53,11 +68,34 @@ jobs:
         if: ${{ inputs.retrain }}
         uses: Swatinem/rust-cache@v2
 
+      - name: Exportar ejemplos reales de REPAIR_CASES_KV (opcional)
+        if: ${{ inputs.retrain && inputs.export_examples }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NS_CASES: "996211a015f14c54b85ea4b47e79fdf9"
+        run: |
+          set -euo pipefail
+          mkdir -p model
+          : > model/training_examples.jsonl
+          keys=$(npx wrangler@4 kv key list --namespace-id "$NS_CASES" --prefix "training_example:" | jq -r '.[].name')
+          n=0
+          for key in $keys; do
+            npx wrangler@4 kv key get "$key" --namespace-id "$NS_CASES" >> model/training_examples.jsonl
+            printf '\n' >> model/training_examples.jsonl
+            n=$((n+1))
+          done
+          echo "exportados $n TrainingExample a model/training_examples.jsonl"
+
       - name: Re-entrenar la NN (opcional)
         if: ${{ inputs.retrain }}
         run: |
           set -euo pipefail
-          cargo run -p repair_train --release -- --out model/current.txt
+          if [ -s model/training_examples.jsonl ]; then
+            cargo run -p repair_train --release -- --out model/current.txt --examples model/training_examples.jsonl
+          else
+            cargo run -p repair_train --release -- --out model/current.txt
+          fi
 
       - name: Preflight (artefacto)
         run: |
@@ -149,4 +187,3 @@ jobs:
             exit 1
           fi
           echo "model/candidate OK: 2863 tokens (challenger listo; solo reporta)"
-

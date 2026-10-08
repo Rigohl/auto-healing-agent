@@ -1,28 +1,31 @@
-//! Trainer offline V1 para la MLP de `repair_nn_core` (64→32→16).
+//! Trainer offline V1 para la MLP de repair_nn_core (64->32->16).
 //!
-//! Cierra el gap "offline train / export" de `docs/E2E_CHECKLIST.md`: entrena
-//! la red sobre el dataset sintetico determinista (`feature_engine::synthetic`)
-//! y exporta los pesos en el formato EXACTO que `worker/src/worker/model.rs`
-//! carga desde `MODEL_KV`: `WEIGHT_COUNT` valores `f32` legibles separados por
-//! whitespace. Sin LLM y sin crate `rand`: el dataset ya es determinista y el
+//! Cierra el gap "offline train / export" de docs/E2E_CHECKLIST.md: entrena
+//! la red sobre el dataset sintetico determinista (feature_engine::synthetic)
+//! y exporta los pesos en el formato EXACTO que worker/src/worker/model.rs
+//! carga desde MODEL_KV: WEIGHT_COUNT valores f32 legibles separados por
+//! whitespace. Sin LLM y sin crate rand: el dataset ya es determinista y el
 //! trainer solo anade aritmetica pura (LCG propio para init y shuffle).
 //!
-//! Objetivo V1 (λ queda FIJADA aqui; cierra el gap de λ de
-//! `docs/INVENTORY.md`):
+//! Objetivo V1 (lambda queda FIJADA aqui; cierra el gap de lambda de
+//! docs/INVENTORY.md):
 //!
-//! ```text
 //! loss = CE(logits, operador_gt)
-//!      + λ_conf · BCE(sigmoid(critic_conf), pred==gt)
-//!      + λ_risk · BCE(sigmoid(critic_risk), pred!=gt)
-//! ```
+//!      + LAMBDA_CONF * BCE(sigmoid(critic_conf), pred==gt)
+//!      + LAMBDA_RISK * BCE(sigmoid(critic_risk), pred!=gt)
 //!
-//! con `λ_conf = λ_risk = 0.5`: la cabeza de confianza aprende a reconocer sus
-//! aciertos y la de riesgo sus fallos, en vez de declarar confianza constante.
-//! El gate de produccion (`0.55 / 0.45`) NO se toca: GitHub Actions sigue
-//! siendo la unica autoridad de VERIFY (`docs/NO_LLM_POLICY.md`).
+//! con LAMBDA_CONF = LAMBDA_RISK = 0.5: la cabeza de confianza aprende a
+//! reconocer sus aciertos y la de riesgo sus fallos, en vez de declarar
+//! confianza constante. El gate de produccion (0.55 / 0.45) NO se toca:
+//! GitHub Actions sigue siendo la unica autoridad de VERIFY.
 //!
-//! El artefacto comprometido en `model/current.txt` se valida en CI con el
-//! `extract` y `RepairNet::predict` reales (ver `tests/train_tests.rs`).
+//! El nucleo SGD (sgd) es COMPARTIDO: el dataset sintetico puro (train) y
+//! el mixto con ejemplos reales (examples::train_with_examples) usan
+//! exactamente el mismo bucle, para que la senal real entrene sin caminos
+//! paralelos que diverjan.
+//!
+//! El artefacto comprometido en model/current.txt se valida en CI con el
+//! extract y RepairNet::predict reales (ver tests/train_tests.rs).
 
 use feature_engine::extract;
 use feature_engine::synthetic::generate_synthetic_dataset;
@@ -33,13 +36,15 @@ use repair_types::{FeatureVector, OperatorId, OPERATOR_COUNT};
 /// para conocer la longitud del payload.
 pub use repair_nn_core::WEIGHT_COUNT;
 
+pub mod examples;
+
 /// Peso de la BCE de la cabeza de confianza (fijado en V1).
 pub const LAMBDA_CONF: f32 = 0.5;
 /// Peso de la BCE de la cabeza de riesgo (fijado en V1).
 pub const LAMBDA_RISK: f32 = 0.5;
-/// Umbral de gate que replica el worker (`worker/src/worker/mod.rs`).
+/// Umbral de gate que replica el worker (worker/src/worker/mod.rs).
 pub const MIN_CONFIDENCE: f32 = 0.55;
-/// Umbral de gate que replica el worker (`worker/src/worker/mod.rs`).
+/// Umbral de gate que replica el worker (worker/src/worker/mod.rs).
 pub const MAX_RISK: f32 = 0.45;
 
 const INPUT: usize = 64;
@@ -47,7 +52,7 @@ const HIDDEN: usize = 32;
 const LATENT: usize = 16;
 const OPS: usize = OPERATOR_COUNT;
 
-// Layout plano, espejo exacto de `repair_nn_core::RepairNet::predict`.
+// Layout plano, espejo exacto de repair_nn_core::RepairNet::predict.
 const OFF_B1: usize = INPUT * HIDDEN;
 const OFF_W2: usize = OFF_B1 + HIDDEN;
 const OFF_B2: usize = OFF_W2 + HIDDEN * LATENT;
@@ -59,7 +64,7 @@ const OFF_WR: usize = OFF_BC + 1;
 const OFF_BR: usize = OFF_WR + LATENT;
 
 // El layout del trainer tiene que ser el del core, no "parecido": la misma
-// regla de `weight_count_stable` en repair_nn_core, exacta y no una cota.
+// regla de weight_count_stable en repair_nn_core, exacta y no una cota.
 const _: () = assert!(OFF_BR + 1 == WEIGHT_COUNT);
 
 /// LCG determinista u32 para el init de pesos y el shuffle de batches.
@@ -74,11 +79,11 @@ impl Rng {
 }
 
 /// Hiperparametros V1. Los defaults son los de la corrida que produjo
-/// `model/current.txt` (dataset 1000 / seed 42, 120 epocas, batch 16,
+/// model/current.txt (dataset 1000 / seed 42, 120 epocas, batch 16,
 /// lr 0.1 -> 0.03 al 70% de las epocas, init seed 7). Re-entrenar con ellos
 /// produce una red equivalente, no bytes identicos: la aritmetica intermedia
 /// del runtime puede divergir en los ultimos bits. El contrato real es el
-/// artefacto comprometido, validado directo en CI (`tests/train_tests.rs`).
+/// artefacto comprometido, validado directo en CI (tests/train_tests.rs).
 #[derive(Debug, Clone, Copy)]
 pub struct TrainConfig {
     pub samples: usize,
@@ -205,7 +210,7 @@ fn forward(w: &[f32], x: &FeatureVector) -> Forward {
     }
 }
 
-/// Acumula en `g` el gradiente de una muestra (loss V1, ver doc del crate).
+/// Acumula en g el gradiente de una muestra (loss V1, ver doc del crate).
 fn backward(fwd: &Forward, gt: usize, w: &[f32], g: &mut [f32], x: &FeatureVector) {
     let mut dl = [0.0f32; OPS];
     for (c, d) in dl.iter_mut().enumerate() {
@@ -315,15 +320,13 @@ fn init_weights(seed: u32) -> Vec<f32> {
     w
 }
 
-/// Entrena y devuelve los `WEIGHT_COUNT` pesos (layout de `repair_nn_core`).
+/// Entrena y devuelve los WEIGHT_COUNT pesos (layout de repair_nn_core).
 ///
 /// SGD por mini-batches sobre el dataset sintetico determinista. El shuffle
-/// usa el mismo LCG que el init: una misma `TrainConfig` produce siempre la
+/// usa el mismo LCG que el init: una misma TrainConfig produce siempre la
 /// misma red.
 pub fn train(config: &TrainConfig) -> Vec<f32> {
     assert!(config.samples > 0, "train necesita samples > 0");
-    assert!(config.batch > 0, "train necesita batch > 0");
-
     let dataset = generate_synthetic_dataset(config.samples, config.dataset_seed);
     let features: Vec<FeatureVector> = dataset
         .iter()
@@ -333,16 +336,33 @@ pub fn train(config: &TrainConfig) -> Vec<f32> {
         .iter()
         .map(|s| s.ground_truth_operator as usize)
         .collect();
+    sgd(config, features, labels)
+}
+
+/// Nucleo SGD compartido: train (sintetico puro) y
+/// examples::train_with_examples (mixto con senal real) usan EXACTAMENTE
+/// el mismo bucle, para que no existan dos caminos de entrenamiento que
+/// diverjan en silencio. Determinista: mismo config + mismo dataset => misma
+/// red (shuffle por LCG con init_seed).
+pub(crate) fn sgd(
+    config: &TrainConfig,
+    features: Vec<FeatureVector>,
+    labels: Vec<usize>,
+) -> Vec<f32> {
+    assert!(config.batch > 0, "sgd necesita batch > 0");
+    let samples = features.len();
+    assert!(samples > 0, "sgd necesita samples > 0");
+    assert!(labels.len() == samples, "features y labels desalineados");
 
     let mut w = init_weights(config.init_seed);
     let mut g = vec![0.0f32; WEIGHT_COUNT];
-    let mut order: Vec<usize> = (0..config.samples).collect();
+    let mut order: Vec<usize> = (0..samples).collect();
     let mut rng = Rng(config.init_seed);
     let decay_epoch = (config.epochs as f32 * 0.7) as usize;
 
     for epoch in 0..config.epochs {
         // Fisher-Yates: el orden de cada epoca depende solo del LCG.
-        for i in (1..config.samples).rev() {
+        for i in (1..samples).rev() {
             let j = ((rng.next_f32() * (i + 1) as f32) as usize).min(i);
             order.swap(i, j);
         }
@@ -353,8 +373,8 @@ pub fn train(config: &TrainConfig) -> Vec<f32> {
         };
 
         let mut start = 0;
-        while start < config.samples {
-            let bs = config.batch.min(config.samples - start);
+        while start < samples {
+            let bs = config.batch.min(samples - start);
             g.fill(0.0);
             for &si in &order[start..start + bs] {
                 let fwd = forward(&w, &features[si]);
@@ -371,7 +391,7 @@ pub fn train(config: &TrainConfig) -> Vec<f32> {
 }
 
 /// Evalua pesos contra el dataset sintetico (semilla propia) usando el
-/// `RepairNet::predict` REAL de produccion, no una copia del forward.
+/// RepairNet::predict REAL de produccion, no una copia del forward.
 pub fn evaluate(weights: &[f32], samples: usize, seed: u64) -> Result<Metrics, &'static str> {
     if samples == 0 {
         return Err("evaluate necesita samples > 0");
@@ -406,9 +426,9 @@ pub fn evaluate(weights: &[f32], samples: usize, seed: u64) -> Result<Metrics, &
     })
 }
 
-/// Exporta el payload KV: `WEIGHT_COUNT` f32 en texto, uno por linea.
+/// Exporta el payload KV: WEIGHT_COUNT f32 en texto, uno por linea.
 ///
-/// `Display` de `f32` emite la representacion mas corta que parsea al mismo
+/// Display de f32 emite la representacion mas corta que parsea al mismo
 /// valor (round-trip exacto): no hay perdida de precision en el export.
 pub fn export_payload(weights: &[f32]) -> Result<String, &'static str> {
     if weights.len() != WEIGHT_COUNT {
@@ -422,10 +442,10 @@ pub fn export_payload(weights: &[f32]) -> Result<String, &'static str> {
     Ok(out)
 }
 
-/// Espejo del loader del worker (`worker/src/worker/model.rs`): cualquier
-/// token no finito, o un recuento distinto de `WEIGHT_COUNT`, invalida el
-/// payload completo. Mismas reglas: aqui `Err`, alla `None` ->
-/// `blocked_no_model`. Nunca se cae a pesos desplazados.
+/// Espejo del loader del worker (worker/src/worker/model.rs): cualquier
+/// token no finito, o un recuento distinto de WEIGHT_COUNT, invalida el
+/// payload completo. Mismas reglas: aqui Err, alla None ->
+/// blocked_no_model. Nunca se cae a pesos desplazados.
 pub fn load_payload(raw: &str) -> Result<Vec<f32>, &'static str> {
     if raw.trim().is_empty() {
         return Err("payload vacio");
