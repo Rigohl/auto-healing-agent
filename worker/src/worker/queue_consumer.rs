@@ -11,7 +11,8 @@ use worker::*;
 use feature_engine::extract;
 use repair_operators::{diff, gate};
 use repair_types::{
-    FailureSignature, Incident, OperatorId, RepairAction, RepairCase, VerificationResult,
+    FailureSignature, FeatureVector, Incident, OperatorId, RepairAction, RepairCase,
+    VerificationResult,
 };
 
 use crate::runtime::{
@@ -32,11 +33,18 @@ pub const DLQ_STAGING: &str = "auto-healing-repairs-dlq-staging";
 /// Binding KV de RepairCases (PASO 3; ver worker/wrangler.toml).
 pub const REPAIR_CASES_KV: &str = "REPAIR_CASES_KV";
 
+/// Prefijo de las claves de TrainingExample (aprendizaje real, CONTRATO
+/// PART4). persist_case congela aqui las features del momento de la
+/// reparacion; /github/callback (lib.rs) marca verified/reward con la
+/// senal REAL de Actions; repair_train consume el JSONL exportado de estas
+/// claves (--examples, promote-model.yml).
+pub const TRAINING_EXAMPLE_PREFIX: &str = "training_example:";
+
 /// Delay fijo de reintento. Antes habia un "contador propio" (MAX_QUEUE_ATTEMPTS)
 /// que era inalcanzable: Cloudflare reentrega el MISMO body al reintentar, asi
 /// que el contador del mensaje nunca avanzaba y la rama nunca se ejecutaba
-/// (dead code). El hard stop autoritativo de intentos es el DO (`/attempt`,
-/// max_attempts_per_incident) y el tope de reintentos es `max_retries=3` de la
+/// (dead code). El hard stop autoritativo de intentos es el DO (/attempt,
+/// max_attempts_per_incident) y el tope de reintentos es max_retries=3 de la
 /// cola (trascendido, el mensaje cae a la DLQ). Nunca retry infinito.
 const RETRY_DELAY_SECONDS: u32 = 10;
 
@@ -115,10 +123,10 @@ impl WebhookPayload {
 
 /// Mensaje de cola: correlation_id SIEMPRE presente para trazabilidad.
 ///
-/// Sin campo `attempts`: el body del mensaje es inmutable al reintentar,
+/// Sin campo attempts: el body del mensaje es inmutable al reintentar,
 /// asi que un contador aqui no sobreviviria a los redeliveries. El numero de
-/// intentos REALES vive en el DO (columna `incidents.attempts`, la incrementa
-/// `/attempt`); ver `RETRY_DELAY_SECONDS`.
+/// intentos REALES vive en el DO (columna incidents.attempts, la incrementa
+/// /attempt); ver RETRY_DELAY_SECONDS.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueTask {
     pub correlation_id: String,
@@ -192,7 +200,7 @@ async fn process(
     quota_cfg: QuotaConfig,
     anti_cfg: AntiLoopConfig,
 ) -> Result<()> {
-    // 1. Puerta: quota + anti-loop (las 4 señales) + contador de attempts en el DO.
+    // 1. Puerta: quota + anti-loop (las 4 senales) + contador de attempts en el DO.
     let qs = format!(
         "/attempt?correlation_id={}&incident_id={}&signature={}&max_attempts_per_incident={}&max_same_signature={}&max_same_fingerprint={}&max_same_failing_verification={}&window_seconds={}",
         urlencode(&task.correlation_id),
@@ -309,7 +317,7 @@ async fn process(
         fnv1a64(format!("{}|{}", action.repair_operator as u8, task.signature).as_bytes())
     );
 
-    // 2.7 Guards fail-closed (kv-adoption 2026-10-08), ANTES de tocar la
+    // 2.7 Guards fail-closed (kv-adopcion 2026-10-08), ANTES de tocar la
     //     API de GitHub: la decision es blocked_by_policy (no un error de
     //     red: nunca retry).
     //     a) self_guard: el agente NUNCA abre PRs contra su propio repo
@@ -332,7 +340,7 @@ async fn process(
     //    rama -> commit -> PR abierto -> RepairCase en KV. VERIFY nunca
     //    se declara aqui: GitHub Actions reporta a /github/callback.
     let (decision, verify_status, evidence_ref, reason) = if gate_ok {
-        match attempt_repair(&env, &task, &action, &incident, "nn").await? {
+        match attempt_repair(&env, &task, &action, &incident, &features, "nn").await? {
             RepairOutcome::Repaired { pr_url } => ("allow", "pending_ci", pr_url, String::new()),
             RepairOutcome::Blocked { reason } => {
                 ("blocked_by_policy", "blocked", String::new(), reason)
@@ -350,7 +358,7 @@ async fn process(
             && !crate::runtime::self_guard::is_own_repo(&env, &task.repo)
             && !circuit::is_open(&env, llm_action.repair_operator).await
         {
-            match attempt_repair(&env, &task, &llm_action, &incident, "llm").await? {
+            match attempt_repair(&env, &task, &llm_action, &incident, &features, "llm").await? {
                 // Distilacion: el caso queda marcado origin=llm en KV; si CI
                 // verifica PASS, el entrenamiento offline aprende de el y la
                 // NN pasa a resolver esta clase de firmas sin consultar al
@@ -439,6 +447,7 @@ async fn attempt_repair(
     task: &QueueTask,
     action: &RepairAction,
     incident: &Incident,
+    features: &FeatureVector,
     origin: &str,
 ) -> worker::Result<RepairOutcome> {
     use crate::runtime::github_client::{GitHubClient, GitHubError};
@@ -454,7 +463,7 @@ async fn attempt_repair(
     };
 
     // Target file del edit acotado (paso 1): package.json para operadores de
-    // dependencias; el resto lo nombra el parametro `file` de la accion.
+    // dependencias; el resto lo nombra el parametro file de la accion.
     let target_path = match action.repair_operator {
         OperatorId::DependencyRepair | OperatorId::VersionPin => String::from("package.json"),
         _ => match action.parameters.get("file") {
@@ -538,7 +547,7 @@ async fn attempt_repair(
     };
 
     // PASO 3: RepairCase persistible en KV (alternativa sin Mongo).
-    persist_case(env, task, incident, action, &pr_url, origin).await;
+    persist_case(env, task, incident, action, features, &pr_url, origin).await;
 
     console_log!("repair pr opened: {} {}", task.correlation_id, pr_url);
     Ok(RepairOutcome::Repaired { pr_url })
@@ -557,6 +566,11 @@ fn diff_blocked_reason(e: &diff::DiffError) -> String {
 }
 
 /// PASO 3: RepairCase en REPAIR_CASES_KV, clave repair_case:{correlation_id}.
+/// Ademas congela el TrainingExample (aprendizaje PART4) con las features
+/// del momento de la reparacion: el RepairCase NO guarda el Incident
+/// completo, asi que las features no se pueden reconstruir despues. El
+/// callback de Actions (lib.rs) marca verified/reward con la senal REAL;
+/// repair_train aprende del export de training_example:*.
 /// Best-effort: un fallo de KV no revierte la reparacion (el DO ya registro
 /// decision + verificacion); solo se loguea.
 #[worker::send]
@@ -565,6 +579,7 @@ async fn persist_case(
     task: &QueueTask,
     incident: &Incident,
     action: &RepairAction,
+    features: &FeatureVector,
     pr_url: &str,
     origin: &str,
 ) {
@@ -591,17 +606,44 @@ async fn persist_case(
         console_error!("repair_case serialize failed: {}", task.correlation_id);
         return;
     };
-    match env.kv(REPAIR_CASES_KV) {
-        Ok(kv) => match kv.put(&key, serialized) {
-            Ok(builder) => {
-                if let Err(e) = builder.execute().await {
-                    console_error!("repair_case kv put failed: {}", e);
-                } else {
-                    console_log!("repair_case stored: {}", key);
-                }
+    let Ok(kv) = env.kv(REPAIR_CASES_KV) else {
+        console_error!("REPAIR_CASES_KV unavailable: binding");
+        return;
+    };
+    match kv.put(&key, serialized) {
+        Ok(builder) => {
+            if let Err(e) = builder.execute().await {
+                console_error!("repair_case kv put failed: {e}");
+            } else {
+                console_log!("repair_case stored: {}", key);
             }
-            Err(e) => console_error!("repair_case kv builder failed: {}", e),
-        },
-        Err(e) => console_error!("REPAIR_CASES_KV unavailable: {}", e),
+        }
+        Err(e) => console_error!("repair_case kv builder failed: {e}"),
+    }
+
+    // Aprendizaje real (PART4): TrainingExample congelado en el momento de
+    // la reparacion. verified=false / reward=0 hasta la senal de Actions;
+    // nunca se persisten features de un caso que no abrio PR.
+    let example = repair_types::TrainingExample {
+        features: features.values.to_vec(),
+        operator: action.repair_operator as u8,
+        node_id: action.node_id.clone(),
+        reward: case.reward,
+        verified: false,
+    };
+    let Ok(ex_serialized) = serde_json::to_string(&example) else {
+        console_error!("training_example serialize failed: {}", task.correlation_id);
+        return;
+    };
+    let ex_key = format!("{}{}", TRAINING_EXAMPLE_PREFIX, task.correlation_id);
+    match kv.put(&ex_key, ex_serialized) {
+        Ok(builder) => {
+            if let Err(e) = builder.execute().await {
+                console_error!("training_example kv put failed: {e}");
+            } else {
+                console_log!("training_example stored: {}", ex_key);
+            }
+        }
+        Err(e) => console_error!("training_example kv builder failed: {e}"),
     }
 }
