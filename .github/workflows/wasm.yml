@@ -39,3 +39,12 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown
+      # Consumidor real de la frontera JS (tests/js_boundary.rs): ejecuta
+      # los tests wasm-bindgen en Node con el payload comprometido en
+      # model/current.txt (fromWeights/predictFromFeatures/weightCount/
+      # featureDim/operator_name). Practica recomendada del toolchain
+      # rustwasm: wasm-pack test valida el contrato real del modulo.
+      - name: wasm-bindgen tests (Node)
+        run: |
+          curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+          wasm-pack test --node crates/repair_nn_wasm

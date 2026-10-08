@@ -68,3 +68,20 @@ no los lee nadie (ya documentado en README e INDEX). Sin acción urgente.
   config_store (config en caliente), neural-net-weights -> NN_WEIGHTS
   (challenger). El registro "sin uso" de arriba quedó desactualizado con
   ese merge; esta línea lo corrige.
+
+## Actualizacion 2026-10-08 (PR: loop de aprendizaje real)
+- `repair_types::TrainingExample`: CONSUMIDOR REAL. El callback
+  `/github/callback` materializa cada caso PASS verificado como
+  `training_example:{correlation_id}` en REPAIR_CASES_KV (via
+  `RepairCase::to_training_example`, con el nuevo campo
+  `RepairCase.features` que persiste queue_consumer), y
+  `repair-train --examples <dump.jsonl>` los entrena mezclados con el
+  dataset sintetico (`train_mixed`); auto-repair.yml hace el dump con
+  wrangler (best-effort). La NN aprende de reparaciones reales.
+- `repair_types::contract::VerifiedResult`: CONSUMIDOR REAL. El callback
+  exige evidencia para registrar un PASS (`missing_evidence_for_pass`,
+  fail-closed).
+- `crates/repair_nn_wasm`: CONSUMIDOR REAL de su superficie JS publica:
+  `tests/js_boundary.rs` (wasm-bindgen-test en Node, `wasm-pack test
+  --node` en wasm.yml) ejercita los 5 exports con el payload comprometido
+  en model/current.txt.
