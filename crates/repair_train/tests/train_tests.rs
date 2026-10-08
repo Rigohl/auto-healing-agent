@@ -1,6 +1,8 @@
 //! Tests del trainer V1: convergencia, artefacto comprometido y espejo del
 //! loader del worker. El test del artefacto es el que mantiene honesto al
-//! resto: si `model/current.txt` deja de cargar o de clasificar, CI lo dice.
+//! resto: si model/current.txt deja de cargar o de clasificar, CI lo dice.
+//! Los tests de ejemplos reales validan el loop de aprendizaje PART4 con la
+//! MISMA forma que persiste el worker (training_example:{id}).
 
 use feature_engine::extract;
 use feature_engine::synthetic::generate_synthetic_dataset;
@@ -40,7 +42,7 @@ fn short_train_converges() {
 
 #[test]
 fn lambda_is_pinned() {
-    // El gap de INVENTORY era "λ sin fijar": estos valores son parte del
+    // El gap de INVENTORY era "lambda sin fijar": estos valores son parte del
     // contrato V1 y no pueden derivar en silencio.
     assert_eq!(LAMBDA_CONF, 0.5);
     assert_eq!(LAMBDA_RISK, 0.5);
@@ -129,4 +131,96 @@ fn load_payload_rejects_malformed() {
     let valid = vec![0.5f32; WEIGHT_COUNT];
     let valid_payload = export_payload(&valid).expect("longitud exacta");
     assert!(load_payload(&valid_payload).is_ok());
+}
+
+#[test]
+fn real_examples_close_the_learning_loop() {
+    // Loop PART4 de punta a punta con la MISMA forma que persiste el worker
+    // (queue_consumer::persist_case -> training_example:{id}): features del
+    // momento del incidente + verificacion real (verified=true, reward=1).
+    let dataset = generate_synthetic_dataset(60, 43);
+    let examples: Vec<repair_types::TrainingExample> = dataset
+        .iter()
+        .map(|s| repair_types::TrainingExample {
+            features: extract(&s.incident, &s.signature).values.to_vec(),
+            operator: s.ground_truth_operator,
+            node_id: String::from("node-test"),
+            reward: 1.0,
+            verified: true,
+        })
+        .collect();
+    let jsonl = examples
+        .iter()
+        .map(|e| serde_json::to_string(e).expect("serializable"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let loaded = repair_train::examples::load_examples(&jsonl).expect("jsonl valido");
+    assert_eq!(loaded.len(), 60);
+
+    let weights = repair_train::examples::train_with_examples(&short_config(), &loaded)
+        .expect("entrenamiento mixto");
+    let acc = repair_train::examples::evaluate_examples(&weights, &loaded)
+        .expect("evaluar sobre los ejemplos reales");
+    assert!(
+        acc >= 0.70,
+        "accuracy sobre ejemplos reales {:.3} por debajo de 0.70",
+        acc
+    );
+}
+
+#[test]
+fn unverified_examples_never_train() {
+    let dataset = generate_synthetic_dataset(10, 44);
+    let unverified: Vec<repair_types::TrainingExample> = dataset
+        .iter()
+        .map(|s| repair_types::TrainingExample {
+            features: extract(&s.incident, &s.signature).values.to_vec(),
+            operator: s.ground_truth_operator,
+            node_id: String::from("node-test"),
+            reward: 0.0,
+            verified: false,
+        })
+        .collect();
+    // Sin senal verificada el entrenamiento mixto se niega: nunca se
+    // aprende una etiqueta que Actions no respalde.
+    assert!(
+        repair_train::examples::train_with_examples(&short_config(), &unverified).is_err()
+    );
+    // usable() tambien rechaza reward negativo (FAIL verificado).
+    let mut fail = unverified[0].clone();
+    fail.verified = true;
+    fail.reward = -1.0;
+    assert!(repair_train::examples::usable(&fail).is_none());
+    assert!(repair_train::examples::usable(&unverified[0]).is_none());
+}
+
+#[test]
+fn load_examples_is_fail_closed() {
+    use repair_train::examples::load_examples;
+
+    // Vacio = cero ejemplos (no es error: el export puede venir sin senal).
+    assert!(load_examples("").expect("jsonl vacio").is_empty());
+
+    // JSON corrupto.
+    assert!(load_examples("no es json").is_err());
+
+    // Dimension incorrecta: 63 features en vez de 64.
+    let dim_bad = serde_json::json!({
+        "features": vec![0.0f32; 63],
+        "operator": 1,
+        "node_id": "n",
+        "reward": 1.0,
+        "verified": true
+    });
+    assert!(load_examples(&dim_bad.to_string()).is_err());
+
+    // Operador fuera de rango (>= OPERATOR_COUNT).
+    let op_bad = serde_json::json!({
+        "features": vec![0.0f32; 64],
+        "operator": 13,
+        "node_id": "n",
+        "reward": 1.0,
+        "verified": true
+    });
+    assert!(load_examples(&op_bad.to_string()).is_err());
 }
