@@ -13,6 +13,8 @@
 
 #[path = "anti_loop.rs"]
 pub mod anti_loop;
+#[path = "dashboard.rs"]
+pub mod dashboard;
 #[path = "candidate.rs"]
 pub mod candidate;
 #[path = "circuit.rs"]
