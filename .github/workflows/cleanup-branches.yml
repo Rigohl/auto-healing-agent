@@ -8,9 +8,9 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
-      - name: Delete merged feature branches
+      - name: Delete merged feature branch
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Rigohl/auto-healing-agent.git
-          git push origin --delete feat/dashboard-route feat/kv-adoption feat/dashboard-relend || true
+          git push origin --delete feat/dashboard-route || true
