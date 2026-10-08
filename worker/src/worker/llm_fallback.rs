@@ -109,7 +109,11 @@ async fn reserve_budget(env: &Env) -> bool {
         .flatten()
         .and_then(|raw| serde_json::from_str::<Budget>(&raw).ok())
         .unwrap_or_default();
-    let mut budget = if stored.date == today { stored } else { Budget::default() };
+    let mut budget = if stored.date == today {
+        stored
+    } else {
+        Budget::default()
+    };
     if !budget_allows(&budget, cap, cost) {
         return false;
     }
@@ -250,7 +254,10 @@ mod tests {
 
     #[test]
     fn budget_allows_respects_cap() {
-        let b = |spent: i64| Budget { date: String::from("2026-10-08"), spent };
+        let b = |spent: i64| Budget {
+            date: String::from("2026-10-08"),
+            spent,
+        };
         assert!(budget_allows(&b(7_700), 8_000, 300));
         assert!(!budget_allows(&b(7_700), 8_000, 301));
         assert!(!budget_allows(&b(8_000), 8_000, 1));
@@ -272,7 +279,7 @@ mod tests {
     #[test]
     fn action_from_wrapped_response() {
         let inner = "{\\\"operator\\\": 1, \\\"parameters\\\": {}, \\\"confidence\\\": 0.8, \\\"risk\\\": 0.2}";
-        let plain = "{\"response\": \"" + inner + "\"}";
+        let plain = format!("{{\"response\": \"{inner}\"}}");
         let action = action_from_response_body(&plain).expect("accion valida");
         assert_eq!(action.node_id, "llm:fallback");
         assert_eq!(action.repair_operator, OperatorId::DependencyRepair);
