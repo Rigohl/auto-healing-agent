@@ -1,11 +1,15 @@
 name: rustdiag
 
 # Diagnostico MANUAL de compilacion del worker (workflow_dispatch).
+# TEMPORAL (feat/code-repair): tambien se dispara en push de esta rama para
+# publicar el diff exacto de cargo fmt --all en el resumen del run.
 # Publica el output de cargo check/fmt en el resumen del run; no crea
-# issues ni se dispara en push.
+# issues. Se restaurara a workflow_dispatch-only antes del merge.
 
 on:
   workflow_dispatch:
+  push:
+    branches: [feat/code-repair]
 
 permissions:
   contents: read
@@ -16,9 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo check --manifest-path worker/Cargo.toml --all-targets 2>&1 | tee check.log
-        continue-on-error: true
-      - run: cargo fmt --manifest-path worker/Cargo.toml -- --check 2>&1 | tee -a check.log || true
+      - run: cargo fmt --all -- --check 2>&1 | tee check.log || true
+      - run: cargo check --workspace --all-targets 2>&1 | tail -n 80 | tee -a check.log || true
       - name: resumen
         run: |
           {
