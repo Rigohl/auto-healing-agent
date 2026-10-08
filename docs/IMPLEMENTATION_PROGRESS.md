@@ -1,6 +1,6 @@
 # Auto-Healing Agent: Implementation Progress (Rust/WASM)
 
-> **Last Updated**: 2026-10-06
+> **Last Updated**: 2026-10-08
 > **Status**: In Progress (Target: 100% Auto-Repair in Rust/WASM)
 > **Compatibility**: Cloudflare Workers + Tokyo Night Theme
 
@@ -43,6 +43,7 @@ Make the **auto-healing-agent** fully **self-repairing** using **100% Rust/WASM*
       match action.repair_operator {
           OperatorId::SyntaxFix => generate_syntax_diff(incident, action),
           OperatorId::DependencyRepair => gen
+
 erate_deps_diff(incident),
           // ...
       }
@@ -82,7 +83,8 @@ erate_deps_diff(incident),
 
 ### 4. **GitHub Actions Callback**
 - **File**: `worker/src/lib.rs`
-- **Status**: ✅ **Done (2026-10-05)** — POST /github/callback in worker/src/lib.rs: same fail-closed secret auth as /webhook; parses verify_status pass
+- **Status**: ✅ **Done (2026-10-05)** — POST /github/callback in worker/src/lib.rs: same fail-closed secret auth as /webhook; parses verify_status pas
+s
 |fail|blocked and records it in the DO via /result. Never declares PASS itself.
 - **Goal**: Receive CI results and update Durable Object.
 - **Approach**:
@@ -132,12 +134,11 @@ erate_deps_diff(incident),
 | CI in main | 100% green after PR #29 (MONITOR, merge `3136ea8a`) and PR #30 (panic=unwind, merge `f123f12`); only Workers Builds red (item 56, human action) |
 | panic=unwind | `worker/build.sh` in main compiles with `worker-build --release --panic-unwind` (blob `aa7f10cf`, verified) |
 | PR #32 (open) | New job `worker-build-artifact` in ci.yml: FIRST CI job that compiles the real worker WASM |
-| Worker deploy | ❌ PENDING: the deployed Cloudflare script is a 275-byte "Hello world" placeholder; the rea
-l worker has NEVER been deployed (runbook docs §23.2) |
+| Worker deploy | ✅ DONE (2026-10-08): real Rust/WASM worker deployed and ACTIVE in Cloudflare (id `7c6b8ec9534b4e97bafa2e2fa79de066`, modified 2026-10-08T03:45Z). Placeholder replaced. |
 | Branches | Repo has ONLY `main` (cleanup-branches.yml auto-deletes fully merged branches) |
 | Mem0 | Workspace connector OPERATIONAL (verified live 2026-10-05: add/search/get memories); no usage from the worker yet |
 | REPAIR_CASES_KV | Namespace exists in the Cloudflare account (verified live via API 2026-10-06): id `996211a015f14c54b85ea4b47e79fdf9`, bound in `worker/wrangler.toml` (prod + staging) |
-| Worker script | `auto-healing-agent` exists in Cloudflare (modified 2026-10-05T18:03Z); DEPLOY of the real Rust/WASM build still pending (placeholder) |
+| Worker script | `auto-healing-agent` deployed (modified 2026-10-08T03:45Z); the Rust/WASM build is LIVE with bindings (KV, DO, Queues, cron) |
 | CI main | Green on `662a929` (2026-10-06): verify PASS 49/50 confirmed, red was BRANCH_DRIFT (commit message) |
 
 ---
@@ -159,7 +160,8 @@ l worker has NEVER been deployed (runbook docs §23.2) |
 2. ✅ **Add GitHub API calls** in `queue_consumer.rs` — DONE: `github_client.rs` + `attempt_repair()` (2026-10-05).
 3. ✅ **Configure KV** for `RepairCase` persistence — DONE: `REPAIR_CASES_KV` (2026-10-05).
 4. ✅ **Add `/github/callback`** endpoint — DONE (2026-10-05).
-5. **Test with real GitHub repo** (e.g., `Rigohl/auto-healing-agent`). ← REMAINING (requires: `wrangler secret put GITHUB_TOKEN` + real Worker deploy)
+5. ✅ **Real Worker deploy** — DONE (2026-10-08): `auto-healing-agent` active in Cloudflare.
+6. **Test end-to-end with real repo** ← REMAINING (requires: `wrangler secret put WEBHOOK_SECRET` + `GITHUB_TOKEN` in Cloudflare, then `docs/E2E_CHECKLIST.md`).
 
 ---
 
@@ -168,8 +170,10 @@ l worker has NEVER been deployed (runbook docs §23.2) |
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-10-05 | Created `IMPLEMENTATION_PROGRESS.md` | Vibe Code |
-| 2026-10-05 | Fixed `/wrangler.toml` for `Root directory = /` | Vibe Code |
+| 2026-10-05 | Fixed `/wrangler.toml` for `Root direct
+ory = /` | Vibe Code |
 | 2026-10-05 | Updated with verified evidence (PRs #29/#30 merged, PR #32 open, Mem0 workspace connector operational) | Vibe |
+| 2026-10-08 | Deploy verified: real Rust/WASM Worker active in Cloudflare (id 7c6b8ec9…); stale "placeholder deploy" claims corrected | Vibe |
 
 ---
 
