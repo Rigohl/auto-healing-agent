@@ -18,7 +18,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use worker::Env;
+use worker::{console_error, Env};
 
 use repair_types::RepairAction;
 

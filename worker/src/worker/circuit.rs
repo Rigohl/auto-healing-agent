@@ -17,7 +17,7 @@
 //! - Determinista: sin relojes propios mas alla del timestamp de la senal.
 
 use serde::{Deserialize, Serialize};
-use worker::Env;
+use worker::{console_error, Env};
 
 /// Binding del KV del breaker (wrangler.toml: namespace CACHE).
 pub const KV_BINDING: &str = "CACHE";
