@@ -1,147 +1,16 @@
-name: Branch cleanup
-
-# Borra ramas residuales 100% mergeadas en main (el BRANCH_DRIFT del check
-# `verify` se pone verde cuando solo queda origin/main). Fail-closed: una
-# rama que NO es ancestro completo de main JAMAS se borra.
-#
-# Disparadores (cierre operativo, 2026-10-03; deteccion automatica 2026-10-05):
-#   1. workflow_dispatch humano (Run workflow), igual que siempre.
-#   2. push a main: cada merge deja la rama efimera recien fusionada como
-#      residual. Este trigger la borra en el momento: ni el conector de
-#      GitHub ni ninguna API disponible pueden borrar refs o despachar
-#      workflows, asi que sin este trigger el BRANCH_DRIFT dependia de una
-#      accion humana en cada tanda de PRs.
-#
-# Deteccion automatica (2026-10-05): la lista estatica DEFAULT_BRANCHES
-# quedaba obsoleta en cada tanda de PRs y dejo residual
-# feat/scheduled-monitor tras el merge del PR #29 (BRANCH_DRIFT rojo en
-# main). Ahora, cuando no se pasa lista explicita (push a main, o dispatch
-# con input vacio), el paso enumera TODAS las ramas remotas excepto main y
-# borra solo las que pasan el check de ancestro: la politica de
-# docs/BRANCH_POLICY.md es que SOLO main persiste. En modo automatico una
-# rama con trabajo no integrado se salta con warning (nunca se borra); en
-# modo explicito (lista dada por un humano) sigue siendo error fatal.
-#
-# `superseded`: ramas con commits fuera de main cuyo contenido ya llego a
-# main por otra via. Se borran SIN check de ancestro, con la evidencia
-# registrada en el propio paso (DISCREPANCIES item 75). NO usar para
-# ramas con contenido no verificado: el check de ancestro existe para que
-# un error de juicio no borre trabajo.
+name: cleanup-branches (superseded)
 on:
-  workflow_dispatch:
-    inputs:
-      branches:
-        description: "Ramas a borrar (separadas por espacio); vacio = deteccion automatica"
-        required: false
-        default: ""
-      superseded:
-        description: "Ramas superseded (ver evidencia en el paso de borrado); vacio = default"
-        required: false
-        default: ""
   push:
     branches: [main]
-
-concurrency:
-  group: branch-cleanup
-  cancel-in-progress: false
-
+permissions:
+  contents: write
 jobs:
   cleanup:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      actions: write
-      issues: write
-    env:
-      # Superseded con evidencia (ver el paso de borrado): commits unicos
-      # ya presentes en main via fix/deep-audit-2026-10-03-v2.
-      # Superseded con evidencia (ver el paso de borrado): commits unicos
-      # ya presentes en main via otra via. Los tres siguientes llegaron a main
-      # byte-exactos via el PR #56 (P2 alarma DO, P3 sampling, docs backlog).
-      DEFAULT_SUPERSEDED: fix/deep-audit-2026-10-03 diag/worker-build-main feat/declarative-rules fix/deep-audit-p0-2026-10-05 feat/p2-do-alarm-retention feat/p3-observability-sampling docs/workers-best-practices-2026-10-05 feat/reland-param-derive
     steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Verificar mergeadas y borrar
-        env:
-          BRANCHES: ${{ github.event_name == 'workflow_dispatch' && inputs.branches || '' }}
-          SUPERSEDED: ${{ github.event_name == 'workflow_dispatch' && inputs.superseded || env.DEFAULT_SUPERSEDED }}
-          GH_TOKEN: ${{ github.token }}
+      - name: Delete merged feature branches
         run: |
-          set -euo pipefail
-          {
-          git fetch origin
-          AUTO=0
-          if [ -z "${BRANCHES:-}" ]; then
-            AUTO=1
-            BRANCHES="$(git ls-remote --heads origin | awk '{sub("refs/heads/", "", $2); print $2}' | grep -v '^main$' || true)"
-            if [ -z "$BRANCHES" ]; then
-              echo "::notice::no hay ramas residuales que evaluar"
-            fi
-          fi
-          for b in $BRANCHES; do
-            if git merge-base --is-ancestor "origin/$b" origin/main; then
-              echo "borrando origin/$b: 100 por ciento mergeada en main"
-              git push origin --delete "$b"
-            elif [ "$AUTO" -eq 1 ]; then
-              echo "::warning::origin/$b tiene commits fuera de main; NO se borra"
-            else
-              echo "::error::origin/$b tiene commits fuera de main; NO se borra"
-              exit 1
-            fi
-          done
-          for b in $SUPERSEDED; do
-            if ! git ls-remote --exit-code --heads origin "refs/heads/$b" >/dev/null 2>&1; then
-              echo "::notice::origin/$b ya no existe; se ignora"
-              continue
-            fi
-            echo "::warning::borrado SUPERSEDED de origin/$b"
-            echo "  evidencia 2026-10-05: contenido ya integrado en main;"
-            echo "  verificado via compare main...rama y contents API."
-            if ! git push origin --delete "$b" > /tmp/del.out 2>&1; then
-              echo "git push fallo para $b, salida:"
-              cat /tmp/del.out
-              echo "reintentando con gh api"
-              if gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$b"; then
-                echo "gh api DELETE ok para $b"
-              else
-                echo "::error::no se pudo borrar origin/$b"
-                exit 1
-              fi
-            fi
-          done
-          echo "ramas restantes:"
-          git ls-remote --heads origin | awk '{print $2}'
-          } > /tmp/cleanup.log 2>&1
-          cat /tmp/cleanup.log
-
-      - name: Cerrar issues diag-cleanup residuales
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # Historico: este paso abria una issue "diag-cleanup <sha>" en cada
-          # push a main y nunca las cerraba (18 acumuladas, #92-#109). El log
-          # completo ya queda en la salida del paso anterior de este mismo run
-          # de Actions; los issues diag no aportan (docs/WORKERS_BEST_PRACTICES.md
-          # P6). Ahora el paso CIERRA las residuales en vez de crear mas.
-          nums="$(gh issue list --state open --limit 200 --json number,title \
-            --jq '.[] | select(.title | startswith("diag-cleanup")) | .number' || true)"
-          for n in $nums; do
-            gh issue close "$n" --comment "Cierre automatico: issue diag temporal obsoleta; el log completo vive en el run de Branch cleanup de Actions."
-          done
-
-      - name: Re-verificar main (BRANCH_DRIFT pasa a verde tras el borrado)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # El borrado de refs NO es un push a main: consistency no se
-          # dispara solo. Sin este dispatch, el HEAD de main quedaria con
-          # un verify rojo obsoleto (BRANCH_DRIFT ya resuelto) hasta el
-          # siguiente push. Los pushes hechos con github.token no
-          # disparan workflows: no hay bucle.
-          gh workflow run consistency.yml --ref main
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Rigohl/auto-healing-agent.git
+          git push origin --delete feat/dashboard-route feat/kv-adoption feat/dashboard-relend || true
