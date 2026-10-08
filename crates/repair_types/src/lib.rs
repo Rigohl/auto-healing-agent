@@ -204,14 +204,23 @@ pub struct RepairCase {
     pub patch_summary: String,
     pub pr_url: Option<String>,
     pub reward: f32,
+    /// Features [f32; 64] con las que la NN evaluo el incidente. Vacio en
+    /// casos anteriores al campo (serde default): sin features no hay
+    /// ejemplo de entrenamiento derivado (fail-closed). Las persiste
+    /// queue_consumer::persist_case; las consume to_training_example en
+    /// el callback de verificacion.
+    #[serde(default)]
+    pub features: Vec<f32>,
     pub created_at_unix: u64,
 }
 
 /// Ejemplo de entrenamiento derivado de un caso real (features,
-/// operador, nodo, reward): fila de la coleccion `training_examples`
-/// en Mongo (PYH-32). CONTRATO PART4: `repair_train` y la promocion a
-/// MODEL_KV lo consumiran. Sin consumidores actuales por diseno
-/// (auditoria 2026-10-03, DISCREPANCIES item 74). No eliminar.
+/// operador, nodo, reward). CONTRATO PART4. Consumidor real desde
+/// 2026-10-08: el callback /github/callback materializa cada caso PASS
+/// verificado como training_example:{correlation_id} en REPAIR_CASES_KV
+/// (via RepairCase::to_training_example) y repair-train --examples los
+/// entrena mezclados con el dataset sintetico (loop de aprendizaje real,
+/// la NN aprende de reparaciones verificadas por Actions). No eliminar.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrainingExample {
     pub features: Vec<f32>,
@@ -219,6 +228,28 @@ pub struct TrainingExample {
     pub node_id: String,
     pub reward: f32,
     pub verified: bool,
+}
+
+impl RepairCase {
+    /// Ejemplo de entrenamiento supervisado derivado del caso real: SOLO un
+    /// caso verificado PASS por Actions produce senal positiva, y solo si
+    /// conserva sus features completas (fail-closed: nada de entrenar con
+    /// casos parciales o sin verificacion).
+    pub fn to_training_example(&self) -> Option<TrainingExample> {
+        if self.verification != VerificationResult::Pass {
+            return None;
+        }
+        if self.features.len() != FeatureVector::DIM {
+            return None;
+        }
+        Some(TrainingExample {
+            features: self.features.clone(),
+            operator: self.action.repair_operator as u8,
+            node_id: self.action.node_id.clone(),
+            reward: self.reward,
+            verified: true,
+        })
+    }
 }
 
 /// Recompensa del caso de reparacion (CONTRATO PART4, ciclo de aprendizaje).
@@ -371,6 +402,48 @@ mod tests {
             message: String::from("ok"),
         };
         assert_eq!(r.verify_result, Some(VerificationResult::Pass));
+    }
+
+    fn sample_case() -> RepairCase {
+        RepairCase {
+            incident_id: String::from("inc-1"),
+            signature: FailureSignature::default(),
+            action: RepairAction {
+                node_id: String::from("n1"),
+                repair_operator: OperatorId::DependencyRepair,
+                parameters: BTreeMap::new(),
+                confidence: 0.9,
+                risk: 0.1,
+            },
+            verification: VerificationResult::Skipped,
+            patch_summary: String::from("DEPENDENCY_REPAIR"),
+            pr_url: Some(String::from("https://example.com/pr/1")),
+            reward: 0.0,
+            features: Vec::new(),
+            created_at_unix: 0,
+        }
+    }
+
+    #[test]
+    fn training_example_requires_verified_pass_and_full_features() {
+        let mut case = sample_case();
+        // Sin verificacion (Skipped) no hay senal.
+        assert!(case.to_training_example().is_none());
+        // PASS pero sin features persistidas (caso anterior al campo):
+        // fail-closed, no entrena.
+        case.verification = VerificationResult::Pass;
+        case.reward = 1.0;
+        assert!(case.to_training_example().is_none());
+        // PASS con features completas: ejemplo positivo.
+        case.features = vec![0.0; 64];
+        let example = case.to_training_example().expect("pass verificado");
+        assert_eq!(example.operator, OperatorId::DependencyRepair as u8);
+        assert_eq!(example.features.len(), 64);
+        assert!(example.verified);
+        assert_eq!(example.reward, 1.0);
+        // Un FAIL verificado nunca produce senal positiva.
+        case.verification = VerificationResult::Fail;
+        assert!(case.to_training_example().is_none());
     }
 
     #[test]

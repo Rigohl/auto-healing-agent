@@ -418,6 +418,23 @@ async fn handle_github_callback(
         "blocked" => "blocked",
         _ => return bad_request("invalid_verify_status"),
     };
+
+    // Fail-closed del contrato (repair_types::VerifiedResult): un PASS sin
+    // evidencia NO se registra. El evidence_ref debe referir al run de
+    // Actions (https://... o evidence://...) que verifica el parche; el
+    // workflow_run_id se rellena con la misma referencia porque el sender ES
+    // ese run (el payload del callback no lleva un id separado).
+    if verify_status == "pass" {
+        let verified = repair_types::VerifiedResult::new(
+            repair_types::VerificationResult::Pass,
+            evidence_ref.as_str(),
+            "",
+            evidence_ref.as_str(),
+        );
+        if !verified.is_valid() {
+            return bad_request("missing_evidence_for_pass");
+        }
+    }
     // El DO marca done solo si CI pasa; fail deja el incidente bloqueado
     // con la evidencia para auditoria.
     let decision = if verify_status == "pass" {
@@ -495,6 +512,28 @@ async fn handle_github_callback(
                             updated_at_unix: crate::runtime::now_ms() as u64,
                         };
                         ledger::record_pass(&env, &repo, &case.signature.fingerprint, entry).await;
+                        // Loop de aprendizaje real (2026-10-08): el caso
+                        // PASS verificado se materializa como TrainingExample
+                        // en REPAIR_CASES_KV (training_example:{id}) con las
+                        // features que la NN evaluo; repair-train --examples
+                        // las consume en el re-entrenamiento (auto-repair.yml
+                        // hace el dump con wrangler). Best-effort: un fallo
+                        // de KV no revoca el callback.
+                        if let Some(example) = case.to_training_example() {
+                            if let Ok(serialized) = serde_json::to_string(&example) {
+                                let ex_key = format!("training_example:{}", correlation_id);
+                                match kv.put(&ex_key, serialized) {
+                                    Ok(builder) => {
+                                        if let Err(e) = builder.execute().await {
+                                            console_error!("training_example kv put failed: {e}");
+                                        }
+                                    }
+                                    Err(e) => {
+                                        console_error!("training_example kv builder failed: {e}")
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

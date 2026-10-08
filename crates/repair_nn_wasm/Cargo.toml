@@ -13,5 +13,8 @@ repair_nn_core = { path = "../repair_nn_core", default-features = false }
 repair_types = { path = "../repair_types", default-features = false }
 wasm-bindgen = "0.2"
 
+[dev-dependencies]
+wasm-bindgen-test = "0.2"
+
 [features]
 default = []

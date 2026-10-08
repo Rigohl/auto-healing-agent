@@ -130,3 +130,40 @@ fn load_payload_rejects_malformed() {
     let valid_payload = export_payload(&valid).expect("longitud exacta");
     assert!(load_payload(&valid_payload).is_ok());
 }
+
+#[test]
+fn train_mixed_learns_from_verified_real_examples() {
+    // Un ejemplo real verificado (DEPENDENCY_REPAIR=1) debe entrar al mixto
+    // sin romper la convergencia ni el export.
+    let example = repair_types::TrainingExample {
+        features: vec![0.0; 64],
+        operator: 1,
+        node_id: String::from("n-real"),
+        reward: 1.0,
+        verified: true,
+    };
+    let jsonl = serde_json::to_string(&example).expect("serializable");
+    let loaded = repair_train::load_examples_jsonl(&jsonl).expect("jsonl valido");
+    assert_eq!(loaded.len(), 1);
+
+    let weights = train_mixed(&short_config(), &loaded);
+    let metrics = evaluate(&weights, 240, 42).expect("pesos recien entrenados");
+    assert!(metrics.accuracy >= 0.70);
+}
+
+#[test]
+fn load_examples_rejects_corrupt_lines_fail_closed() {
+    let ok = serde_json::to_string(&repair_types::TrainingExample {
+        features: vec![0.0; 64],
+        operator: 1,
+        node_id: String::from("n"),
+        reward: 1.0,
+        verified: true,
+    })
+    .expect("serializable");
+    assert!(repair_train::load_examples_jsonl(&ok).is_ok());
+    // Una linea corrupta invalida el dump entero (fail-closed).
+    assert!(repair_train::load_examples_jsonl("{ no json").is_err());
+    // Vacio = sin ejemplos (entrenamiento solo sintetico), no un error.
+    assert!(repair_train::load_examples_jsonl("").is_ok());
+}

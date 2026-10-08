@@ -13,18 +13,22 @@ use std::fs;
 use std::path::PathBuf;
 use std::process;
 
-use repair_train::{evaluate, export_payload, train, TrainConfig};
+use repair_train::{evaluate, export_payload, train, train_mixed, TrainConfig};
 
 /// Umbral V1: un payload que no clasifica al 90% no se promueve.
 const MIN_ARTIFACT_ACCURACY: f32 = 0.90;
 
 fn main() {
     let mut out = PathBuf::from("model/current.txt");
+    let mut examples: Option<PathBuf> = None;
     let args: Vec<String> = env::args().skip(1).collect();
     let mut i = 0;
     while i < args.len() {
         if args[i] == "--out" && i + 1 < args.len() {
             out = PathBuf::from(&args[i + 1]);
+            i += 2;
+        } else if args[i] == "--examples" && i + 1 < args.len() {
+            examples = Some(PathBuf::from(&args[i + 1]));
             i += 2;
         } else if args[i] == "--help" || args[i] == "-h" {
             print_usage();
@@ -47,7 +51,33 @@ fn main() {
         config.lr_final
     );
 
-    let weights = train(&config);
+    // Loop de aprendizaje real: si hay dump de ejemplos verificados, la NN
+    // entrena con el sintetico MAS los casos reales (train_mixed); sin
+    // dump, comportamiento V1 intacto.
+    let real_examples = match &examples {
+        Some(path) => {
+            let raw = fs::read_to_string(path).unwrap_or_else(|e| {
+                eprintln!("no se pudo leer {}: {e}", path.display());
+                process::exit(1);
+            });
+            match repair_train::load_examples_jsonl(&raw) {
+                Ok(examples) => {
+                    eprintln!("ejemplos reales: {} (de {})", examples.len(), path.display());
+                    examples
+                }
+                Err(e) => {
+                    eprintln!("dump invalido {}: {e}", path.display());
+                    process::exit(1);
+                }
+            }
+        }
+        None => Vec::new(),
+    };
+    let weights = if real_examples.is_empty() {
+        train(&config)
+    } else {
+        train_mixed(&config, &real_examples)
+    };
     let payload = export_payload(&weights).expect("train produce WEIGHT_COUNT pesos");
 
     let train_m =
@@ -87,6 +117,7 @@ fn main() {
 }
 
 fn print_usage() {
-    eprintln!("uso: repair-train [--out <ruta>]");
+    eprintln!("uso: repair-train [--out <ruta>] [--examples <dump.jsonl>]");
     eprintln!("  entrena con la config V1 y escribe el payload KV (WEIGHT_COUNT f32 en texto)");
+    eprintln!("  --examples: mezcla TrainingExample reales verificados con el sintetico");
 }

@@ -27,7 +27,7 @@
 use feature_engine::extract;
 use feature_engine::synthetic::generate_synthetic_dataset;
 use repair_nn_core::RepairNet;
-use repair_types::{FeatureVector, OperatorId, OPERATOR_COUNT};
+use repair_types::{FeatureVector, OperatorId, TrainingExample, OPERATOR_COUNT};
 
 /// Re-export: los callers del trainer no deberian depender del core solo
 /// para conocer la longitud del payload.
@@ -333,16 +333,26 @@ pub fn train(config: &TrainConfig) -> Vec<f32> {
         .iter()
         .map(|s| s.ground_truth_operator as usize)
         .collect();
+    sgd(&features, &labels, config)
+}
+
+/// Loop SGD compartido por train (sintetico) y train_mixed (sintetico MAS
+/// ejemplos reales verificados): mismo LCG, mismo shuffle y mismo decay
+/// de lr.
+fn sgd(features: &[FeatureVector], labels: &[usize], config: &TrainConfig) -> Vec<f32> {
+    let samples = features.len();
+    assert!(samples > 0, "sgd necesita samples > 0");
+    assert!(config.batch > 0, "sgd necesita batch > 0");
 
     let mut w = init_weights(config.init_seed);
     let mut g = vec![0.0f32; WEIGHT_COUNT];
-    let mut order: Vec<usize> = (0..config.samples).collect();
+    let mut order: Vec<usize> = (0..samples).collect();
     let mut rng = Rng(config.init_seed);
     let decay_epoch = (config.epochs as f32 * 0.7) as usize;
 
     for epoch in 0..config.epochs {
         // Fisher-Yates: el orden de cada epoca depende solo del LCG.
-        for i in (1..config.samples).rev() {
+        for i in (1..samples).rev() {
             let j = ((rng.next_f32() * (i + 1) as f32) as usize).min(i);
             order.swap(i, j);
         }
@@ -353,8 +363,8 @@ pub fn train(config: &TrainConfig) -> Vec<f32> {
         };
 
         let mut start = 0;
-        while start < config.samples {
-            let bs = config.batch.min(config.samples - start);
+        while start < samples {
+            let bs = config.batch.min(samples - start);
             g.fill(0.0);
             for &si in &order[start..start + bs] {
                 let fwd = forward(&w, &features[si]);
@@ -368,6 +378,54 @@ pub fn train(config: &TrainConfig) -> Vec<f32> {
         }
     }
     w
+}
+
+/// Cuantas veces se replica cada ejemplo real dentro del mixto: para que
+/// la senal verificada no quede ahogada por el dataset sintetico.
+pub const REAL_EXAMPLE_BOOST: usize = 8;
+
+/// Entrena con el dataset sintetico MAS los ejemplos reales verificados
+/// (TrainingExample exportados de REPAIR_CASES_KV): cierra el loop de
+/// aprendizaje; la NN aprende de reparaciones que Actions verifico PASS.
+/// Fail-closed: ejemplos con dimension incorrecta, operador fuera de
+/// rango o reward no positivo se ignoran (nunca entrenan con senal
+/// dudosa).
+pub fn train_mixed(config: &TrainConfig, examples: &[TrainingExample]) -> Vec<f32> {
+    let dataset = generate_synthetic_dataset(config.samples, config.dataset_seed);
+    let mut features: Vec<FeatureVector> = dataset
+        .iter()
+        .map(|s| extract(&s.incident, &s.signature))
+        .collect();
+    let mut labels: Vec<usize> = dataset
+        .iter()
+        .map(|s| s.ground_truth_operator as usize)
+        .collect();
+    for ex in examples {
+        let op = ex.operator as usize;
+        if ex.features.len() != FeatureVector::DIM || op >= OPS || ex.reward <= 0.0 {
+            continue;
+        }
+        let mut fv = FeatureVector::zeros();
+        fv.values.copy_from_slice(&ex.features);
+        for _ in 0..REAL_EXAMPLE_BOOST {
+            features.push(fv);
+            labels.push(op);
+        }
+    }
+    sgd(&features, &labels, config)
+}
+
+/// Carga TrainingExample desde un dump JSONL (una linea por ejemplo).
+/// Una linea corrupta invalida el archivo entero (fail-closed): mejor no
+/// entrenar que entrenar con filas a medias.
+pub fn load_examples_jsonl(raw: &str) -> Result<Vec<TrainingExample>, String> {
+    let mut out = Vec::new();
+    for (i, line) in raw.lines().filter(|l| !l.trim().is_empty()).enumerate() {
+        let ex: TrainingExample =
+            serde_json::from_str(line).map_err(|e| format!("linea {i}: {e}"))?;
+        out.push(ex);
+    }
+    Ok(out)
 }
 
 /// Evalua pesos contra el dataset sintetico (semilla propia) usando el
