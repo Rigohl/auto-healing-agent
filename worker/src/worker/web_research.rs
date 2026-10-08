@@ -69,21 +69,23 @@ impl ResearchReport {
 /// fallo (red, dominio, parseo) deja el campo en None.
 #[worker::send]
 pub async fn research(env: &Env, incident: &Incident) -> ResearchReport {
-    let mut report = ResearchReport::default();
     if env.var(VAR_ENABLED).map(|v| v.to_string()).ok().as_deref() == Some("false") {
         console_warn!("web research disabled: RESEARCH_ENABLED == false");
-        return report;
+        return ResearchReport::default();
     }
-    if let Some(url) = rustc_error_docs_url(&incident.error_code) {
-        report.error_docs = Some(url);
-    }
-    if let Some(dep) = dependency_hint(incident) {
-        if let Some(latest) = fetch_npm_latest(&dep).await {
-            report.npm_latest = Some(latest);
+    let error_docs = rustc_error_docs_url(&incident.error_code);
+    let (dependency, npm_latest) = match dependency_hint(incident) {
+        Some(dep) => {
+            let latest = fetch_npm_latest(&dep).await;
+            (Some(dep), latest)
         }
-        report.dependency = Some(dep);
+        None => (None, None),
+    };
+    ResearchReport {
+        dependency,
+        npm_latest,
+        error_docs,
     }
-    report
 }
 
 /// Evidencia de investigacion en REPAIR_CASES_KV (auditoria). Best-effort:
@@ -285,13 +287,13 @@ mod tests {
 
     #[test]
     fn render_lists_findings() {
-        let mut r = ResearchReport::default();
-        assert!(r.is_empty());
-        r.dependency = Some(String::from("axios"));
-        r.npm_latest = Some(String::from("1.7.0"));
-        r.error_docs = Some(String::from(
-            "https://doc.rust-lang.org/error_codes/E0432.html",
-        ));
+        let r = ResearchReport {
+            dependency: Some(String::from("axios")),
+            npm_latest: Some(String::from("1.7.0")),
+            error_docs: Some(String::from(
+                "https://doc.rust-lang.org/error_codes/E0432.html",
+            )),
+        };
         let text = r.render();
         assert!(text.contains("axios"));
         assert!(text.contains("1.7.0"));

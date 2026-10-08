@@ -344,11 +344,13 @@ mod tests {
     fn research_context_reaches_the_prompt() {
         let incident = Incident::default();
         let signature = FailureSignature::from_incident(&incident);
-        let mut report = crate::runtime::web_research::ResearchReport::default();
-        report.npm_latest = Some(String::from("5.2.1"));
-        report.error_docs = Some(String::from(
-            "https://doc.rust-lang.org/error_codes/E0432.html",
-        ));
+        let report = crate::runtime::web_research::ResearchReport {
+            npm_latest: Some(String::from("5.2.1")),
+            error_docs: Some(String::from(
+                "https://doc.rust-lang.org/error_codes/E0432.html",
+            )),
+            ..Default::default()
+        };
         let prompt = build_prompt(&incident, &signature, &report);
         assert!(prompt.contains("Live web research"));
         assert!(prompt.contains("5.2.1"));
