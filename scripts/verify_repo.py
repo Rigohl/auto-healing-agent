@@ -59,6 +59,7 @@ WORKER_FILES = [
     "worker/src/worker/queue_consumer.rs",
     "worker/src/worker/quota.rs",
     "worker/src/worker/anti_loop.rs",
+    "worker/src/worker/llm_fallback.rs",
     "worker/wrangler.toml",
 ]
 
@@ -83,7 +84,7 @@ DOCS = [
     "docs/CONTRACT.md",
     "docs/E2E_CHECKLIST.md",
     "docs/INVENTORY.md",
-    "docs/NO_LLM_POLICY.md",
+    "docs/LLM_POLICY.md",
 ]
 
 # INPUT/HIDDEN/LATENT/OPS del MLP, y WEIGHT_COUNT que sale de su aritmetica.
@@ -310,11 +311,19 @@ def check_two_build_units(r: Report) -> None:
 # ---------------------------------------------------------------- seguridad
 
 
-def check_no_llm_path(r: Report) -> None:
-    # auto-repair.yml (camino LLM legacy, notice-only) fue ELIMINADO del repo
-    # el 2026-10-07: NO_LLM_POLICY prohibe el camino y el aviso era estado
-    # muerto que nada consumia. Un camino LLM colado de vuelta seria un
-    # fichero nuevo, no una linea.
+def check_llm_guarded(r: Report) -> None:
+    """LLM fallback (Workers AI, Always Free) permitido PERO acotado.
+
+    Decision del dueno 2026-10-08 (docs/LLM_POLICY.md): la NN sigue siendo
+    la via principal; el LLM solo propone acciones estructuradas cuando el
+    gate la rechaza. Invariantes que este claim hace reales:
+    - los crates siguen SIN clientes LLM: el modelo vive en el worker via el
+      binding [ai] (run_bytes), sin HTTP a proveedores externos;
+    - el fallback es fail-closed: sin presupuesto o sin binding => None y el
+      consumidor escala a humano, nunca abre el gate;
+    - la salida del LLM pasa por el MISMO gate (0.55/0.45) y los mismos
+      operadores deterministas: jamas escribe codigo libre.
+    """
     offenders = []
     for dirpath, _dirnames, filenames in os.walk(os.path.join(ROOT, "crates")):
         for name in filenames:
@@ -325,10 +334,38 @@ def check_no_llm_path(r: Report) -> None:
                     if needle in body:
                         offenders.append(f"{rel}:{needle}")
     r.expect(
-        "NO_LLM_IN_CRATES",
-        "Ningun crate depende de un cliente LLM o HTTP a uno",
+        "NO_LLM_CLIENT_IN_CRATES",
+        "Ningun crate depende de un cliente LLM: el modelo vive en el worker ([ai])",
         not offenders,
         f"encontrado: {offenders}" if offenders else "",
+    )
+    fallback = read("worker/src/worker/llm_fallback.rs")
+    r.expect(
+        "LLM_FALLBACK_FAIL_CLOSED",
+        "llm_fallback.rs es fail-closed (presupuesto + gate, nunca fail-open)",
+        "fn propose" in fallback
+        and "budget_allows" in fallback
+        and "LLM_DAILY_BUDGET" in fallback,
+    )
+    consumer = read("worker/src/worker/queue_consumer.rs")
+    r.expect(
+        "LLM_AFTER_GATE_ONLY",
+        "el consumidor consulta el LLM solo tras rechazar el gate a la NN",
+        "llm_fallback::propose" in consumer
+        and consumer.index("llm_fallback::propose") > consumer.index("gate_ok"),
+    )
+    for rel in ("wrangler.toml", "worker/wrangler.toml"):
+        body = read(rel)
+        r.expect(
+            f"AI_BINDING_DECLARED_{rel.replace('/', '_')}",
+            f"{rel} declara el binding [ai] y las vars LLM_* (espejo)",
+            "[ai]" in body and "LLM_DAILY_BUDGET" in body and "LLM_ENABLED" in body,
+        )
+    policy = read("docs/LLM_POLICY.md")
+    r.expect(
+        "LLM_POLICY_DOC",
+        "docs/LLM_POLICY.md declara el presupuesto Always Free y el fail-closed",
+        "10.000 Neurons" in policy and "fail-closed" in policy,
     )
 
 
@@ -794,7 +831,7 @@ CHECKS = [
     check_files_exist,
     check_exec_bits,
     check_two_build_units,
-    check_no_llm_path,
+    check_llm_guarded,
     check_constant_time_auth,
     check_no_active_placeholder,
     check_secrets_not_in_tree,

@@ -27,6 +27,8 @@ pub mod github_client;
 pub mod incident_state;
 #[path = "ledger.rs"]
 pub mod ledger;
+#[path = "llm_fallback.rs"]
+pub mod llm_fallback;
 #[path = "model.rs"]
 pub mod model;
 #[path = "monitor.rs"]
