@@ -59,6 +59,22 @@ jobs:
           echo "$bundle" | grep -F '+++ b/src/demo.ts'
           echo "OK: repair-pr diff produce el bundle de evidencia"
 
+      # PART6 (repurpose): el modo `repair-pr pr` (antes sin consumidor de
+      # CI) se verifica fail-closed aqui: una rama head que no es
+      # auto-repair/* se rechaza ANTES de tocar git, red o credenciales.
+      - name: repair-pr pr fail-closed (guardas del CLI)
+        run: |
+          cat > /tmp/pr.json <<'JSON'
+          {"request": {"incident_id": "inc-test", "correlation_id": "corr-1", "head_branch": "feature/x", "base_branch": "main", "title": "t", "body": "b", "patch": {"operator_id": 1, "parameters": {}, "patch_summary": "s", "diff": null, "has_diff_generator": false}, "labels": [], "metadata": {}}, "files": [{"path": "package.json", "after": "{}"}]}
+          JSON
+          if cargo run -p repair_pr --release -- pr /tmp/pr.json --repo acme/test >/tmp/pr.out 2>&1; then
+            echo "::error::repair-pr pr debia rechazar la rama no efimera"
+            cat /tmp/pr.out
+            exit 1
+          fi
+          grep -q "rejecting head" /tmp/pr.out
+          echo "OK: repair-pr pr es fail-closed antes de git/red/token"
+
  
       - name: Target de despliegue del worker (wasm32, release)
         run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release

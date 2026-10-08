@@ -38,7 +38,7 @@ use tower_service::Service;
 use worker::*;
 
 use feature_engine::extract;
-use repair_operators::gate;
+use repair_operators::{apply, gate};
 use repair_types::{compute_idempotency_key, FailureSignature};
 
 use crate::runtime::{
@@ -308,6 +308,11 @@ async fn handle_webhook(State(env): State<Env>, headers: HeaderMap, body: Bytes)
         Ok(loaded) => {
             let action = loaded.net.predict(&features);
             let gate_ok = gate(&action, MIN_CONFIDENCE, MAX_RISK).is_ok();
+            // PART6 (repurpose): el plan del operador (repair_operators::apply,
+            // antes codigo muerto solo testeado) se muestra en el preview del
+            // webhook: el sender lee QUE hara el operador antes de que la cola
+            // ejecute la reparacion.
+            let plan = apply(&action, &incident);
             serde_json::json!({
                 "operator_id": action.repair_operator as u8,
                 "operator": action.repair_operator.as_str(),
@@ -315,6 +320,12 @@ async fn handle_webhook(State(env): State<Env>, headers: HeaderMap, body: Bytes)
                 "risk": action.risk,
                 "gate": if gate_ok { "allow" } else { "blocked_by_policy" },
                 "weights": loaded.source,
+                "plan": {
+                    "summary": plan.summary,
+                    "steps": plan.steps,
+                    "files": plan.files,
+                    "advisory": plan.advisory,
+                },
             })
         }
         // Sin modelo (current ni stable): BLOCKED. Nunca zeros -> PASS.

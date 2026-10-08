@@ -110,13 +110,20 @@ impl Default for TrainConfig {
 }
 
 /// Metricas de evaluacion sobre el dataset sintetico.
-#[derive(Debug, Clone, Copy)]
+///
+/// PART6 (repurpose): by_category usa SyntheticIncident.error_category
+/// (antes campo sin consumidor). Un 90% global puede esconder una
+/// categoria en 50%; el breakdown la hace visible antes del promote.
+#[derive(Debug, Clone)]
 pub struct Metrics {
     pub samples: usize,
     pub accuracy: f32,
     pub actionable: f32,
     pub mean_confidence: f32,
     pub mean_risk: f32,
+    /// Accuracy por categoria de error del dataset sintetico
+    /// (orden alfabetico, determinista).
+    pub by_category: Vec<(String, f32)>,
 }
 
 /// Intermedios del forward que el backward necesita (mascaras ReLU incluidas).
@@ -402,12 +409,18 @@ pub fn evaluate(weights: &[f32], samples: usize, seed: u64) -> Result<Metrics, &
     let mut actionable = 0usize;
     let mut conf_sum = 0.0f32;
     let mut risk_sum = 0.0f32;
+    // PART6: conteo por categoria (error_category) para el breakdown.
+    let mut cat_total: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    let mut cat_correct: std::collections::BTreeMap<&str, usize> =
+        std::collections::BTreeMap::new();
 
     for item in &dataset {
         let fv = extract(&item.incident, &item.signature);
         let action = net.predict(&fv);
+        *cat_total.entry(item.error_category.as_str()).or_insert(0) += 1;
         if action.repair_operator == OperatorId::from_u8(item.ground_truth_operator) {
             correct += 1;
+            *cat_correct.entry(item.error_category.as_str()).or_insert(0) += 1;
         }
         if action.is_actionable(MIN_CONFIDENCE, MAX_RISK) {
             actionable += 1;
@@ -417,12 +430,20 @@ pub fn evaluate(weights: &[f32], samples: usize, seed: u64) -> Result<Metrics, &
     }
 
     let n = samples as f32;
+    let by_category = cat_total
+        .iter()
+        .map(|(category, total)| {
+            let hits = *cat_correct.get(category).unwrap_or(&0);
+            ((*category).to_string(), hits as f32 / *total as f32)
+        })
+        .collect();
     Ok(Metrics {
         samples,
         accuracy: correct as f32 / n,
         actionable: actionable as f32 / n,
         mean_confidence: conf_sum / n,
         mean_risk: risk_sum / n,
+        by_category,
     })
 }
 

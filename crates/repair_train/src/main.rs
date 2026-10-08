@@ -98,6 +98,13 @@ fn main() {
         holdout_m.accuracy, holdout_m.actionable, holdout_m.mean_confidence, holdout_m.mean_risk
     );
 
+    // PART6 (repurpose): breakdown por categoria de error
+    // (SyntheticIncident.error_category, antes sin consumidor).
+    println!("train per-category (senal para el revisor humano):");
+    for (category, acc) in &train_m.by_category {
+        println!("  {category}: acc={acc:.4}");
+    }
+
     // Senal real: accuracy sobre los propios ejemplos verificables, con el
     // predictor de produccion. Solo informativo: el umbral de promocion
     // sigue siendo el sintetico (canary de regression.yml).
