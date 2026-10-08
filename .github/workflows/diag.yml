@@ -1,0 +1,48 @@
+name: Diag (temporal)
+
+# Captura la salida REAL de cargo check/clippy del worker y la commitea
+# (los logs de Actions requieren auth). Autolimitado: solo .diag lo dispara.
+
+on:
+  push:
+    branches: [feat/devops-research]
+    paths: [".diag"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: diag
+  cancel-in-progress: false
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/devops-research
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: wasm32-unknown-unknown
+      - name: "cargo check worker (all targets)"
+        run: |
+          set +e
+          cargo check --manifest-path worker/Cargo.toml --all-targets >/tmp/chk.txt 2>&1
+          echo "chk_exit=$?" >>"$GITHUB_ENV"
+          exit 0
+      - name: "Commit con la evidencia"
+        run: |
+          git config user.name "diag-bot"
+          git config user.email "actions@users.noreply.github.com"
+          {
+            echo "diag: salida de cargo check del worker"
+            echo ""
+            echo "check exit: ${CHK_EXIT}"
+            echo "--- output (tail 3500) ---"
+            tail -c 3500 /tmp/chk.txt
+          } >/tmp/commit-msg.txt
+          git commit --allow-empty -F /tmp/commit-msg.txt
+          git push
