@@ -28,10 +28,11 @@ pub const MAX_CONSECUTIVE_FAILS: u32 = 3;
 pub const OPEN_WINDOW_SECONDS: u64 = 3600;
 
 /// Estado contable del operador (persistido en CACHE KV).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BreakerState {
     pub consecutive_fails: u32,
-    /// 0 = nunca abierto; si no, el timestamp unix del momento en que abrio.
+    /// 0 = nunca abierto; si no, el timestamp unix EN SEGUNDOS del momento
+    /// en que abrio (mismo orden de magnitud que OPEN_WINDOW_SECONDS).
     pub opened_at_unix: u64,
 }
 
@@ -68,11 +69,18 @@ pub fn key(operator: u8) -> String {
     format!("{}:{:02x}", PREFIX, operator)
 }
 
+/// Segundos unix. now_ms() devuelve MILISEGUNDOS: pasar ms donde el
+/// estado y la ventana razonan en segundos hacia la ventana de 3.6s en
+/// vez de 1h (bug de unidades hallado en el review del PR #114).
+fn unix_seconds() -> u64 {
+    (crate::runtime::now_ms() / 1000) as u64
+}
+
 /// El circuito del operador esta OPEN? Best-effort (fail-open seguro: ver
 /// mod docs). Nunca bloquea el pipeline por un fallo de lectura de KV.
 pub async fn is_open(env: &Env, operator: repair_types::OperatorId) -> bool {
     match read_state(env, operator as u8).await {
-        Some(state) => state_is_open(&state, crate::runtime::now_ms() as u64),
+        Some(state) => state_is_open(&state, unix_seconds()),
         None => false,
     }
 }
@@ -81,7 +89,7 @@ pub async fn is_open(env: &Env, operator: repair_types::OperatorId) -> bool {
 /// KV solo se loguea (el DO ya registro la decision autoritativa).
 pub async fn record(env: &Env, operator: u8, pass: bool) {
     let current = read_state(env, operator).await.unwrap_or_default();
-    let next = transition(&current, pass, crate::runtime::now_ms() as u64);
+    let next = transition(&current, pass, unix_seconds());
     if let Ok(kv) = env.kv(KV_BINDING) {
         if let Ok(serialized) = serde_json::to_string(&next) {
             if let Ok(builder) = kv.put(&key(operator), serialized) {

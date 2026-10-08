@@ -15,7 +15,6 @@
 //!     {"QUOTA_DAILY_BUDGET": 5, "QUOTA_MAX_OPEN_REPAIRS": "1", ...}.
 //! Sin claves o vacio => comportamiento previo exacto ([vars]).
 
-use serde::Deserialize;
 use worker::Env;
 
 use crate::runtime::quota::{self, QuotaConfig};
@@ -83,7 +82,14 @@ pub fn apply_quota_overrides(base: QuotaConfig, raw: &str) -> Option<QuotaConfig
                 cfg.max_open_repairs = text.parse().unwrap_or(cfg.max_open_repairs);
             }
             quota::VAR_COOLDOWN_SECONDS => {
-                cfg.cooldown_seconds = text.parse().unwrap_or(cfg.cooldown_seconds);
+                // cooldown_seconds es i64 y acepta negativos: un cooldown
+                // negativo desactivaria la cuota en el DO (review PR #114).
+                // Solo se aceptan valores >= 0; lo demas conserva la base.
+                if let Ok(v) = text.parse::<i64>() {
+                    if v >= 0 {
+                        cfg.cooldown_seconds = v;
+                    }
+                }
             }
             quota::VAR_DAILY_BUDGET => {
                 cfg.daily_budget = text.parse().unwrap_or(cfg.daily_budget);

@@ -27,9 +27,12 @@ pub fn own_repo(env: &Env) -> String {
     }
 }
 
-/// Comparacion pura (testeada): insensible a mayusculas y espacios.
+/// Comparacion pura (testeada): insensible a mayusculas y espacios. Un
+/// valor VACIO nunca coincide (review del PR #114): " "=="" seria true y
+/// un repo vacio pasaria el guard si OWN_REPO quedara vacio por error.
 pub fn is_match(own: &str, repo: &str) -> bool {
-    own.trim().eq_ignore_ascii_case(repo.trim())
+    let (own, repo) = (own.trim(), repo.trim());
+    !own.is_empty() && !repo.is_empty() && own.eq_ignore_ascii_case(repo)
 }
 
 pub fn is_own_repo(env: &Env, repo: &str) -> bool {
