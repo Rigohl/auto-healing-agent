@@ -45,6 +45,15 @@ async fn load_from(env: &Env, key: &str) -> Option<RepairNet> {
     if raw.trim().is_empty() {
         return None;
     }
+    parse_plain_weights(&raw)
+}
+
+/// Parser compartido de pesos planos: WEIGHT_COUNT f32 legibles con
+/// split_whitespace. Un solo formato de pesos en todo el sistema: lo usan
+/// el champion (este modulo) y el challenger (candidate.rs). Cualquier
+/// desviacion devuelve None y NO se cae a ceros: una red malformada no
+/// puede producir una confianza inventada.
+pub fn parse_plain_weights(raw: &str) -> Option<RepairNet> {
     let mut values: Vec<f32> = Vec::with_capacity(WEIGHT_COUNT);
     for token in raw.split_whitespace() {
         match token.parse::<f32>() {
