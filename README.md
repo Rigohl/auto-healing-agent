@@ -17,11 +17,13 @@ crates/          # código Rust — abrir aquí en móvil
   repair_nn_core/
   repair_nn_wasm/
   repair_operators/
+  repair_pr/      # CLI offline repair-pr (sin consumidor de producción; ver docs/DEAD_CODE_AUDIT.md)
   repair_train/   # trainer offline V1 (bin repair-train)
 worker/          # Cloudflare Worker (workers-rs)
 model/           # current.txt = payload KV real (2863 f32)
 docs/            # incluye PROMPT_PAD.md v2
 scripts/
+wrangler.toml    # espejo de worker/wrangler.toml (deploy desde la raíz; guard 6 del preflight)
 ```
 
 ## Comandos
