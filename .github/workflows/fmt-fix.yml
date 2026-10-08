@@ -1,0 +1,45 @@
+name: FMT fix (temporal)
+
+# Workflow TEMPORAL de la rama feat/learning-loop: ejecuta el rustfmt real
+# (mismo toolchain que CI) sobre el workspace raiz y worker/, y commitea el
+# resultado. Determinista: cero adivinacion manual del output de rustfmt.
+# Se elimina de la rama en cuanto el arbol queda formateado.
+
+on:
+  push:
+    branches: [feat/learning-loop]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fmt-fix
+  cancel-in-progress: false
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: feat/learning-loop
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: rustfmt workspace raiz
+        run: cargo fmt --all
+      - name: rustfmt worker
+        run: cargo fmt --manifest-path worker/Cargo.toml
+      - name: Commit si hay cambios
+        run: |
+          git config user.name "fmt-bot"
+          git config user.email "actions@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "style: rustfmt del arbol (auto)"
+            git push
+            echo "commit de formato empujado"
+          else
+            echo "sin cambios de formato"
+          fi

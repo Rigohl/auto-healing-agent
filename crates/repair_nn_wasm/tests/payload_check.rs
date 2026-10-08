@@ -1,3 +1,4 @@
+#![cfg(not(target_arch = "wasm32"))]
 //! El artefacto `model/current.txt` debe cargar a traves de la frontera
 //! wasm-bindgen de esta crate.
 //!
@@ -6,6 +7,13 @@
 //! el worker (`MODEL_KV:model/current`). Si alguien cambia WEIGHT_COUNT o
 //! el formato del payload sin regenerarlo, CI se pone rojo ANTES de que el
 //! promote suba un modelo que el runtime rechazaria (blocked_no_model).
+//!
+//! Gate wasm32: este test lee el sistema de archivos del host
+//! (CARGO_MANIFEST_DIR + std::fs), que NO existe bajo wasm32. El job
+//! node-boundary (wasm-pack test --node) compila TODOS los integration
+//! tests a wasm32; sin este gate el archivo romperia esa frontera. La
+//! carga del artefacto a traves de la frontera wasm ya la ejerce
+//! tests/js_boundary.rs (from_weights sobre el payload real).
 
 use repair_nn_wasm::RepairModel;
 
