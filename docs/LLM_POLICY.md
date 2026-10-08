@@ -1,4 +1,4 @@
-# Politica LLM — fallback acotado con presupuesto Always Free (canonica)
+# Politica LLM â fallback acotado con presupuesto Always Free (canonica)
 
 > Sustituye a docs/NO_LLM_POLICY.md (decision del dueno, 2026-10-08: el
 > auto-repair completo vive en este repo y el LLM deja de estar prohibido).
@@ -18,10 +18,17 @@
 
 ## Regla de oro
 
-El LLM solo propone `{operator, parameters, confidence, risk}` (ids 1
-DEPENDENCY_REPAIR y 9 VERSION_PIN). Cualquier salida que no pase el gate, el
-self_guard o el circuit breaker => `llm_gate_denied` / blocked. El LLM jamas
-ve el arbol del repo y jamas produce diffs.
+El LLM solo propone `{operator, parameters, confidence, risk}`. Operadores
+permitidos: 1 DEPENDENCY_REPAIR y 9 VERSION_PIN (params dependency/version)
+y, desde el PR de code-repair, los de edicion acotada 2 SYNTAX_FIX,
+8 IMPORT_PATH_FIX y 12 SOURCE_REPAIR (params `file`, `from`, `to`): el LLM
+nombra un archivo y dos literales cortos; el operador DETERMINISTA
+(`repair_operators::diff`) aplica el find/replace, valida el ancla y
+respeta MAX_FILE_BYTES. Sin `file`/`from`/`to`, con `from == to` o con
+`from` vacio, la propuesta se rechaza (fail-closed en `llm_fallback.rs`).
+Cualquier salida que no pase el gate, el self_guard o el circuit breaker
+=> `llm_gate_denied` / blocked. El LLM jamas ve el arbol del repo y jamas
+produce diffs ni archivos nuevos.
 
 ## Always Free: presupuesto y fail-closed
 
@@ -60,3 +67,4 @@ CHANGE -> POLICY (gate + self_guard + circuit) -> PATCH VALIDATION
 -> CI -> VERIFY -> PUSH AUTHORIZATION -> main (ref efimera de PR se borra).
 
 Una sola rama persistente: main.
+

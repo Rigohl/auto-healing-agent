@@ -1,29 +1,52 @@
-name: Auto-Repair (DISABLED legacy LLM)
+name: Retrain NN (manual)
 
-# Path canónico = Rust crates + worker/ + CI verify.
-# legacy/agent.ts NO se ejecuta. Conservado solo como archivo de archivo.
+# Reemplaza al antiguo "Auto-Repair (DISABLED legacy LLM)": da uso real al
+# crate repair_train (antes sin consumidor) en un flujo seguro. Re-entrena
+# la red V1 y publica el payload KV como artefacto de Actions para
+# inspeccion humana; la promocion a MODEL_KV sigue siendo un paso aparte
+# (promote-model.yml) y la escritura en produccion sigue bajo dispatch
+# humano (docs/GOVERNANCE.md: PRODUCTION_WRITE). Umbral interno del
+# trainer: accuracy >= 0.90, si no no escribe el artefacto (fail-closed).
 
 on:
   workflow_dispatch:
     inputs:
       note:
-        description: "This workflow no longer runs the HF agent. Use cargo CI + worker Rust."
+        description: "Motivo del re-entrenamiento (queda en el run)"
         required: false
-        default: "rust-only"
+        default: "retrain"
 
 permissions:
   contents: read
 
 concurrency:
-  group: auto-repair-${{ github.ref }}
-  cancel-in-progress: true
+  group: retrain-nn
+  cancel-in-progress: false
 
 jobs:
-  notice:
+  retrain:
     runs-on: ubuntu-latest
     steps:
-      - name: Rust-only policy
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Entrenar y validar (accuracy >= 0.90)
+        run: cargo run -p repair_train --release -- --out /tmp/current.txt
+
+      - name: Preflight del artefacto
         run: |
-          echo "LLM free-form codegen path is disabled."
-          echo "Core: crates/repair_* + worker/ (Rust/WASM)."
-          echo "VERIFY authority: .github/workflows/ci.yml and wasm.yml"
+          set -euo pipefail
+          n=$(wc -w < /tmp/current.txt)
+          if [ "$n" -ne 2863 ]; then
+            echo "::error::payload con $n tokens, se esperan 2863 (WEIGHT_COUNT)"
+            exit 1
+          fi
+          echo "OK: 2863 tokens"
+
+      - name: Publicar artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: nn-payload
+          path: /tmp/current.txt
+          if-no-files-found: error

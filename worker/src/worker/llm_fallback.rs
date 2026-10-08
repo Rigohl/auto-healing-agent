@@ -44,7 +44,18 @@ pub const DEFAULT_DAILY_BUDGET: i64 = 8_000;
 /// Estimacion conservadora por llamada (Neurons) del modelo pequeno.
 pub const DEFAULT_COST_PER_CALL: i64 = 300;
 
-const SYSTEM_PROMPT: &str = "You are a build-repair action classifier. Reply with ONLY a JSON object, no prose, no markdown fences. Schema: {\"operator\": <int>, \"parameters\": {\"dependency\": string?, \"version\": string?, \"file\": string?}, \"confidence\": <float 0..1>, \"risk\": <float 0..1>}. Allowed operators ONLY: 1 = DEPENDENCY_REPAIR (bump/replace a failing dependency in package.json), 9 = VERSION_PIN (pin an exact version). If the incident is not a dependency/version issue, reply {\"operator\": 0, \"parameters\": {}, \"confidence\": 0.0, \"risk\": 1.0}.";
+const SYSTEM_PROMPT: &str = "You are a build-repair action classifier. Reply with ONLY a JSON object, no prose, no markdown fences. Schema: {\"operator\": <int>, \"parameters\": {\"dependency\": string?, \"version\": string?, \"file\": string?, \"from\": string?, \"to\": string?}, \"confidence\": <float 0..1>, \"risk\": <float 0..1>}. Allowed operators ONLY: 1 = DEPENDENCY_REPAIR (bump/replace a failing dependency in package.json; params dependency, version), 9 = VERSION_PIN (pin an exact version; params dependency, version), 2 = SYNTAX_FIX (small textual fix in one file; params file, from, to), 8 = IMPORT_PATH_FIX (fix a broken import path; params file, from, to), 12 = SOURCE_REPAIR (small bounded find/replace edit in one source file; params file, from, to). Edits are STRICTLY bounded: from/to must be short exact literal substrings already present in the named file; never whole-file rewrites, never new files, never regex. If the incident is not actionable, reply {\"operator\": 0, \"parameters\": {}, \"confidence\": 0.0, \"risk\": 1.0}.";
+
+/// Operadores de edicion acotada de codigo que el LLM puede proponer
+/// (2 SYNTAX_FIX, 8 IMPORT_PATH_FIX, 12 SOURCE_REPAIR). El LLM NO escribe
+/// codigo libre: solo nombra `file`/`from`/`to` y el operador DETERMINISTA
+/// (repair_operators::diff) aplica el find/replace, valida el ancla unica
+/// y respeta MAX_FILE_BYTES.
+const EDIT_OPERATORS: [OperatorId; 3] = [
+    OperatorId::SyntaxFix,
+    OperatorId::ImportPathFix,
+    OperatorId::SourceRepair,
+];
 
 /// Propone una accion estructurada. None = fail-closed (escalacion humana).
 #[worker::send]
@@ -216,10 +227,23 @@ impl Proposal {
         }
         let confidence = clamp01(self.confidence)?;
         let risk = clamp01(self.risk)?;
+        let mut parameters = self.parameters.clone();
+        if EDIT_OPERATORS.contains(&operator) {
+            // Edicion acotada: sin archivo o sin ancla from->to no hay
+            // parche seguro. Fail-closed, nunca un edit inventado.
+            let file = parameters.get("file")?;
+            let from = parameters.get("from")?;
+            let to = parameters.get("to")?;
+            if file.is_empty() || from.is_empty() || from == to {
+                return None;
+            }
+            // El ejecutor determinista solo entiende file/from/to.
+            parameters.retain(|key, _| matches!(key.as_str(), "file" | "from" | "to"));
+        }
         Some(RepairAction {
             node_id: String::from("llm:fallback"),
             repair_operator: operator,
-            parameters: self.parameters.clone(),
+            parameters,
             confidence,
             risk,
         })
@@ -299,6 +323,28 @@ mod tests {
     }
 
     #[test]
+    fn action_accepts_bounded_source_repair() {
+        let body = "{\"operator\": 12, \"parameters\": {\"file\": \"src/main.ts\", \"from\": \"../old/path\", \"to\": \"../new/path\"}, \"confidence\": 0.9, \"risk\": 0.2}";
+        let action = action_from_response_body(body).expect("edicion acotada valida");
+        assert_eq!(action.repair_operator, OperatorId::SourceRepair);
+        assert_eq!(action.parameters.len(), 3);
+        assert_eq!(action.parameters.get("file").map(String::as_str), Some("src/main.ts"));
+    }
+
+    #[test]
+    fn action_rejects_invalid_edits() {
+        // from == to: parche nulo.
+        let same = "{\"operator\": 2, \"parameters\": {\"file\": \"a.ts\", \"from\": \"x\", \"to\": \"x\"}, \"confidence\": 0.9, \"risk\": 0.2}";
+        assert!(action_from_response_body(same).is_none());
+        // Sin ancla from (vacia): nada seguro que buscar.
+        let no_from = "{\"operator\": 2, \"parameters\": {\"file\": \"a.ts\", \"from\": \"\", \"to\": \"y\"}, \"confidence\": 0.9, \"risk\": 0.2}";
+        assert!(action_from_response_body(no_from).is_none());
+        // Sin archivo: sin target acotado.
+        let no_file = "{\"operator\": 8, \"parameters\": {\"from\": \"a\", \"to\": \"b\"}, \"confidence\": 0.9, \"risk\": 0.2}";
+        assert!(action_from_response_body(no_file).is_none());
+    }
+
+    #[test]
     fn prompt_contains_incident_context() {
         let incident = Incident {
             id: String::from("inc-1"),
@@ -321,3 +367,4 @@ mod tests {
         assert!(prompt.contains("npm install"));
     }
 }
+

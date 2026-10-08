@@ -59,3 +59,23 @@ jobs:
           grep -q "MIN_CONFIDENCE=0.55" docs/GOVERNANCE.md
           grep -q "MAX_RISK=0.45" docs/GOVERNANCE.md
           echo "OK: umbrales de gate sincronizados entre runtime y GOVERNANCE.md"
+
+      # Smoke del CLI repair-pr (antes sin consumidor en CI): el camino de
+      # evidencia offline (CONTRACT.md seccion 3/5) debe seguir produciendo
+      # un bundle de diff valido, y un input vacio debe ser BLOCKED (exit 2),
+      # nunca verde falso.
+      - name: Smoke repair-pr diff (CLI de evidencia)
+        run: |
+          set -euo pipefail
+          cat > /tmp/changes.json <<'JSON'
+          {"files":[{"path":"package.json","before":"{}\n","after":"{\"name\":\"x\"}\n"}]}
+          JSON
+          cargo run -p repair_pr --release -- diff /tmp/changes.json
+          printf '{"files":[]}' > /tmp/empty.json
+          if cargo run -p repair_pr --release -- diff /tmp/empty.json; then
+            echo "::error::un bundle vacio deberia salir con codigo 2 (BLOCKED)"
+            exit 1
+          else
+            echo "OK: bundle vacio -> exit 2 (BLOCKED)"
+          fi
+
