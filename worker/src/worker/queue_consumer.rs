@@ -21,6 +21,7 @@ use crate::runtime::{
     quota::QuotaConfig,
     rules,
     security::{fnv1a64, urlencode},
+    web_research,
     MAX_RISK, MIN_CONFIDENCE,
 };
 
@@ -346,50 +347,71 @@ async fn process(
                 ("blocked_by_policy", "blocked", String::new(), reason)
             }
         }
-    } else if let Some(mut llm_action) = llm_fallback::propose(&env, &incident, &signature).await {
+    } else {
         // LLM FALLBACK (docs/LLM_POLICY.md): la NN rechazo el caso; se pide
         // una accion ESTRUCTURADA al modelo (Workers AI, presupuesto diario
         // fail-closed). La salida pasa por el MISMO gate y los MISMOS
         // operadores deterministas: el LLM nunca escribe codigo libre.
-        // La localizacion determinista (file/from del diagnostico) tambien
-        // rellena la propuesta del LLM: lo extractible no se le delega.
-        param_derive::ensure_params(&mut llm_action, &incident);
-        if gate(&llm_action, MIN_CONFIDENCE, MAX_RISK).is_ok()
-            && !crate::runtime::self_guard::is_own_repo(&env, &task.repo)
-            && !circuit::is_open(&env, llm_action.repair_operator).await
+        //
+        // Investigacion web en paralelo (PART5): mientras se decide, se
+        // consultan fuentes publicas (registry npm, docs oficiales de
+        // rustc) para dar contexto REAL a la propuesta. Fail-open: sin red
+        // o deshabilitada (RESEARCH_ENABLED=false) el reporte llega vacio
+        // y la reparacion sigue su camino normal. La evidencia queda en
+        // REPAIR_CASES_KV (research:{correlation_id}) para auditoria.
+        let research = web_research::research(&env, &incident).await;
+        if !research.is_empty() {
+            console_log!(
+                "web research correlation_id={}: {}",
+                task.correlation_id,
+                research.render().replace('\n', "; ")
+            );
+            web_research::persist(&env, &task.correlation_id, &research).await;
+        }
+        if let Some(mut llm_action) =
+            llm_fallback::propose(&env, &incident, &signature, &research).await
         {
-            match attempt_repair(&env, &task, &llm_action, &incident, &features, "llm").await? {
-                // Distilacion: el caso queda marcado origin=llm en KV; si CI
-                // verifica PASS, el entrenamiento offline aprende de el y la
-                // NN pasa a resolver esta clase de firmas sin consultar al
-                // LLM (ademas del replay inmediato del ledger).
-                RepairOutcome::Repaired { pr_url } => {
-                    console_log!(
-                        "llm fallback repaired correlation_id={} (distill target)",
-                        task.correlation_id
-                    );
-                    ("allow", "pending_ci", pr_url, String::new())
+            // La localizacion determinista (file/from del diagnostico)
+            // tambien rellena la propuesta del LLM: lo extractible no se
+            // le delega.
+            param_derive::ensure_params(&mut llm_action, &incident);
+            if gate(&llm_action, MIN_CONFIDENCE, MAX_RISK).is_ok()
+                && !crate::runtime::self_guard::is_own_repo(&env, &task.repo)
+                && !circuit::is_open(&env, llm_action.repair_operator).await
+            {
+                match attempt_repair(&env, &task, &llm_action, &incident, &features, "llm").await? {
+                    // Distilacion: el caso queda marcado origin=llm en KV;
+                    // si CI verifica PASS, el entrenamiento offline aprende
+                    // de el y la NN pasa a resolver esta clase de firmas
+                    // sin consultar al LLM (ademas del replay del ledger).
+                    RepairOutcome::Repaired { pr_url } => {
+                        console_log!(
+                            "llm fallback repaired correlation_id={} (distill target)",
+                            task.correlation_id
+                        );
+                        ("allow", "pending_ci", pr_url, String::new())
+                    }
+                    RepairOutcome::Blocked { reason } => {
+                        ("blocked_by_policy", "blocked", String::new(), reason)
+                    }
                 }
-                RepairOutcome::Blocked { reason } => {
-                    ("blocked_by_policy", "blocked", String::new(), reason)
-                }
+            } else {
+                (
+                    "blocked_by_policy",
+                    "blocked",
+                    String::new(),
+                    String::from("llm_gate_denied"),
+                )
             }
         } else {
             (
                 "blocked_by_policy",
                 "blocked",
                 String::new(),
-                String::from("llm_gate_denied"),
+                String::from("gate_denied"),
             )
         }
-    } else {
-        (
-            "blocked_by_policy",
-            "blocked",
-            String::new(),
-            String::from("gate_denied"),
-        )
-    };
+    };;
 
     // 4. Registrar decision + verificacion en el DO.
     let rqs = format!(
