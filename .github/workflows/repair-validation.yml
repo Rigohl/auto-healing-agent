@@ -56,8 +56,10 @@ jobs:
           JSON
           bundle=$(cargo run -p repair_pr --release -- diff /tmp/changes.json)
           echo "$bundle"
-          echo "$bundle" | grep -q '^+++ b/src/demo.ts
+          echo "$bundle" | grep -F '+++ b/src/demo.ts'
+          echo "OK: repair-pr diff produce el bundle de evidencia"
 
+ 
       - name: Target de despliegue del worker (wasm32, release)
         run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
 
