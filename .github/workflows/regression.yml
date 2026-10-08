@@ -21,3 +21,19 @@ jobs:
       # Alineado con ci.yml (item 31): el workspace raiz entero. El worker se
       # cubre en CI por los jobs worker-*; aqui no se duplica.
       - run: cargo test --workspace
+
+  # Eslabon visible de la distilacion (docs/DEAD_CODE_AUDIT.md): repair_train
+  # deja de ser un crate huerfano al entrenarse y validarse periodicamente.
+  # El trainer V1 usa el dataset sintetico determinista (LCG con semilla); la
+  # promocion del payload a KV sigue siendo una accion humana (GOVERNANCE.md).
+  trainer-canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Entrenar V1 y validar el payload (umbral 90%)
+        run: |
+          cargo run -p repair_train --release -- --out /tmp/payload.txt
+          test -s /tmp/payload.txt
+          echo "payload KV regenerable (no promovido: accion humana)"

@@ -338,11 +338,14 @@ async fn process(
                 ("blocked_by_policy", "blocked", String::new(), reason)
             }
         }
-    } else if let Some(llm_action) = llm_fallback::propose(&env, &incident, &signature).await {
+    } else if let Some(mut llm_action) = llm_fallback::propose(&env, &incident, &signature).await {
         // LLM FALLBACK (docs/LLM_POLICY.md): la NN rechazo el caso; se pide
         // una accion ESTRUCTURADA al modelo (Workers AI, presupuesto diario
         // fail-closed). La salida pasa por el MISMO gate y los MISMOS
         // operadores deterministas: el LLM nunca escribe codigo libre.
+        // La localizacion determinista (file/from del diagnostico) tambien
+        // rellena la propuesta del LLM: lo extractible no se le delega.
+        param_derive::ensure_params(&mut llm_action, &incident);
         if gate(&llm_action, MIN_CONFIDENCE, MAX_RISK).is_ok()
             && !crate::runtime::self_guard::is_own_repo(&env, &task.repo)
             && !circuit::is_open(&env, llm_action.repair_operator).await

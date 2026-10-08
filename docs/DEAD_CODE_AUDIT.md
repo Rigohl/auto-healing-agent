@@ -9,8 +9,9 @@
 
 | Ítem | Consumidor en producción | Veredicto |
 |------|--------------------------|----------|
-| `crates/repair_nn_wasm` | Ninguno en runtime. Solo `wasm.yml` y `repair-validation.yml` lo compilan como canario de build wasm32 | Sin consumidor de runtime; rol actual = CI-check redundante con `worker-check` (que ya compila wasm32) |
-| `crates/repair_pr` (CLI `repair-pr`) | Ninguno. Ningún workflow lo invoca; el Worker abre PRs con su propio cliente (`worker/src/worker/github_client.rs`, `worker::Fetch`, sin octocrab) | Código sin consumidor en producción. Conservado como herramienta offline de evidencia (`repair-pr diff`) |
+| `crates/repair_nn_wasm` | `repair-validation.yml` compila el artefacto wasm32 Y `cargo test --workspace` ejecuta `tests/payload.rs` (carga `model/current.txt` vía `from_weights` + predicción real) | Con uso desde 2026-10-08: valida el payload KV contra la API pública antes del promote |
+| `crates/repair_pr` (CLI `repair-pr`) | `repair-validation.yml` ejecuta `repair-pr diff` sobre un fixture en cada PR | Con uso desde 2026-10-08: puente de evidencia verificado en CI; el camino de producción sigue siendo `github_client.rs` |
+| `crates/repair_train` (CLI `repair-train`) | `regression.yml` (job `trainer-canary`, semanal) entrena V1 y valida el payload (umbral 90%) | Con uso desde 2026-10-08: eslabón visible de la distilación; promover el payload a KV sigue siendo acción humana |
 | `repair_types::TrainingExample` | Ninguno | Contrato versionado por diseño (DISCREPANCIES item 74). **No eliminar** |
 | `repair_types::contract::CandidatePatch`, `OutboundPRRequest`, `VerifiedResult`, `DuplicateResponse`, `GitHubEventType`, `MinimumPermissions`, `get_error_policy` | Solo `repair_pr` (que a su vez no tiene consumidor). El Worker usa `compute_idempotency_key` e `IDEMPOTENCY_TTL_SECONDS` del mismo módulo | Contrato GitHub↔Cloudflare v1 (CONTRACT.md). Mantener; revisar si `repair_pr` se elimina |
 | `model/current.json`, `model/stable.json`, `model/schema.json` | Ninguno (`weights: null`; el payload real es `model/current.txt` → KV `model/current`) | Placeholders de metadata documentados (README). Mantener como metadatos o eliminar |
@@ -61,5 +62,9 @@ no los lee nadie (ya documentado en README e INDEX). Sin acción urgente.
   (id 7c6b8ec9534b4e97bafa2e2fa79de066, modificado 2026-10-07).
 - Los namespaces KV del wrangler.toml existen en la cuenta:
   MODEL_KV (73014a1b…) y REPAIR_CASES_KV (996211a0…).
-- Namespaces KV adicionales sin uso por este Worker (posible limpieza):
-  STATE, neural-net-weights, CACHE, agent-config.
+- Los namespaces STATE, CACHE, agent-config y neural-net-weights fueron
+  ADOPTADOS por el Worker en el PR #114 (kv-adoption, 2026-10-08): STATE ->
+  ledger (replay de firmas PASS), CACHE -> circuit breaker, agent-config ->
+  config_store (config en caliente), neural-net-weights -> NN_WEIGHTS
+  (challenger). El registro "sin uso" de arriba quedó desactualizado con
+  ese merge; esta línea lo corrige.

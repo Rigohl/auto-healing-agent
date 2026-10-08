@@ -19,9 +19,16 @@
 ## Regla de oro
 
 El LLM solo propone `{operator, parameters, confidence, risk}` (ids 1
-DEPENDENCY_REPAIR y 9 VERSION_PIN). Cualquier salida que no pase el gate, el
-self_guard o el circuit breaker => `llm_gate_denied` / blocked. El LLM jamas
-ve el arbol del repo y jamas produce diffs.
+DEPENDENCY_REPAIR, 9 VERSION_PIN, 2 SYNTAX_FIX y 8 IMPORT_PATH_FIX). Los
+operadores 2 y 8 son UNA edicion acotada de sustitucion unica y exigen los
+parametros `file` (ruta copiada del diagnostico), `from` (texto exacto
+presente en el archivo) y `to` (texto de reemplazo): edicion minima, sin
+codigo libre. La localizacion determinista (`file`/`from` extraibles del
+diagnostico) la aporta param_derive.rs y tambien rellena la propuesta del
+LLM; `to` es lo unico que el LLM aporta y jamas se deriva sin el. Cualquier
+salida que no pase el gate, el self_guard o el circuit breaker =>
+`llm_gate_denied` / blocked. El LLM jamas ve el arbol del repo y jamas
+produce diffs.
 
 ## Always Free: presupuesto y fail-closed
 

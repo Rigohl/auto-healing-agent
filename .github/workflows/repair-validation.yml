@@ -45,6 +45,21 @@ jobs:
       - name: Artefacto WASM de repair_nn_wasm
         run: cargo build -p repair_nn_wasm --release --target wasm32-unknown-unknown
 
+      # Puente de evidencia (docs/DEAD_CODE_AUDIT.md): el CLI repair-pr diff
+      # deja de ser huerfano al verificarse en cada PR sobre un fixture. CI
+      # comprueba que el generador de evidencia offline sigue produciendo el
+      # bundle unificado que el contrato (CONTRACT.md 3) exige.
+      - name: repair-pr diff sobre fixture (puente de evidencia)
+        run: |
+          cat > /tmp/changes.json <<'JSON'
+          {"files": [{"path": "src/demo.ts", "before": "import x from \"../old/path\";\n", "after": "import x from \"../new/path\";\n"}]}
+          JSON
+          bundle=$(cargo run -p repair_pr --release -- diff /tmp/changes.json)
+          echo "$bundle"
+          echo "$bundle" | grep -F '+++ b/src/demo.ts'
+          echo "OK: repair-pr diff produce el bundle de evidencia"
+
+ 
       - name: Target de despliegue del worker (wasm32, release)
         run: cargo check --manifest-path worker/Cargo.toml --target wasm32-unknown-unknown --release
 

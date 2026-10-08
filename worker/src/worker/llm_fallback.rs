@@ -44,7 +44,7 @@ pub const DEFAULT_DAILY_BUDGET: i64 = 8_000;
 /// Estimacion conservadora por llamada (Neurons) del modelo pequeno.
 pub const DEFAULT_COST_PER_CALL: i64 = 300;
 
-const SYSTEM_PROMPT: &str = "You are a build-repair action classifier. Reply with ONLY a JSON object, no prose, no markdown fences. Schema: {\"operator\": <int>, \"parameters\": {\"dependency\": string?, \"version\": string?, \"file\": string?}, \"confidence\": <float 0..1>, \"risk\": <float 0..1>}. Allowed operators ONLY: 1 = DEPENDENCY_REPAIR (bump/replace a failing dependency in package.json), 9 = VERSION_PIN (pin an exact version). If the incident is not a dependency/version issue, reply {\"operator\": 0, \"parameters\": {}, \"confidence\": 0.0, \"risk\": 1.0}.";
+const SYSTEM_PROMPT: &str = "You are a build-repair action classifier. Reply with ONLY a JSON object, no prose, no markdown fences. Schema: {\"operator\": <int>, \"parameters\": {\"dependency\": string?, \"version\": string?, \"file\": string?, \"from\": string?, \"to\": string?}, \"confidence\": <float 0..1>, \"risk\": <float 0..1>}. Allowed operators ONLY: 1 = DEPENDENCY_REPAIR (fix a failing dependency in package.json), 9 = VERSION_PIN (pin an exact version), 2 = SYNTAX_FIX, 8 = IMPORT_PATH_FIX. Operators 2 and 8 are ONE bounded single-substitution edit and REQUIRE all of: \"file\" (repo-relative path taken verbatim from the diagnostic), \"from\" (exact text currently in that file), \"to\" (replacement text). Propose from/to only from the compiler diagnostic; minimal edit only; never invent file paths or code. If the incident is not fixable by these operators, reply {\"operator\": 0, \"parameters\": {}, \"confidence\": 0.0, \"risk\": 1.0}.";
 
 /// Propone una accion estructurada. None = fail-closed (escalacion humana).
 #[worker::send]
@@ -163,11 +163,12 @@ pub fn utc_date_from_unix_ms(ms: i64) -> String {
 /// jamas ve el arbol; solo el contexto acotado del incidente).
 pub fn build_prompt(incident: &Incident, signature: &FailureSignature) -> String {
     format!(
-        "Incident:\n- error_code: {}\n- error_step: {}\n- command: {}\n- message: {}\n- language_hint: {}\n- framework_hint: {}\n- signature: {}\n\nPropose the repair action JSON.",
+        "Incident:\n- error_code: {}\n- error_step: {}\n- command: {}\n- message: {}\n- stack_hint: {}\n- language_hint: {}\n- framework_hint: {}\n- signature: {}\n\nPropose the repair action JSON.",
         incident.error_code,
         incident.error_step,
         incident.command,
         incident.message,
+        incident.stack_hint,
         incident.language_hint,
         incident.framework_hint,
         signature.fingerprint
@@ -319,5 +320,6 @@ mod tests {
         let prompt = build_prompt(&incident, &signature);
         assert!(prompt.contains("E404"));
         assert!(prompt.contains("npm install"));
+        assert!(prompt.contains("stack_hint"));
     }
 }

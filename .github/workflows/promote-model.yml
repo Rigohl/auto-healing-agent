@@ -18,6 +18,16 @@ on:
         description: "Claves destino (separadas por espacio; por defecto solo model/current)"
         required: true
         default: "model/current"
+      retrain:
+        description: "Re-entrenar la NN con repair_train antes de promover"
+        required: false
+        default: false
+        type: boolean
+      also_candidate:
+        description: "Ademas subir el payload a NN_WEIGHTS:model/candidate (challenger)"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: promote-model-kv
@@ -31,6 +41,23 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v5
+
+      # Cierra el loop champion/challenger con el crate repair_train (antes
+      # sin consumidor): el re-entrenamiento es parte del mismo flujo humano
+      # de promocion, nunca automatico. Umbral interno: accuracy >= 0.90.
+      - name: Toolchain Rust (solo retrain)
+        if: ${{ inputs.retrain }}
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache de cargo (solo retrain)
+        if: ${{ inputs.retrain }}
+        uses: Swatinem/rust-cache@v2
+
+      - name: Re-entrenar la NN (opcional)
+        if: ${{ inputs.retrain }}
+        run: |
+          set -euo pipefail
+          cargo run -p repair_train --release -- --out model/current.txt
 
       - name: Preflight (artefacto)
         run: |
@@ -102,3 +129,24 @@ jobs:
             fi
             echo "$key OK: 2863 tokens"
           done
+
+      # Challenger (candidate.rs): el DO lee NN_WEIGHTS en la clave
+      # model/candidate y SOLO reporta metricas; jamas atiende trafico.
+      # Subir aqui el mismo payload cierra el flujo champion/challenger sin
+      # pasos manuales fuera del workflow de promocion.
+      - name: Challenger -> NN_WEIGHTS:model/candidate (opcional)
+        if: ${{ inputs.also_candidate }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NS_CANDIDATE: "3c269e92364f4b59aa83c4388596eefb"
+        run: |
+          set -euo pipefail
+          npx wrangler@4 kv key put "model/candidate" --namespace-id "$NS_CANDIDATE" --path model/current.txt
+          n=$(npx wrangler@4 kv key get "model/candidate" --namespace-id "$NS_CANDIDATE" 2>/dev/null | wc -w)
+          if [ "$n" -ne 2863 ]; then
+            echo "::error::model/candidate devolvio $n tokens, se esperan 2863"
+            exit 1
+          fi
+          echo "model/candidate OK: 2863 tokens (challenger listo; solo reporta)"
+
