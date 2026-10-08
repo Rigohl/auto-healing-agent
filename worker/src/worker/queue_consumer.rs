@@ -496,12 +496,13 @@ async fn persist_case(
         incident_id: task.incident_id.clone(),
         signature: FailureSignature::from_incident(incident),
         action: action.clone(),
-        // Pendiente de VERIFY: Skipped = aun sin verificacion (PASS/FAIL
-        // llega por /github/callback; el reward se computa al verificar).
+        // Pendiente de VERIFY: Skipped = aun sin verificacion. El reward es
+        // HONESTO: 0.0 hasta que /github/callback actualice el caso en KV
+        // con la verificacion real de Actions (repair_types::compute_reward).
         verification: VerificationResult::Skipped,
         patch_summary: format!("{} pr={}", action.repair_operator.as_str(), pr_url),
         pr_url: Some(pr_url.to_string()),
-        reward: 0.0,
+        reward: repair_types::compute_reward(VerificationResult::Skipped),
         created_at_unix: crate::runtime::now_ms() as u64,
     };
     let key = format!("repair_case:{}", task.correlation_id);

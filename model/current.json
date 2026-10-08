@@ -1,7 +1,18 @@
 {
-  "version": "0.1.0-placeholder",
-  "trained_at": null,
-  "accuracy": null,
-  "weights": null,
-  "note": "Placeholder. weights=null: no hay entrenamiento ni export en el repo todavia. Ver docs/E2E_CHECKLIST.md y docs/DISCREPANCIES.md items 5, 6, 22."
+  "version": "0.2.0",
+  "artifact": "model/current.txt",
+  "trained_at": "2026-10-03",
+  "weights": 2863,
+  "accuracy": 1.0,
+  "training": {
+    "dataset_size": 1000,
+    "dataset_seed": 42,
+    "epochs": 120,
+    "batch_size": 16,
+    "lr": "0.1 -> 0.03",
+    "init_seed": 7,
+    "holdout": { "size": 500, "seed": 43, "accuracy": 1.0 }
+  },
+  "promoted_to_model_kv": false,
+  "note": "Metadata real del entrenamiento V1 (docs/INVENTORY.md, actualizacion 2026-10-03). El worker carga los pesos desde MODEL_KV clave model/current; este JSON es el registro auditable del artefacto. Promocion a KV: accion humana via .github/workflows/promote-model.yml."
 }

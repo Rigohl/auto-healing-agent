@@ -70,7 +70,6 @@ WORKFLOWS = [
     ".github/workflows/security.yml",
     ".github/workflows/regression.yml",
     ".github/workflows/repair-validation.yml",
-    ".github/workflows/auto-repair.yml",
     ".github/workflows/deploy-staging.yml",
     ".github/workflows/promote-model.yml",
     ".github/workflows/cleanup-branches.yml",
@@ -312,13 +311,10 @@ def check_two_build_units(r: Report) -> None:
 
 
 def check_no_llm_path(r: Report) -> None:
-    auto_repair = read(".github/workflows/auto-repair.yml")
-    r.expect(
-        "NO_LLM_WORKFLOW",
-        "auto-repair.yml declara el camino LLM como deshabilitado",
-        "disabled" in auto_repair.lower(),
-    )
-    # Un camino LLM colado de vuelta seria un fichero nuevo, no una linea.
+    # auto-repair.yml (camino LLM legacy, notice-only) fue ELIMINADO del repo
+    # el 2026-10-07: NO_LLM_POLICY prohibe el camino y el aviso era estado
+    # muerto que nada consumia. Un camino LLM colado de vuelta seria un
+    # fichero nuevo, no una linea.
     offenders = []
     for dirpath, _dirnames, filenames in os.walk(os.path.join(ROOT, "crates")):
         for name in filenames:

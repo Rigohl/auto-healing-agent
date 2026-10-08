@@ -196,6 +196,34 @@ Runbook Notion actualizado con esta firma.
   Sin ellos `/webhook` responde 503 (fail-closed por diseño) y el flujo E2E incidente →
   PR → CI → callback (PYH-63) no puede cerrarse.
 
+## Higiene de estado muerto (2026-10-07, sesion de activacion) — todo lo que existe se usa
+
+Auditoria "nada bloqueado ni mentira" ordenada por el dueño. Cada pieza muerta
+recibio una de dos sentencias: USO o ELIMINACION.
+
+- **reward YA NO es mentira**: `RepairCase.reward` existia pero nada lo computaba
+  (`persist_case` escribia 0.0 "hasta verificar" y nadie verificaba). Ahora
+  `repair_types::compute_reward()` es la unica fuente (Pass=+1.0, Fail=-1.0,
+  Blocked=-0.5, Skipped=0.0), con test propio; `persist_case` la usa y
+  `/github/callback` actualiza el RepairCase en KV con la verificacion real de
+  Actions (verification + reward). El ciclo de aprendizaje PART4 tiene su senal.
+- **model/current.json y stable.json YA NO son placeholders**: current.json lleva
+  la metadata real del entrenamiento V1 (2863 pesos, dataset 1000/seed 42, 120
+  epocas, accuracy 1.000 en train y holdout); stable.json declara honestamente
+  que aun no hay STABLE promovido y el pipeline para lograrlo.
+- **auto-repair.yml ELIMINADO**: camino LLM legacy notice-only, deshabilitado por
+  diseno desde NO_LLM_POLICY; era estado muerto puro. `verify_repo.py` actualizado
+  (fuera de WORKFLOWS y del claim NO_LLM_WORKFLOW).
+- **compatibility_date 2024-09-23 -> 2026-02-24** (raiz espejo + worker, cambio
+  identico, guard 6 intacto): habilita deleteAll-de-DO borrando alarms
+  (prevencion de fugas de retencion) y el limite de 1000 subrequests
+  eliminado (2026-02-11). NO se fue mas alla a proposito: fechas >= 2026-08-04
+  traen nodejs_compat por defecto y exigen verificacion de runtime antes de
+  adoptarlas (proximo bump tras E2E verde).
+- `crates/repair_pr` (octocrab) se CONSERVA documentado como CLI offline de
+  diagnostico (diff local sin worker); el camino de produccion es
+  github_client.rs.
+
 ## Historial de este documento (actualizado)
 - 2026-10-06 (tarde): reparación del bump de actions — el push 0a2dee1 dejó YAML inválido en 7 workflows (deploy-staging, cleanup-branches + 5 más con "Invalid workflow file"). Se reconstruyeron desde 5337044 (último verde) aplicando solo checkout@v5 (commits b109e04, 5b38422, be3ccad, 0a4585a, 04fe0c5, 9c8b6b3, 0b76945). En 0b76945: CI ✅, Consistency ✅ (verify 50 claims), Security ✅, Branch cleanup ✅. Nota técnica: el "content viewer" open_url parte líneas al azar al mostrar YAML — verificación de contenido siempre vía raw fetch (apify web-fetch), nunca open_url.
 - 2026-10-06: sección CI/CD completa (dashboard + secrets + vars, valores exactos); inventario KV actualizado a 6 namespaces; referencias a commits que fijaron cada decisión.

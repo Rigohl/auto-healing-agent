@@ -21,7 +21,7 @@
 
 name = "auto-healing-agent"
 main = "worker/build/worker/shim.mjs"
-compatibility_date = "2024-09-23"
+compatibility_date = "2026-02-24"
 
 # Build desde la raiz: wrangler ejecuta build.sh dentro de worker/
 # (build.cwd). El script se auto-fija su CWD y valida que wrangler.toml y

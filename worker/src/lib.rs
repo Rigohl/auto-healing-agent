@@ -367,6 +367,35 @@ async fn handle_github_callback(
         Ok(t) => t,
         Err(_) => return svc_unavailable("state_store_unavailable"),
     };
+    // Reward real (CONTRATO PART4): Actions ya verifico; el RepairCase en KV
+    // deja de ser reward=0.0 y registra la verificacion. Best-effort: el DO
+    // ya registro la decision; un fallo de KV no revoca el callback.
+    let verification = if verify_status == "pass" {
+        repair_types::VerificationResult::Pass
+    } else if verify_status == "fail" {
+        repair_types::VerificationResult::Fail
+    } else {
+        repair_types::VerificationResult::Blocked
+    };
+    if let Ok(kv) = env.kv("REPAIR_CASES_KV") {
+        let key = format!("repair_case:{}", correlation_id);
+        if let Ok(Some(raw)) = kv.get(&key).text().await {
+            if let Ok(mut case) = serde_json::from_str::<repair_types::RepairCase>(&raw) {
+                case.verification = verification;
+                case.reward = repair_types::compute_reward(verification);
+                if let Ok(serialized) = serde_json::to_string(&case) {
+                    match kv.put(&key, serialized) {
+                        Ok(builder) => {
+                            if let Err(e) = builder.execute().await {
+                                console_error!("repair_case kv put failed: {e}");
+                            }
+                        }
+                        Err(e) => console_error!("repair_case kv builder failed: {e}"),
+                    }
+                }
+            }
+        }
+    }
     let resp = serde_json::json!({
         "status": "recorded",
         "correlation_id": correlation_id,

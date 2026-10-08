@@ -1,5 +1,5 @@
 {
-  "version": "0.0.0-none",
+  "version": "none",
   "weights": null,
-  "note": "No STABLE checkpoint yet"
+  "note": "Sin checkpoint STABLE promovido todavia. Pipeline real: current.txt V1 -> promote-model.yml (humano) -> MODEL_KV model/current; tras E2E verde se promueve model/stable. Registro auditable, no payload: el worker nunca lee este archivo."
 }

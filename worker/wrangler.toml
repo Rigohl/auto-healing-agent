@@ -34,7 +34,7 @@
 
 name = "auto-healing-agent"
 main = "build/worker/shim.mjs"
-compatibility_date = "2024-09-23"
+compatibility_date = "2026-02-24"
 
 [build]
 command = "bash ./build.sh"

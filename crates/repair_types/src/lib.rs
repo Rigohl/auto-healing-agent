@@ -221,6 +221,23 @@ pub struct TrainingExample {
     pub verified: bool,
 }
 
+/// Recompensa del caso de reparacion (CONTRATO PART4, ciclo de aprendizaje).
+/// La autoridad es GitHub Actions: sin verificacion no hay senal.
+/// Pass = +1.0 (reparacion verificada por CI), Fail = -1.0 (el PR rompio
+/// CI), Blocked = -0.5 (el gate o las reglas frenaron el parche),
+/// Skipped = 0.0 (pendiente de VERIFY: valor honesto, nunca inventado).
+/// Consumidor real desde el 2026-10-07: /github/callback actualiza el
+/// RepairCase en REPAIR_CASES_KV con esta funcion (antes el reward quedaba
+/// en 0.0 para siempre: valor muerto).
+pub fn compute_reward(verification: VerificationResult) -> f32 {
+    match verification {
+        VerificationResult::Pass => 1.0,
+        VerificationResult::Fail => -1.0,
+        VerificationResult::Blocked => -0.5,
+        VerificationResult::Skipped => 0.0,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentStatus {
     Success,
@@ -354,5 +371,13 @@ mod tests {
             message: String::from("ok"),
         };
         assert_eq!(r.verify_result, Some(VerificationResult::Pass));
+    }
+
+    #[test]
+    fn reward_matches_verification() {
+        assert_eq!(compute_reward(VerificationResult::Pass), 1.0);
+        assert_eq!(compute_reward(VerificationResult::Fail), -1.0);
+        assert_eq!(compute_reward(VerificationResult::Blocked), -0.5);
+        assert_eq!(compute_reward(VerificationResult::Skipped), 0.0);
     }
 }
