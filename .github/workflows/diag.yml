@@ -49,20 +49,27 @@ jobs:
           python3 scripts/verify_repo.py --out /tmp/ev.json >/tmp/verify.txt 2>&1
           echo "verify_exit=$?" >>"$GITHUB_OUTPUT"
           exit 0
+      - name: verify_repo.py
+        id: verify
+        run: |
+          set +e
+          python3 scripts/verify_repo.py --out /tmp/ev.json >/tmp/verify.txt 2>&1
+          echo "verify_exit=$?" >>"$GITHUB_OUTPUT"
+          echo "verify_bytes=$(wc -c </tmp/verify.txt)" >>"$GITHUB_OUTPUT"
+          exit 0
       - name: Commit con la evidencia
         run: |
           git config user.name "diag-bot"
           git config user.email "actions@users.noreply.github.com"
           {
-            echo "diag: evidencia de wasm-pack y verify"
+            echo "diag2: output completo de verify"
             echo ""
-            echo "wasm-pack exit: ${{ steps.wasm.outputs.wasm_exit }}"
-            echo "--- wasm-pack output ---"
-            tail -n 60 /tmp/wasm.txt | head -c 4500
+            echo "verify exit: ${{ steps.verify.outputs.verify_exit }} bytes: ${{ steps.verify.outputs.verify_bytes }}"
+            echo "--- verify.txt (tail) ---"
+            tail -c 3500 /tmp/verify.txt
             echo ""
-            echo "verify exit: ${{ steps.verify.outputs.verify_exit }}"
-            echo "--- verify claims NO PASS ---"
-            grep -v "[PASS" /tmp/verify.txt | head -c 3000 || true
+            echo "--- refs origin ---"
+            git for-each-ref --format="%(refname)" refs/remotes/origin || true
           } >/tmp/commit-msg.txt
           git commit --allow-empty -F /tmp/commit-msg.txt
           git push
