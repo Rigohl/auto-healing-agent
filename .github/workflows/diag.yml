@@ -29,7 +29,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Borrar rama extraviada (politica: solo main persiste)
+      - name: "Borrar rama extraviada feat/real-learning-loop"
         run: |
           set +e
           git push origin --delete feat/real-learning-loop >/tmp/branch-del.txt 2>&1
@@ -42,7 +42,7 @@ jobs:
           python3 scripts/verify_repo.py --out /tmp/ev.json >/tmp/verify.txt 2>&1
           echo "verify_exit=$?" >>"$GITHUB_OUTPUT"
           exit 0
-      - name: Commit con la evidencia
+      - name: "Commit con la evidencia"
         run: |
           git config user.name "diag-bot"
           git config user.email "actions@users.noreply.github.com"
@@ -53,8 +53,8 @@ jobs:
             tail -n 3 /tmp/branch-del.txt
             echo ""
             echo "verify exit: ${{ steps.verify.outputs.verify_exit }}"
-            echo "--- verify.txt (tail 1200) ---"
-            tail -c 1200 /tmp/verify.txt
+            echo "--- verify.txt (tail 1000) ---"
+            tail -c 1000 /tmp/verify.txt
           } >/tmp/commit-msg.txt
           git commit --allow-empty -F /tmp/commit-msg.txt
           git push
