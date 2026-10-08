@@ -18,13 +18,13 @@
 //! Regla de autoridad: Cloudflare ORCHESTRATES, PERSISTS, DEDUPLICATES,
 //! QUEUES, LIMITS, OBSERVES. GitHub Actions es la autoridad de VERIFY;
 //! este Worker nunca declara CI PASS, aprueba ni fusiona PRs.
-//! No hay ruta LLM ni generacion libre de codigo (docs/NO_LLM_POLICY.md).
+//! No hay generacion libre de codigo (docs/LLM_POLICY.md).
 //! Sin unwrap() en el path de request.
 
-// El modulo interno NO puede llamarse `worker`: colisiona con el crate
-// externo `worker` y hace ambigua cada ruta `use worker::...` (error
-// E0659). El job `worker` de CI detecto exactamente eso en c5fadd48.
-// El modulo se llama `runtime` y se mapea al mismo directorio src/worker/.
+// El modulo interno NO puede llamarse worker: colisiona con el crate
+// externo worker y hace ambigua cada ruta use worker::... (error
+// E0659). El job worker de CI detecto exactamente eso en c5fadd48.
+// El modulo se llama runtime y se mapea al mismo directorio src/worker/.
 #[path = "worker/mod.rs"]
 mod runtime;
 
@@ -90,8 +90,8 @@ async fn main(
     Ok(router(env).call(req).await?)
 }
 
-/// GET /model: informe de salud del registro de modelos. `model::report`
-/// devuelve una respuesta del crate `worker`; se transporta preservando
+/// GET /model: informe de salud del registro de modelos. model::report
+/// devuelve una respuesta del crate worker; se transporta preservando
 /// status y cuerpo en la respuesta de Axum.
 #[worker::send]
 async fn model_report(State(env): State<Env>) -> AxumResponse {
@@ -192,7 +192,7 @@ async fn handle_webhook(State(env): State<Env>, headers: HeaderMap, body: Bytes)
     // 1. Autorizacion fail-closed. Sin secret configurado el endpoint queda
     //    cerrado (503); con secret, comparacion en tiempo constante. Un secret
     //    VACIO cuenta como no configurado: con un secret "" el header vacio
-    //    `x-webhook-secret: ` pasaria la comparacion y abriria el endpoint.
+    //    x-webhook-secret: pasaria la comparacion y abriria el endpoint.
     let secret = match env.secret("WEBHOOK_SECRET") {
         Ok(s) => s.to_string(),
         Err(_) => return svc_unavailable("webhook_secret_not_configured"),
@@ -262,7 +262,7 @@ async fn handle_webhook(State(env): State<Env>, headers: HeaderMap, body: Bytes)
     let quota_cfg = config_store::quota(&env).await;
     let anti_cfg = AntiLoopConfig::from_env(&env);
     let qs = format!(
-        // Sin `delivery_id`: el DO deduplica por `idem_key`, que ya lo
+        // Sin delivery_id: el DO deduplica por idem_key, que ya lo
         // codifica (FNV-1a(repo | incident | delivery | fingerprint)).
         // Mandarlo era ruido.
         "/ingest?repo={}&incident_id={}&signature={}&idem_key={}&correlation_id={}&max_attempts_per_incident={}&max_repairs_per_repo={}&max_open_repairs={}&cooldown_seconds={}&daily_budget={}&max_same_incident={}&max_same_signature={}&max_same_fingerprint={}&max_same_failing_verification={}&window_seconds={}",
@@ -418,6 +418,12 @@ async fn handle_github_callback(
         "blocked" => "blocked",
         _ => return bad_request("invalid_verify_status"),
     };
+    // CONTRATO (repair_types::VerifiedResult): un PASS sin evidencia no es
+    // un PASS. La senal que alimenta el aprendizaje (reward, ledger,
+    // circuit, TrainingExample) debe ser auditable. Fail-closed 400.
+    if verify_status == "pass" && evidence_ref.trim().is_empty() {
+        return bad_request("missing_evidence_for_pass");
+    }
     // El DO marca done solo si CI pasa; fail deja el incidente bloqueado
     // con la evidencia para auditoria.
     let decision = if verify_status == "pass" {
@@ -470,7 +476,38 @@ async fn handle_github_callback(
             }
         }
     }
-    // Aprendizaje real (kv-adoption 2026-10-08): la senal VERIFICADA de
+    // Aprendizaje real (CONTRATO PART4, loop cerrado 2026-10-08): el
+    // TrainingExample congelado en el momento de la reparacion
+    // (queue_consumer::persist_case) recibe aqui la senal VERIFICADA:
+    // verified=true + reward REAL solo en PASS. repair_train aprende del
+    // export de estas claves (--examples, promote-model.yml). Best-effort
+    // igual que el RepairCase: el DO ya asento la decision autoritativa.
+    if let Ok(kv) = env.kv("REPAIR_CASES_KV") {
+        let ex_key = format!(
+            "{}{}",
+            queue_consumer::TRAINING_EXAMPLE_PREFIX,
+            correlation_id
+        );
+        if let Ok(Some(raw)) = kv.get(&ex_key).text().await {
+            if let Ok(mut example) =
+                serde_json::from_str::<repair_types::TrainingExample>(&raw)
+            {
+                example.verified = verify_status == "pass";
+                example.reward = repair_types::compute_reward(verification);
+                if let Ok(serialized) = serde_json::to_string(&example) {
+                    match kv.put(&ex_key, serialized) {
+                        Ok(builder) => {
+                            if let Err(e) = builder.execute().await {
+                                console_error!("training_example kv put failed: {e}");
+                            }
+                        }
+                        Err(e) => console_error!("training_example kv builder failed: {e}"),
+                    }
+                }
+            }
+        }
+    }
+    // Aprendizaje real (kv-adopcion 2026-10-08): la senal VERIFICADA de
     // Actions alimenta el circuit breaker (CACHE KV) y, en PASS, el
     // signature ledger (STATE KV). "blocked" NO cuenta como fail del
     // operador (el gate freno el parche; CI no lo rechazo). Best-effort
@@ -524,7 +561,7 @@ pub async fn queue_main(batch: MessageBatch<QueueTask>, env: Env, _ctx: Context)
 ///
 /// Devuelve () a proposito: el glue de #[event(scheduled)] en workers-rs
 /// descarta el Result del handler, y devolver Result<()> activaria
-/// unused_must_use bajo `clippy -D warnings`. El error solo se loguea.
+/// unused_must_use bajo clippy -D warnings. El error solo se loguea.
 #[event(scheduled)]
 pub async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     console_error_panic_hook::set_once();
