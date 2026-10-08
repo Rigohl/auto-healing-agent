@@ -105,7 +105,10 @@ pub fn train_with_examples(
 
 /// Accuracy sobre los ejemplos reales usando el predictor de produccion
 /// (RepairNet::predict), no una copia del forward.
-pub fn evaluate_examples(weights: &[f32], examples: &[TrainingExample]) -> Result<f32, &'static str> {
+pub fn evaluate_examples(
+    weights: &[f32],
+    examples: &[TrainingExample],
+) -> Result<f32, &'static str> {
     let net = RepairNet::from_weights(weights)?;
     let mut correct = 0usize;
     let mut total = 0usize;

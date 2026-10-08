@@ -489,9 +489,7 @@ async fn handle_github_callback(
             correlation_id
         );
         if let Ok(Some(raw)) = kv.get(&ex_key).text().await {
-            if let Ok(mut example) =
-                serde_json::from_str::<repair_types::TrainingExample>(&raw)
-            {
+            if let Ok(mut example) = serde_json::from_str::<repair_types::TrainingExample>(&raw) {
                 example.verified = verify_status == "pass";
                 example.reward = repair_types::compute_reward(verification);
                 if let Ok(serialized) = serde_json::to_string(&example) {

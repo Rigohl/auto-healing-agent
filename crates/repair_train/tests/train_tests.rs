@@ -183,9 +183,7 @@ fn unverified_examples_never_train() {
         .collect();
     // Sin senal verificada el entrenamiento mixto se niega: nunca se
     // aprende una etiqueta que Actions no respalde.
-    assert!(
-        repair_train::examples::train_with_examples(&short_config(), &unverified).is_err()
-    );
+    assert!(repair_train::examples::train_with_examples(&short_config(), &unverified).is_err());
     // usable() tambien rechaza reward negativo (FAIL verificado).
     let mut fail = unverified[0].clone();
     fail.verified = true;

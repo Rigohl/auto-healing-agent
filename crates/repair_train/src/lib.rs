@@ -344,7 +344,11 @@ pub fn train(config: &TrainConfig) -> Vec<f32> {
 /// el mismo bucle, para que no existan dos caminos de entrenamiento que
 /// diverjan en silencio. Determinista: mismo config + mismo dataset => misma
 /// red (shuffle por LCG con init_seed).
-pub(crate) fn sgd(config: &TrainConfig, features: Vec<FeatureVector>, labels: Vec<usize>) -> Vec<f32> {
+pub(crate) fn sgd(
+    config: &TrainConfig,
+    features: Vec<FeatureVector>,
+    labels: Vec<usize>,
+) -> Vec<f32> {
     assert!(config.batch > 0, "sgd necesita batch > 0");
     let samples = features.len();
     assert!(samples > 0, "sgd necesita samples > 0");
