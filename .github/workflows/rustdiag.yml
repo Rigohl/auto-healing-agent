@@ -1,0 +1,39 @@
+name: RustDiag (temporal)
+on:
+  push:
+    branches: [feat/llm-distill]
+permissions:
+  contents: read
+  issues: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: cargo check worker
+        id: check
+        run: |
+          set +e
+          cargo check --manifest-path worker/Cargo.toml --all-targets > /tmp/check.txt 2>&1
+          code=$?
+          echo "exit=$code" >> $GITHUB_OUTPUT
+          cat /tmp/check.txt
+        continue-on-error: true
+      - name: cargo fmt diff
+        run: cargo fmt --manifest-path worker/Cargo.toml -- --check > /tmp/fmt.txt 2>&1 || true
+      - name: publicar diagnostico
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "# Diag rust: cargo check worker (PR #122)"
+            echo '~~~'
+            cat /tmp/check.txt | tail -n 120
+            echo '~~~'
+            echo "## fmt"
+            echo '~~~'
+            cat /tmp/fmt.txt | tail -n 40
+            echo '~~~'
+          } > /tmp/body.md
+          gh issue create --title "diag: cargo check feat/llm-distill" --body-file /tmp/body.md || true
