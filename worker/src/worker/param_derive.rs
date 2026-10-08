@@ -65,11 +65,17 @@ pub fn ensure_params(action: &mut RepairAction, incident: &Incident) {
             }
             let chars: Vec<char> = text.chars().collect();
             if let Some(file) = file_from_message(&chars) {
-                action.parameters.entry(String::from(P_FILE)).or_insert(file);
+                action
+                    .parameters
+                    .entry(String::from(P_FILE))
+                    .or_insert(file);
             }
             if action.repair_operator == OperatorId::ImportPathFix {
                 if let Some(from) = unresolved_specifier(&chars) {
-                    action.parameters.entry(String::from(P_FROM)).or_insert(from);
+                    action
+                        .parameters
+                        .entry(String::from(P_FROM))
+                        .or_insert(from);
                 }
             }
         }
@@ -191,7 +197,7 @@ fn valid_file_path(path: &str) -> bool {
     !path.is_empty()
         && !path.starts_with(['-', '.'])
         && !path.contains("..")
-        && path.contains(|c: char| c == '.' || c == '/')
+        && path.contains(['.', '/'])
         && path
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '/'))
