@@ -134,7 +134,7 @@ jobs:
           status=${PIPESTATUS[0]}
           set -e
           if [ "$status" -ne 0 ]; then
-            grep -E "^(error|warning)" -A 8 /tmp/clippy.log | head -200 > /tmp/clippy_excerpt.txt || true
+            tail -n 150 /tmp/clippy.log > /tmp/clippy_excerpt.txt || true
             {
               echo "### worker-clippy: salida de cargo clippy (diagnostico temporal)"
               echo "~~~"
