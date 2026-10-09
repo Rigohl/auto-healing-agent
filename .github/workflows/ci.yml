@@ -130,7 +130,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set +e
-          cargo clippy --manifest-path worker/Cargo.toml --all-targets 2>&1 | tee /tmp/clippy.log
+          cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings 2>&1 | tee /tmp/clippy.log
           status=${PIPESTATUS[0]}
           set -e
           if [ "$status" -ne 0 ]; then
