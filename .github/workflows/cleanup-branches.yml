@@ -5,9 +5,6 @@ name: cleanup-branches (superseded)
 # la ejecucion automatica de esa regla. Se dispara manualmente y cada dia.
 
 on:
-  # TEMPORAL (revertido tras la limpieza): disparo unico para borrar las 5
-  # ramas residuales ya fusionadas/superseded. El cron y dispatch quedan igual.
-  push: {}
   workflow_dispatch:
   schedule:
     - cron: "17 4 * * *"
