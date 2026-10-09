@@ -28,7 +28,7 @@ filtra ráfagas en el edge ANTES de tocar el DO. Cambio en wrangler.toml:
 Primero confirmar soporte en workers-rs actual; si no existe binding de
 rate limiter en la versión del crate, mantener la cuota del DO y reevaluar.
 
-### P2 — Alarms del DO en vez de cron horario para retención
+### P2 — Alarms del DO en vez de cron horario para retención — ✅ HECHO (PR #56)
 El monitor barre cada hora aunque no haya actividad (invocaciones gratis,
 pero ruido en logs). Un DO alarm (setAlarm) dispara la retención solo
 cuando hay incidentes vivos, cumpliendo "design around your atom of
@@ -47,7 +47,7 @@ determinista y elimina la única incógnita del reporte.
 Si los RepairCases crecen, KV no es el lugar (1 write/s por clave).
 Registrar payloads grandes en R2 y dejar en KV solo el índice.
 
-### P6 — Limpieza de issues de diagnóstico
+### P6 — Limpieza de issues de diagnóstico — ✅ HECHO (issues de diag cerrados; política actual: 0 issues)
 Los issues #38–#52 son logs automatizados (diag-verify/diag-cleanup) que
 ya no aportan: el snapshot 441705f está OVERALL: PASS. Cerrarlos con un
 comentario de archivo y mantener solo los abiertos recientes.
@@ -57,7 +57,7 @@ comentario de archivo y mantener solo los abiertos recientes.
 Nueva pasada contra developers.cloudflare.com (changelog + docs) tras el
 bump de actions. Estado: nada roto; tres ítems nuevos al backlog.
 
-### P7 — Actualizar compatibility_date (2024-09-23 -> actual)
+### P7 — Actualizar compatibility_date — ✅ HECHO (bump a 2026-02-24)
 El worker usa `compatibility_date = "2024-09-23"` (~2 años). No es un
 bug: los cambios de compat date alteran el runtime, así que el bump debe
 hacerse deliberado y con CI + smoke test de staging en verde. Cambios
@@ -73,7 +73,7 @@ Changelog de Workers: hoy wasm-bindgen trata un panic como estado
 inválido del módulo WASM (el runtime reinicializa). El repo ya maneja
 panics (hook en lib.rs, sin unwrap() en el path de request). La propuesta
 WASM 3.0 permitirá panics recuperables sin reinicialización: reevaluar
-cuando Cloudflare lo soporte en producción (no adelantarse: NO_LLM_POLICY
+cuando Cloudflare lo soporte en producción (no adelantarse: LLM_POLICY
 aplica igual, es solo runtime).
 
 ### P9 — Rules of Durable Objects (guía oficial 2025-12-15)
@@ -95,4 +95,4 @@ incumplimientos conocidos hoy.
 - NO migrar a D1: el estado transaccional por repo encaja en DO SQLite.
 - NO subir max_concurrency de la cola: 1 es intencional (orden estricto
   por incidente y presupuesto de reparación).
-- NO añadir rutas LLM: ver docs/NO_LLM_POLICY.md.
+- NO añadir rutas de generación libre por LLM: el fallback acotado vía Workers AI está regulado por docs/LLM_POLICY.md (decisión del dueño 2026-10-08, PR #122).
