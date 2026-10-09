@@ -111,8 +111,14 @@ fn unsupported_major_version() {
 
 #[test]
 fn idempotency() {
-    let event = sample_event();
-    let key1 = event.idempotency_key();
+    // PART7: el wrapper de evento fue eliminado; la clave canonica ES
+    // compute_idempotency_key (unica fuente de verdad).
+    let key1 = compute_idempotency_key(
+        "Rigohl/auto-healing-agent",
+        "inc-998877",
+        "deliv-12345",
+        "err_build_failed|cargo check|cargo|rust|none",
+    );
     let key2 = compute_idempotency_key(
         "Rigohl/auto-healing-agent",
         "inc-998877",
@@ -299,6 +305,6 @@ fn serialization() {
     };
     assert!(!patch_valid.is_blocked());
 
-    let min_perms = MinimumPermissions::default_required();
-    assert_eq!(min_perms.permissions.len(), 5);
+    // PART7: constructor eliminado (API muerta); MinimumPermissions sigue
+    // siendo contrato serde reexportado y verificado por verify_repo.
 }
