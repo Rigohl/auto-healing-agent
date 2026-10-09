@@ -553,7 +553,12 @@ async fn handle_github_callback(
                             risk: case.action.risk,
                             pr_url: case.pr_url.clone().unwrap_or_default(),
                             correlation_id: correlation_id.clone(),
-                            updated_at_unix: crate::runtime::now_ms() as u64,
+                            // now_ms() devuelve MILISEGUNDOS; el TTL del ledger razona en
+// SEGUNDOS (ledger::unix_seconds). Guardar ms aqui hacia que
+// saturating_sub saturara a 0 en el lookup y el TTL de 30 dias
+// nunca expirara (misma clase de bug de unidades que el review
+// del PR #114, documentada en ledger.rs y circuit.rs).
+updated_at_unix: (crate::runtime::now_ms() / 1000) as u64,
                         };
                         ledger::record_pass(&env, &repo, &case.signature.fingerprint, entry).await;
                     }
