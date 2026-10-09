@@ -45,7 +45,7 @@ use crate::runtime::{
     anti_loop::AntiLoopConfig,
     candidate, circuit, config_store, dashboard, ledger, model, monitor,
     queue_consumer::{self, QueueTask, WebhookPayload},
-    security::{fnv1a64, urlencode, verify_webhook_secret},
+    security::{fnv1a64, urlencode, verify_github_signature, verify_webhook_secret},
     MAX_RISK, MIN_CONFIDENCE,
 };
 
@@ -204,7 +204,22 @@ async fn handle_webhook(State(env): State<Env>, headers: HeaderMap, body: Bytes)
         .get("x-webhook-secret")
         .and_then(|v| v.to_str().ok());
     if !verify_webhook_secret(header, &secret) {
-        return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+        // Camino ADITIVO (PART3 14.1): firma nativa de GitHub
+        // (x-hub-signature-256: sha256=<hex>) con HMAC-SHA-256 puro y
+        // comparacion en tiempo constante. Solo activo si el secret
+        // GITHUB_WEBHOOK_SECRET esta configurado; sin el, el endpoint
+        // permanece cerrado. Los senders actuales (x-webhook-secret)
+        // no cambian en nada.
+        let gh_secret = match env.secret("GITHUB_WEBHOOK_SECRET") {
+            Ok(s) => s.to_string(),
+            Err(_) => String::new(),
+        };
+        let gh_sig = headers
+            .get("x-hub-signature-256")
+            .and_then(|v| v.to_str().ok());
+        if !verify_github_signature(gh_sig, &body, &gh_secret) {
+            return (StatusCode::UNAUTHORIZED, "unauthorized").into_response();
+        }
     }
 
     // 1b. delivery_id real de la entrega (BUG-03): el header
