@@ -1,7 +1,7 @@
 //! Paridad entre los dos generadores de unified diff (docs/DEAD_CODE_AUDIT.md).
 //!
-//! Riesgo documentado: ``repair_pr::diff` (similar, evidencia offline) y
-//! ``repair_operators::diff` (runtime del worker) son dos implementaciones
+//! Riesgo documentado: `repair_pr::diff` (similar, evidencia offline) y
+//! `repair_operators::diff` (runtime del worker) son dos implementaciones
 //! paralelas que pueden divergir en silencio; CI no comparaba sus salidas.
 //! Este test cierra esa brecha: ante las MISMAS entradas before/after, ambos
 //! generadores deben producir diffs equivalentes (mismo header a/b, mismas
@@ -53,10 +53,7 @@ fn assert_equivalent(path: &str, before: &str, after: &str) {
     // Nucleo de la paridad: mismas lineas eliminadas y anadidas, mismo orden.
     let rt_lines = changed_lines(&rt);
     let off_lines = changed_lines(&off);
-    assert_eq!(
-        rt_lines, off_lines,
-        "los generadores de diff divergieron para {path}"
-    );
+    assert_eq!(rt_lines, off_lines, "los generadores divergieron en {path}");
 }
 
 #[test]
