@@ -195,11 +195,7 @@ pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
     }
     let mut ipad = [0x36u8; 64];
     let mut opad = [0x5cu8; 64];
-    for ((ip, op), k) in ipad
-        .iter_mut()
-        .zip(opad.iter_mut())
-        .zip(block_key.iter())
-    {
+    for ((ip, op), k) in ipad.iter_mut().zip(opad.iter_mut()).zip(block_key.iter()) {
         *ip ^= *k;
         *op ^= *k;
     }
@@ -243,12 +239,11 @@ pub fn verify_github_signature(header: Option<&str>, body: &[u8], secret: &str) 
     constant_time_eq(signature.as_bytes(), expected.as_bytes())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-#[test]
+    #[test]
     fn sha256_fips_vectors() {
         // FIPS 180-4: vacio, "abc" y el vector clasico de dos bloques.
         assert_eq!(
@@ -314,7 +309,6 @@ mod tests {
         assert!(!verify_github_signature(None, body, secret));
         assert!(!verify_github_signature(Some(&good), body, ""));
     }
-
 
     #[test]
     fn constant_time_eq_matches_and_differs() {
