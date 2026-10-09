@@ -9,11 +9,11 @@
 //! empty-fail-closed ante contenido identico. Si alguien cambia un solo
 //! lado, este test se pone rojo ANTES de que el divergence llegue a produccion.
 
-use repair_operators::FileEdit;
+use repair_operators::diff::{unified_diff, FileEdit};
 use repair_pr::diff::{bundle_is_empty, unified_diff_file, FileChange};
 
 fn runtime_diff(path: &str, before: &str, after: &str) -> String {
-    repair_operators::unified_diff(&FileEdit {
+    unified_diff(&FileEdit {
         path: path.to_string(),
         before: before.to_string(),
         after: after.to_string(),
@@ -46,7 +46,8 @@ fn assert_equivalent(path: &str, before: &str, after: &str) {
 
     // Ambos referencian el mismo archivo con headers a/ b/.
     for d in [&rt, &off] {
-        assert!(d.contains(&format!("--- a/{path}")), "header a/ falta: {d}");
+        assert!(d.contains(&format!("--- a/{path}")), "header a/ falta: {d}"
+);
         assert!(d.contains(&format!("+++ b/{path}")), "header b/ falta: {d}");
     }
 
