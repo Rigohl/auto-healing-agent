@@ -6,7 +6,7 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 |---|----------|----------------------|--------------|---------|-------------|
 | 1 | Dims FeatureVector | 16 / 907 pesos | **64 / 2863** | Repo gana | PROMPT_PAD regla 2 |
 | 2 | Node / package.json | Implícito | No existe | Rust-only | legacy archivado (eliminado del repo 2026-10-05) |
-| 3 | Path LLM / híbrido | HYBRID_POLICY | No existe | Descartado | Rust-only |
+| 3 | Path LLM / híbrido | HYBRID_POLICY | Sí: `worker/src/worker/llm_fallback.rs` (fallback acotado vía Workers AI) | Reabierto por decisión del dueño (2026-10-08, PR #122) | Salida validada contra operadores deterministas; ver docs/LLM_POLICY.md |
 | 4 | tests/ dir | Propuesto | Inline | Mantener inline | |
 | 5 | Scripts train/export | Propuestos | Diferir | Hasta pesos reales |
 | 6 | model/README | Propuesto | Diferir | FASE 5 |
@@ -16,7 +16,7 @@ Regla: cada ítem tiene decisión. Sin decisión documentada → bloqueante.
 | 10 | MongoDB Rust | Diseñado | Sin driver | Diferido |
 | 11 | Umbrales conf/risk | (sin nº) | **0.55 / 0.45** | Repo gana | GOVERNANCE.md |
 | 12 | Operadores | 5 | 13 (0–12) | Repo gana | |
-| 13 | should_fallback_to_llm | Mencionado | No | No reintroducir |
+| 13 | should_fallback_to_llm | Mencionado | Sí: `llm_fallback.rs` activo como fallback acotado | Reabierto por decisión del dueño (2026-10-08, PR #122) |
 | 14 | Notion duplicadas | 2 páginas | Conservar canónica | |
 | 15 | Estado Notion | 16-dim/híbrido | Actualizar Notion | |
 | 16 | Ramas residuales | Varias | Unificar → main | Borrar tras merge |
