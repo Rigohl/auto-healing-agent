@@ -485,7 +485,7 @@ mod tests {
 
     #[test]
     fn repair_strips_markdown_fences() {
-        let fenced = "```json\n{\"operator\": 1, \"parameters\": {}, \"confidence\": 0.8, \"risk\": 0.2}\n```";
+        let fenced = "```json\n{\"operator\": 1}\n```";
         let repaired = repair_candidate_json(fenced).expect("fence reparable");
         assert!(!repaired.contains("```"));
         assert!(serde_json::from_str::<serde_json::Value>(&repaired).is_ok());
@@ -493,8 +493,8 @@ mod tests {
 
     #[test]
     fn repair_removes_trailing_commas() {
-        let trailing = "{\"operator\": 1, \"parameters\": {}, \"confidence\": 0.8, \"risk\": 0.2,}";
-        let repaired = repair_candidate_json(trailing).expect("coma colgante reparable");
+        let trailing = "{\"operator\": 1,}";
+        let repaired = repair_candidate_json(trailing).expect("coma colgante");
         assert!(serde_json::from_str::<serde_json::Value>(&repaired).is_ok());
     }
 
@@ -516,7 +516,7 @@ mod tests {
     #[test]
     fn action_salvada_por_el_pase_agentjson() {
         // Strict-parse falla (fence + coma colgante); el pase la rescata.
-        let inner = "```json\n{\"operator\": 1, \"parameters\": {}, \"confidence\": 0.8, \"risk\": 0.2,}\n```";
+        let inner = "```json\n{\"operator\": 1, \"confidence\": 0.8, \"risk\": 0.2,}\n```";
         let wrapped = format!("{{\"response\": {}}}", serde_json::json!(inner));
         let action = action_from_response_body(&wrapped).expect("rescatada");
         assert_eq!(action.repair_operator, OperatorId::DependencyRepair);
