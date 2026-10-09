@@ -199,6 +199,34 @@ El protocolo **NO se cambió**: `x-webhook-secret` con secreto compartido. Lo qu
 
 La evaluación y esta decisión quedan registradas aquí; cualquier cambio de protocolo requiere justificar el impacto en todos los senders.
 
+### 14.1 HMAC nativo de GitHub (aditivo, 2026-10-09)
+
+La sección 14 dejó la firma nativa de GitHub como endurecimiento futuro
+P1, condicionado a justificar el impacto en senders. Esta subsección
+registra esa decisión y su implementación.
+
+- Header: `x-hub-signature-256: sha256=<hex>` (hex en minúsculas;
+  se normalizan mayúsculas por tolerancia).
+- Implementación: HMAC-SHA-256 puro en `worker/src/worker/security.rs`
+  (SHA-256 incremental FIPS 180-4; ipad 0x36 / opad 0x5c; clave >64
+  bytes se hashea antes). Sin dependencias nuevas, sin unwrap().
+- Verificación: `verify_github_signature(header, body, secret)`,
+  fail-closed (secret vacío, prefijo incorrecto o longitud inválida
+  -> rechazo) con comparación en tiempo constante del digest.
+- Tests: vectores oficiales SHA-256 (FIPS 180-4) y RFC 4231 (TC1, TC2,
+  TC3, TC7) más casos de aceptación/rechazo del header de GitHub.
+- Activación: SOLO con `wrangler secret put GITHUB_WEBHOOK_SECRET`.
+  Sin ese secret el endpoint permanece exactamente como hoy.
+
+Impacto en senders: NINGUNO. El camino es aditivo y solo se evalúa
+cuando `x-webhook-secret` NO valida. Los senders actuales
+(deploy.yml, Actions, smoke test) no cambian ni un byte. Si ningún
+sender usa HMAC, el comportamiento es idéntico al anterior. El
+endpoint `/github/callback` conserva su scope mínimo: solo
+`x-webhook-secret`, sin HMAC. Fail-closed preservado en todos los
+caminos; VERIFY = GitHub Actions no cambia.
+
+
 ## 15. Rollback del modelo
 
 Registro en `MODEL_KV`: `model/current`, `model/stable`, `model/rollback`.
