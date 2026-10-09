@@ -13,7 +13,8 @@
 | crates/repair_pr (CLI repair-pr) | repair-validation.yml ejecuta repair-pr diff sobre un fixture en cada PR | Con uso desde 2026-10-08: puente de evidencia verificado en CI; el camino de produccion sigue siendo github_client.rs |
 | crates/repair_train (CLI repair-train) | regression.yml (job trainer-canary, semanal) entrena V1 y valida el payload (umbral 90%); promote-model.yml con retrain=true re-entrena, y con export_examples=true ademas aprende de los TrainingExample reales exportados de REPAIR_CASES_KV | Con uso desde 2026-10-08: eslabon visible de la destilacion + loop de aprendizaje real; promover el payload a KV sigue siendo accion humana |
 | repair_types::TrainingExample | queue_consumer::persist_case congela las features en training_example:{id} (REPAIR_CASES_KV); /github/callback marca verified/reward con la senal REAL de Actions; repair-train --examples entrena con ellos (promote-model.yml export_examples) | Con uso desde 2026-10-08 (loop de aprendizaje PART4 cerrado). Antes era contrato sin consumidores (DISCREPANCIES item 74) |
-| repair_types::contract::CandidatePatch, OutboundPRRequest, VerifiedResult, DuplicateResponse, GitHubEventType, MinimumPermissions, get_error_policy | repair_pr (verificado en CI) + tests de contrato (tests/contract/mod.rs). El Worker usa compute_idempotency_key e IDEMPOTENCY_TTL_SECONDS; la regla de evidencia de VerifiedResult se aplica en /github/callback (PASS sin evidencia => 400) | Contrato GitHub-Cloudflare v1 (CONTRACT.md) con uso creciente. Mantener |
+| rep
+air_types::contract::CandidatePatch, OutboundPRRequest, VerifiedResult, DuplicateResponse, GitHubEventType, MinimumPermissions, get_error_policy | repair_pr (verificado en CI) + tests de contrato (tests/contract/mod.rs). El Worker usa compute_idempotency_key e IDEMPOTENCY_TTL_SECONDS; la regla de evidencia de VerifiedResult se aplica en /github/callback (PASS sin evidencia => 400) | Contrato GitHub-Cloudflare v1 (CONTRACT.md) con uso creciente. Mantener |
 | model/current.json, model/stable.json, model/schema.json | Ninguno (weights: null; el payload real es model/current.txt -> KV model/current) | Placeholders de metadata documentados (README). Mantener como metadatos o eliminar |
 | Doble CandidatePatch | repair_operators::CandidatePatch (runtime) vs repair_types::contract::CandidatePatch (contrato) | Duplicacion de nombre con roles distintos: riesgo de confusion; documentado aqui |
 | Doble generador de diff | repair_operators::diff (worker, package.json) vs repair_pr::diff (similar, generico) | Divergencia posible: el runtime usa el primero; el CLI es evidencia offline |
@@ -29,7 +30,8 @@ codigo del worker importa RepairModel/JsRepairAction. Desde el 2026-10-08
 (toma la opcion b de esta auditoria) la superficie publica JS es un
 producto REAL y verificado: tests/js_boundary.rs ejerce weightCount,
 featureDim, predictFromFeatures y operator_name bajo Node (wasm-pack
-test --node, job node-boundary de wasm.yml), ademas del payload_check
+test --node, jo
+b node-boundary de wasm.yml), ademas del payload_check
 nativo que valida model/current.txt antes de cada promote. Un consumidor
 JS externo (dashboard embebido, herramientas de terceros) tiene hoy una
 frontera estable y testeada.
@@ -67,7 +69,8 @@ persist_case (worker) congela las features del momento de la reparacion
 en training_example:{correlation_id} porque el RepairCase NO guarda el
 Incidente completo y las features no son reconstruibles despues.
 /github/callback marca verified/reward con la senal REAL de Actions (un
-PASS sin evidencia se rechaza 400: regla VerifiedResult). promote-model.yml
+PASS sin evid
+encia se rechaza 400: regla VerifiedResult). promote-model.yml
 con retrain + export_examples exporta el JSONL y repair-train --examples
 mezcla esa senal con el sintetico usando el MISMO nucleo SGD (sin caminos
 paralelos). Solo la senal verificada positiva entrena: un caso FAIL o
@@ -101,7 +104,8 @@ real de produccion (misma regla de siempre: no se borra, se cablea):
   `repair_train::evaluate` reporta accuracy POR CATEGORIA y el CLI la
   imprime antes del promote (un 90% global puede esconder una categoria
   al 50%).
-- El modo `repair-pr pr` se verifica fail-closed en CI (guarda de rama
+- El modo `repair-pr pr` se verifica fail-closed en CI
+ (guarda de rama
   no efimera, sin git/red/token): repair-validation.yml.
 
 
@@ -136,9 +140,28 @@ consultan `model/stable`) pero NADIE lo escribia nunca. Era una feature
 futura: si current fallaba, stable no existia y el worker caia a BLOCKED.
 - `promote-model.yml` gana el input `promote_stable` (humano, opt-in):
   promueve el current PREVIO (el que ya sirvio produccion, validado a
-  2863 tokens) a `MODEL_KV:model/stable`. Nunca el payload nuevo:
+  2863 tokens) a `MODEL_KV:model/stable`. Nunca el payl
+oad nuevo:
   subir el mismo payload a current y stable anulaba el fallback (BUG-07).
 - `model/stable.json` deja de describirse como placeholder: es el
   registro auditable del checkpoint (version "none" hasta la primera
   promocion real, por honestidad).
 - INVENTORY.md e INDEX.md actualizados en la misma linea.
+
+## 9. Paridad de diffs PART9 (2026-10-09): el riesgo de divergencia se cierra en CI
+
+El "Riesgo" de la seccion 2 (dos implementaciones paralelas de diff que
+pueden divergir en silencio, sin comparacion en CI) deja de ser riesgo:
+- Nuevo test de integracion `crates/repair_pr/tests/diff_parity.rs`
+  (dev-dependency `repair_operators` en repair_pr): ante las MISMAS
+  entradas before/after, `repair_operators::unified_diff` (runtime) y
+  `repair_pr::diff::unified_diff_file` (similar, evidencia offline)
+  deben producir diffs equivalentes (mismo header a/ b/, mismas lineas
+  -/+ en el mismo orden) y ambos deben ser empty-fail-closed ante
+  contenido identico.
+- Corre dentro de `cargo test --workspace` (repair-validation.yml y
+  ci.yml): cualquier cambio en un solo lado pone CI en rojo antes de
+  que la divergencia llegue a produccion. No se borra nada: se cablea
+  (regla del repo).
+- La recomendacion de la seccion 2 queda cumplida: repair-pr diff sigue
+  como verificacion de CI y ahora ademas se compara contra el runtime.
