@@ -1,0 +1,29 @@
+name: cleanup-now
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete non-main branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          gh auth setup-git
+          for ref in $(git ls-remote --heads https://github.com/Rigohl/auto-healing-agent.git | cut -f2 | sed "s#refs/heads/##"); do
+            if [ "$ref" != "main" ]; then
+              echo "deleting branch: $ref"
+              gh api -X DELETE repos/Rigohl/auto-healing-agent/git/refs/heads/"$ref" || true
+            fi
+          done
+      - name: Delete this workflow (self-destruct)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          SHA=$(gh api repos/Rigohl/auto-healing-agent/contents/.github/workflows/cleanup-now.yml --jq .sha)
+          gh api -X DELETE repos/Rigohl/auto-healing-agent/contents/.github/workflows/cleanup-now.yml -f message="chore: remove cleanup-now" -f sha="$SHA"
