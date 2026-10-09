@@ -113,38 +113,12 @@ jobs:
 
   worker-clippy:
     runs-on: ubuntu-latest
-    # DIAGNOSTICO TEMPORAL (se revierte antes del merge): al fallar, el job
-    # publica su salida de clippy como comentario del PR para que el error
-    # sea auditable sin acceso a los logs de Actions.
-    permissions:
-      contents: read
-      pull-requests: write
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - name: clippy (warnings son errores)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set +e
-          cargo clippy --manifest-path worker/Cargo.toml --all-targets 2>&1 | tee /tmp/clippy.log
-          status=${PIPESTATUS[0]}
-          set -e
-          if [ "$status" -ne 0 ]; then
-            {
-              echo "### worker-clippy: salida de cargo clippy (diagnostico)"
-              echo '~~~'
-              grep -E "^(error|warning)" -A 8 /tmp/clippy.log | head -160
-              echo '~~~'
-            } > /tmp/clippy_comment.md
-            if [ -n "$PR_NUMBER" ]; then
-              gh pr comment "$PR_NUMBER" --body-file /tmp/clippy_comment.md || true
-            fi
-            exit 1
-          fi
+      - run: cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings
 
   # ---------------- guard de configuracion (wrangler.toml) ----------------
   # Ningun job validaba wrangler.toml: solo wrangler lo parsea, en el momento
