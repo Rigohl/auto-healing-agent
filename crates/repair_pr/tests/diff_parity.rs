@@ -46,8 +46,7 @@ fn assert_equivalent(path: &str, before: &str, after: &str) {
 
     // Ambos referencian el mismo archivo con headers a/ b/.
     for d in [&rt, &off] {
-        assert!(d.contains(&format!("--- a/{path}")), "header a/ falta: {d}"
-);
+        assert!(d.contains(&format!("--- a/{path}")), "header a/ falta: {d}");
         assert!(d.contains(&format!("+++ b/{path}")), "header b/ falta: {d}");
     }
 
