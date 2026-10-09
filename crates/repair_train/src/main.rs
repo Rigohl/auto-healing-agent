@@ -144,5 +144,6 @@ fn main() {
 fn print_usage() {
     eprintln!("uso: repair-train [--out <ruta>] [--examples <training_examples.jsonl>]");
     eprintln!("  entrena con la config V1 y escribe el payload KV (WEIGHT_COUNT f32 en texto)");
-    eprintln!("  --examples: mezcla casos reales verificados (export de REPAIR_CASES_KV) con el sintetico");
+    eprintln!("  --examples: mezcla casos reales verificados (export de REPAIR_CASES_KV)");
+    eprintln!("    con el dataset sintetico");
 }
