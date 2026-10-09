@@ -62,21 +62,19 @@ put_secret() {
 }
 
 echo ">> Subiendo secrets (solo los que tengas en env)"
-# El núcleo es Rust/WASM sin LLM. No se aprovisiona HF_TOKEN / HF_MODEL /
-# HF_BASE_URL: la ruta HuggingFace V0 (legacy/) fue eliminada del repo
-# el 2026-10-05 por decisión del dueño
-# (ver docs/NO_LLM_POLICY.md y DISCREPANCIES.md ítems 3 y 13).
-# MongoDB sigue sin driver en código (ítem 10): el secret se puede preparar,
-# pero su presencia no implica integración.
-put_secret MONGODB_URI "${MONGODB_URI:-}"
-put_secret EXA_API_KEY "${EXA_API_KEY:-}"
-put_secret LINEAR_API_KEY "${LINEAR_API_KEY:-}"
-put_secret VERCEL_TOKEN "${VERCEL_TOKEN:-}"
-# Sin valores por defecto: un org/project id embebido se subiría aunque nadie
-# lo exportara. Se conserva solo lo que el operador define explícitamente.
-put_secret VERCEL_ORG_ID "${VERCEL_ORG_ID:-}"
-put_secret VERCEL_PROJECT_ID "${VERCEL_PROJECT_ID:-}"
-put_secret GH_PAT "${GH_PAT:-}"
+# Alineado 2026-10-09 con los secrets que ESTE repo consume de verdad (grep
+# de secrets.* en .github/workflows/): CLOUDFLARE_ACCOUNT_ID y
+# CLOUDFLARE_API_TOKEN (deploy.yml, deploy-staging.yml), GITHUB_TOKEN y
+# WEBHOOK_SECRET (deploy.yml smoke test). Se ELIMINAN los que venian de
+# otro proyecto y ningun workflow usa: MONGODB_URI, EXA_API_KEY,
+# LINEAR_API_KEY, VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID, GH_PAT
+# (la ruta HuggingFace V0 ya fue eliminada el 2026-10-05, ver
+# docs/LLM_POLICY.md y DISCREPANCIES.md items 3 y 13).
+# Sin valores por defecto: un id embebido se subiria aunque nadie lo
+# exportara. Se sube solo lo que el operador define explicitamente.
+put_secret CLOUDFLARE_API_TOKEN "${CLOUDFLARE_API_TOKEN:-}"
+put_secret CLOUDFLARE_ACCOUNT_ID "${CLOUDFLARE_ACCOUNT_ID:-}"
+put_secret GITHUB_TOKEN "${GITHUB_TOKEN:-}"
 put_secret WEBHOOK_SECRET "${WEBHOOK_SECRET:-}"
 
 echo ">> Listo. Revisa: https://github.com/$OWNER/$REPO/settings/secrets/actions"
