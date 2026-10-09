@@ -94,7 +94,6 @@ impl RepairEvent {
         }
         Ok(())
     }
-
 }
 
 /// Compute canonical idempotency key using FNV-1a 64-bit hash.
@@ -323,10 +322,10 @@ pub struct MinimumPermissions {
     pub permissions: Vec<GitHubPermission>,
 }
 
-/// PART7: MinimumPermissions es un contrato de DATOS (serde); su constructor
-/// (eliminado en PART7, API muerta en produccion) no tenia consumidor. La
-/// lista canonica de permisos minimos vive en docs/CONTRACT.md y el struct
-/// sigue reexportado (CONTRACT_REEXPORTS de verify_repo.py).
+// PART7: MinimumPermissions es un contrato de DATOS (serde); su constructor
+// (eliminado en PART7, API muerta en produccion) no tenia consumidor. La
+// lista canonica de permisos minimos vive en docs/CONTRACT.md y el struct
+// sigue reexportado (CONTRACT_REEXPORTS de verify_repo.py).
 
 /// Contract Errors.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
