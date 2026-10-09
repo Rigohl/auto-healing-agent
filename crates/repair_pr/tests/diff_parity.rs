@@ -10,7 +10,7 @@
 //! lado, este test se pone rojo ANTES de que el divergence llegue a produccion.
 
 use repair_operators::diff::{FileEdit, unified_diff};
-use repair_pr::diff::{bundle_is_empty, unified_diff_file, FileChange};
+use repair_pr::diff::{FileChange, bundle_is_empty, unified_diff_file};
 
 fn runtime_diff(path: &str, before: &str, after: &str) -> String {
     unified_diff(&FileEdit {

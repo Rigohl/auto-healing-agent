@@ -418,7 +418,7 @@ mod tests {
     #[test]
     fn action_from_wrapped_response() {
         let inner = "{\"operator\": 1, \"parameters\": {}, \"confidence\": 0.8, \"risk\": 0.2}";
-        let plain = format!("{{\"response\": \"{inner}\"}}");
+        let plain = serde_json::json!({ "response": inner }).to_string();
         let action = action_from_response_body(&plain).expect("accion valida");
         assert_eq!(action.node_id, "llm:fallback");
         assert_eq!(action.repair_operator, OperatorId::DependencyRepair);
