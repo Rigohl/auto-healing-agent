@@ -66,7 +66,7 @@ docs/
 - `crates/` — 6 miembros: types, feature_engine, nn_core, nn_wasm, operators, train.
 - `worker/` — runtime PART3 async (webhook fail-closed → DO → Queue → consumidor), **fuera** del workspace Cargo (paquete CF aparte,
   se compila con wrangler).
-- `model/` — `current.txt` = payload KV real (2863 `f32`, pesos V1). `current.json` y `stable.json` siguen como placeholders de metadata (`weights: null`, nadie los consume).
+- `model/` — `current.txt` = payload KV real (2863 `f32`, pesos V1). `current.json` = metadata real del entrenamiento; `stable.json` = registro auditable del checkpoint stable, con mecanismo de promocion REAL desde PART8 (input `promote_stable` de promote-model.yml; antes el fallback `current -> stable` era teorico: nada escribia `model/stable`).
 - `legacy/` — eliminado del repo el 2026-10-05 por decisión explícita del dueño (era archivo V0 no ejecutable; ver DISCREPANCIES ítem 50).
 - `FeatureVector::DIM = 64`, `WEIGHT_COUNT = 2863`, gate `0.55 / 0.45`,
   `OperatorId` 0–12 (`OPERATOR_COUNT = 13`).
@@ -151,8 +151,9 @@ T3
 - **No promovido**: `MODEL_KV` sigue sin las claves `model/current`/
   `model/stable` → el Worker responde `blocked_no_model`. Promoción =
   acción humana; nada se declara PASS sin GitHub Actions.
-- Los placeholders `current.json`/`stable.json` se conservan (metadata, nadie
-  los consume).
+- `current.json` (metadata real del entrenamiento) y `stable.json` (registro
+  auditable del stable) se conservan; el worker carga pesos desde `MODEL_KV`,
+  nunca desde JSON.
 
 ## Actualización 2026-10-03 (docs sync tras auditoría doc↔código)
 
@@ -273,9 +274,10 @@ Consistency/Security/Branch cleanup SUCCESS, 0 issues abiertos, solo `main`).
   técnico: `compat_date = 2024-09-23` (P7, bump acompañado de prueba de
   regresión).
 - **`model/`**: `current.txt` = payload KV real (2863 f32);
-  `current.json`/`stable.json` siguen como placeholders de metadata
-  **intencionales** (nadie los consume; el worker carga `model/current`
-  desde `MODEL_KV`, no desde JSON).
+  `current.json` = metadata real del entrenamiento; `stable.json` = registro
+  auditable con mecanismo de promocion real desde PART8 (input `promote_stable`:
+  el current previo validado pasa a `MODEL_KV:model/stable`). El worker carga
+  pesos desde `MODEL_KV`, no desde JSON.
 - **`docs/`** (29 .md + prompts/) y **`.github/workflows/`** (11, todos
   `checkout@v5`): sin corrupción residual; `verify_repo.py` 50 claims en
   verde.
@@ -300,5 +302,5 @@ Consistency/Security/Branch cleanup SUCCESS, 0 issues abiertos, solo `main`).
   de `RepairCase` en `repair_types` (ya tiene consumidor real, no es contrato huérfano).
 - Dead code restante, todo documentado y deliberado: `repair_pr` (superseded, CLI),
   `repair_nn_wasm` (adaptador wasm-bindgen sin consumidor en runtime, se compila en CI),
-  `model/current.json`/`stable.json` (placeholders de metadata), tipos de contrato
+  `model/current.json`/`stable.json` (registros auditables, no payload), tipos de contrato
   `RepairEvent`/`OutboundPRRequest` en `contract.rs` (contrato versionado P1, ítem 74).

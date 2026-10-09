@@ -43,6 +43,11 @@ on:
         required: false
         default: false
         type: boolean
+      promote_stable:
+        description: "Ademas promocionar el current PREVIO (validado) a model/stable: el fallback current->stable del worker deja de ser teorico"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: promote-model-kv
@@ -136,6 +141,31 @@ jobs:
             fi
           else
             echo "model/current inexistente (primer promote): nada que respaldar"
+          fi
+
+      # PART8 (sin features futuras): el fallback current -> stable -> BLOCKED
+      # del worker era teorico: nada escribia model/stable. Con este paso, el
+      # current PREVIO (el que ya sirvio produccion real) se promueve a
+      # stable bajo decision humana. Nunca el payload nuevo: subir el mismo
+      # payload a current y stable anulaba el fallback (BUG-07).
+      - name: Promocionar current previo -> model/stable (opcional)
+        if: ${{ inputs.promote_stable }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NS: ${{ inputs.kv_namespace_id }}
+        run: |
+          set -euo pipefail
+          if [ -s /tmp/current-payload ]; then
+            n=$(wc -w < /tmp/current-payload)
+            if [ "$n" -ne 2863 ]; then
+              echo "::error::el current previo tiene $n tokens, se esperan 2863"
+              exit 1
+            fi
+            npx wrangler@4 kv key put "model/stable" --namespace-id "$NS" --path /tmp/current-payload
+            echo "model/stable = current previo (fallback real del worker)"
+          else
+            echo "sin current previo: nada que promover a stable"
           fi
 
       - name: Subir payload

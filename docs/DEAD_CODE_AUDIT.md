@@ -126,3 +126,19 @@ repurpose no-contradictorio:
   FileEdit del gate): abstracciones distintas, ambos con uso real.
 - `repair_nn_wasm` (exports JS): frontera WASM testeada por diseño
   (js_boundary + payload_check); se mantiene.
+
+## 8. Fallback estable PART8 (2026-10-08): model/stable deja de ser teorico
+
+El analisis "todo archivo de codigo se debe usar, sin futures" encontro el
+ultimo elemento muerto-en-la-practica del arbol: el fallback
+`current -> stable -> BLOCKED` de model.rs era LEGIBLE (report/health
+consultan `model/stable`) pero NADIE lo escribia nunca. Era una feature
+futura: si current fallaba, stable no existia y el worker caia a BLOCKED.
+- `promote-model.yml` gana el input `promote_stable` (humano, opt-in):
+  promueve el current PREVIO (el que ya sirvio produccion, validado a
+  2863 tokens) a `MODEL_KV:model/stable`. Nunca el payload nuevo:
+  subir el mismo payload a current y stable anulaba el fallback (BUG-07).
+- `model/stable.json` deja de describirse como placeholder: es el
+  registro auditable del checkpoint (version "none" hasta la primera
+  promocion real, por honestidad).
+- INVENTORY.md e INDEX.md actualizados en la misma linea.
