@@ -130,16 +130,16 @@ impl Sha256 {
         }
         self.update(&bits.to_be_bytes());
         let mut out = [0u8; 32];
-        for (word, bytes) in self.state.iter().zip(out.chunks_exact_mut(4)) {
-            bytes.copy_from_slice(&word.to_be_bytes());
+        for (word, chunk) in self.state.iter().zip(out.as_chunks_mut::<4>().0) {
+            chunk.copy_from_slice(&word.to_be_bytes());
         }
         out
     }
 
     fn compress(&mut self, block: &[u8; 64]) {
         let mut w = [0u32; 64];
-        for (i, chunk) in block.chunks_exact(4).enumerate() {
-            w[i] = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        for (slot, chunk) in w.iter_mut().zip(block.as_chunks::<4>().0) {
+            *slot = u32::from_be_bytes(chunk);
         }
         // Expansion del mensaje (FIPS 180-4 6.2.2). Bucle while a proposito:
         // la expansion es secuencial (w[i] depende de w[i-2]..w[i-16]) y no
