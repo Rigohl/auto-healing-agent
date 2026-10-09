@@ -1,5 +1,5 @@
 {
   "version": "none",
   "weights": null,
-  "note": "Sin checkpoint STABLE promovido todavia. Pipeline real: current.txt V1 -> promote-model.yml (humano) -> MODEL_KV model/current; tras E2E verde se promueve model/stable. Registro auditable, no payload: el worker nunca lee este archivo."
+  "note": "Sin checkpoint STABLE promovido todavia (version sigue en none hasta la primera promocion real). Mecanismo REAL desde PART8 (2026-10-08): el input promote_stable de .github/workflows/promote-model.yml promociona el current PREVIO (validado, 2863 tokens) a MODEL_KV:model/stable, con lo que el fallback current -> stable -> BLOCKED del worker deja de ser teorico. Registro auditable, no payload: el worker nunca lee este archivo."
 }
