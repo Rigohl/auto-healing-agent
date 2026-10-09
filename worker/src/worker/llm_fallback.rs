@@ -45,7 +45,6 @@ pub const VAR_COST_PER_CALL: &str = "LLM_COST_PER_CALL";
 /// Verificar contra el catalogo vigente: los modelos grandes (GLM/Kimi/
 /// DeepSeek-Pro) ya requieren plan pagado desde 2026-07.
 pub const DEFAULT_MODEL: &str = "@cf/meta/llama-3.2-3b-instruct";
-
 /// Tope conservador: deja margen sobre las 10.000 Neurons gratis/dia.
 pub const DEFAULT_DAILY_BUDGET: i64 = 8_000;
 /// Estimacion conservadora por llamada (Neurons) del modelo pequeno.
@@ -66,8 +65,7 @@ pub async fn propose(
         return None;
     }
     if !reserve_budget(env).await {
-        console_warn!("llm budget exhausted: fail-closed, escalando a humano")
-;
+        console_warn!("llm budget exhausted: fail-closed, escalando a humano");
         return None;
     }
     let model = env
@@ -132,8 +130,7 @@ async fn reserve_budget(env: &Env) -> bool {
         Ok(serialized) => match kv.put(KEY_BUDGET, serialized) {
             Ok(builder) => builder.execute().await.is_ok(),
             Err(_) => false,
-       
- },
+        },
         Err(_) => false,
     }
 }
@@ -185,8 +182,7 @@ pub fn build_prompt(
         incident.command,
         incident.message,
         incident.stack_hint,
-        incident.language_h
-int,
+        incident.language_hint,
         incident.framework_hint,
         signature.fingerprint
     );
@@ -213,15 +209,15 @@ pub fn extract_json_object(raw: &str) -> Option<&str> {
 /// (realsigridjin/agentjson): los modelos pequenos envuelven el JSON en
 /// fences de markdown, prosa y comas colgantes. Este pase NUNCA inventa
 /// contenido: solo elimina ruido sintactico observable (fences, comas
-/// antes de } o ]). El gate final (operadores permitidos + clamp01
-/// finito + fail-closed) queda intacto: reparar sintaxis jamas valida
-/// semantica. None = irreparable => escalacion humana.
+/// antes de } o ]). El gate final (operadores permitidos + clamp01)
+/// queda intacto: reparar sintaxis jamas valida semantica. None =
+/// irreparable => escalacion humana.
 pub fn repair_candidate_json(candidate: &str) -> Option<String> {
-    // a) Quitar fences de markdown: json ... fence -> contenido.
+    // a) Quitar fences de markdown: json-fence ... fence -> contenido.
     let mut text = candidate.trim().to_string();
     if text.starts_with("```") {
         let after_first = &text[3..];
-        // Descartar la etiqueta de lenguaje (json, JSON, etc.) hasta el newline.
+        // Descartar la etiqueta de lenguaje hasta el newline.
         let body = match after_first.find('\n') {
             Some(i) => &after_first[i + 1..],
             None => after_first,
@@ -241,10 +237,16 @@ pub fn repair_candidate_json(candidate: &str) -> Option<String> {
     let mut end = None;
     for (i, &b) in bytes.iter().enumerate().skip(start) {
         let c = b as char;
-        if escape { escape = false; continue; }
+        if escape {
+            escape = false;
+            continue;
+        }
         if in_string {
-            if c == '\\' { escape = true; }
-            else if c == '"' { in_string = false; }
+            if c == '\\' {
+                escape = true;
+            } else if c == '"' {
+                in_string = false;
+            }
             continue;
         }
         match c {
@@ -252,7 +254,10 @@ pub fn repair_candidate_json(candidate: &str) -> Option<String> {
             '{' => depth += 1,
             '}' => {
                 depth -= 1;
-                if depth == 0 { end = Some(i); break; }
+                if depth == 0 {
+                    end = Some(i);
+                    break;
+                }
             }
             _ => {}
         }
@@ -267,21 +272,36 @@ pub fn repair_candidate_json(candidate: &str) -> Option<String> {
     let mut i = 0;
     while i < chars.len() {
         let c = chars[i];
-        if escape { escape = false; cleaned.push(c); i += 1; continue; }
-        if in_string {
-            if c == '\\' { escape = true; }
-            else if c == '"' { in_string = false; }
+        if escape {
+            escape = false;
             cleaned.push(c);
             i += 1;
             continue;
         }
-        if c == '"' { in_string = true; cleaned.push(c); i += 1; continue; }
+        if in_string {
+            if c == '\\' {
+                escape = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            cleaned.push(c);
+            i += 1;
+            continue;
+        }
+        if c == '"' {
+            in_string = true;
+            cleaned.push(c);
+            i += 1;
+            continue;
+        }
         if c == ',' {
             // Primer char no-espacio despues de la coma.
             let mut j = i + 1;
-            while j < chars.len() && chars[j].is_whitespace() { j += 1; }
+            while j < chars.len() && chars[j].is_whitespace() {
+                j += 1;
+            }
             if j < chars.len() && (chars[j] == '}' || chars[j] == ']') {
-                // Coma colgante: omitirla (y sus espacios).
+                // Coma colgante: omitirla junto con sus espacios.
                 i = j;
                 continue;
             }
@@ -289,8 +309,20 @@ pub fn repair_candidate_json(candidate: &str) -> Option<String> {
         cleaned.push(c);
         i += 1;
     }
-    if cleaned.trim().is_empty() { return None; }
+    if cleaned.trim().is_empty() {
+        return None;
+    }
     Some(cleaned)
+}
+
+/// Strict-parse primero (cero coste); solo si falla, un unico pase de
+/// reparacion de sintaxis. Si tampoco parsea: None, fail-closed.
+fn parse_proposal(json: &str) -> Option<Proposal> {
+    if let Ok(strict) = serde_json::from_str::<Proposal>(json) {
+        return Some(strict);
+    }
+    let fixed = repair_candidate_json(json)?;
+    serde_json::from_str::<Proposal>(&fixed).ok()
 }
 
 /// Salida del modelo -> RepairAction validada. Operador no accionable o
@@ -303,15 +335,7 @@ pub fn action_from_response_body(body: &str) -> Option<RepairAction> {
         .and_then(|v| v.as_str())
         .unwrap_or(body);
     let json = extract_json_object(candidate)?;
-    // Strict-parse primero (cero coste). Solo si falla, el pase agentjson
-    // (reparar sintaxis observable, nunca inventar contenido). Si tampoco
-    // parsea: None, fail-closed, escalacion humana.
-    let proposal: Proposal = serde_json::from_str(json)
-        .ok()
-        .or_else(|| {
-            repair_candidate_json(json)
-                .and_then(|fixed| serde_json::from_str(&fixed).ok())
-        })?;
+    let proposal = parse_proposal(json)?;
     proposal.to_action()
 }
 
@@ -343,8 +367,7 @@ impl Proposal {
 }
 
 fn clamp01(value: f32) -> Option<f32> {
-    if value
-.is_finite() {
+    if value.is_finite() {
         Some(value.clamp(0.0, 1.0))
     } else {
         None
@@ -405,8 +428,7 @@ mod tests {
 
     #[test]
     fn action_rejects_noop_and_nonfinite() {
-        let noop = "{\"op
-erator\": 0, \"parameters\": {}, \"confidence\": 0.9, \"risk\": 0.1}";
+        let noop = "{\"operator\": 0, \"parameters\": {}, \"confidence\": 0.9, \"risk\": 0.1}";
         assert!(action_from_response_body(noop).is_none());
         let unknown = "{\"operator\": 42, \"parameters\": {}, \"confidence\": 0.9, \"risk\": 0.1}";
         assert!(action_from_response_body(unknown).is_none());
@@ -455,8 +477,7 @@ erator\": 0, \"parameters\": {}, \"confidence\": 0.9, \"risk\": 0.1}";
             )),
             ..Default::default()
         };
-        let prompt = 
-build_prompt(&incident, &signature, &report);
+        let prompt = build_prompt(&incident, &signature, &report);
         assert!(prompt.contains("Live web research"));
         assert!(prompt.contains("5.2.1"));
         assert!(prompt.contains("E0432.html"));
@@ -488,7 +509,8 @@ build_prompt(&incident, &signature, &report);
     #[test]
     fn repair_returns_none_para_texto_sin_objeto() {
         assert!(repair_candidate_json("no json aqui").is_none());
-        assert!(repair_candidate_json("{\"operator\": 1").is_none()); // sin cierre
+        // Sin llave de cierre: irreparable.
+        assert!(repair_candidate_json("{\"operator\": 1").is_none());
     }
 
     #[test]
@@ -496,7 +518,8 @@ build_prompt(&incident, &signature, &report);
         // Strict-parse falla (fence + coma colgante); el pase la rescata.
         let inner = "```json\n{\"operator\": 1, \"parameters\": {}, \"confidence\": 0.8, \"risk\": 0.2,}\n```";
         let wrapped = format!("{{\"response\": {}}}", serde_json::json!(inner));
-        let action = action_from_response_body(&wrapped).expect("rescatada por el pase de reparacion");
+        let action = action_from_response_body(&wrapped).expect("rescatada");
         assert_eq!(action.repair_operator, OperatorId::DependencyRepair);
     }
 }
+
