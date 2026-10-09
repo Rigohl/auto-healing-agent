@@ -12,8 +12,16 @@
 //!   no una dependencia.
 //! - Fail-closed de contenido: una entrada con operador no accionable o
 //!   confidence/risk no finitos no es reutilizable.
+//! - TTL (riesgo #1 de la revision de seguridad 2026-10-09): una entrada
+//!   verificada hace mucho tiempo puede revivir un edit obsoleto si
+//!   reaparece la misma firma. PatternNotFound frena los archivos que
+//!   cambiaron, pero un repo puede volver a un estado antiguo y el replay
+//!   viejo volveria a colar sin pasar por la NN. Pasado MAX_AGE_SECONDS
+//!   desde su verificacion la entrada expira: no se borra (auditoria),
+//!   solo deja de ser reutilizable y el consumidor vuelve al camino
+//!   normal (NN).
 //! - Clave por (repo, fingerprint): un edit verificado en un repo no se
-//!   traslada a otro (el parametro `file` puede diferir).
+//!   traslada a otro (el parametro file puede diferir).
 
 use std::collections::BTreeMap;
 
@@ -27,6 +35,11 @@ use crate::runtime::security::fnv1a64;
 /// Binding del KV del ledger (wrangler.toml: namespace STATE).
 pub const KV_BINDING: &str = "STATE";
 pub const PREFIX: &str = "ledger";
+/// Antiguedad maxima de una entrada verificada para replay: 30 dias.
+/// La senal es la verificacion REAL de Actions (updated_at_unix la fija
+/// el callback); el TTL cuenta desde esa verificacion, no desde la
+/// creacion de la firma.
+pub const MAX_AGE_SECONDS: u64 = 30 * 24 * 60 * 60;
 
 /// Accion verificada PASS por Actions, lista para replay.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,11 +66,16 @@ impl LedgerEntry {
         }
     }
 
-    /// Entrada utilizable: operador accionable y valores finitos. Una
-    /// entrada corrupta jamas produce un replay.
-    pub fn is_replayable(&self) -> bool {
+    /// Entrada utilizable: operador accionable, valores finitos y NO
+    /// expirada. Una entrada corrupta o vieja jamas produce un replay.
+    ///
+    /// saturating_sub: un updated_at_unix "en el futuro" (skew de reloj
+    /// entre el callback y el consumidor) cuenta como fresca, nunca
+    /// expira por artefacto de unidades.
+    pub fn is_replayable_at(&self, now_unix: u64) -> bool {
         self.confidence.is_finite()
             && self.risk.is_finite()
+            && now_unix.saturating_sub(self.updated_at_unix) < MAX_AGE_SECONDS
             && !matches!(
                 repair_types::OperatorId::from_u8(self.operator),
                 repair_types::OperatorId::NoOp | repair_types::OperatorId::Unknown
@@ -75,8 +93,15 @@ pub fn key(repo: &str, fingerprint: &str) -> String {
     )
 }
 
-/// Busca un replay verificado. Best-effort: sin binding, sin clave o
-/// entrada malformada => None (camino normal por la NN).
+/// Segundos unix. now_ms() devuelve MILISEGUNDOS: pasar ms donde el TTL
+/// razona en segundos adelantaria la expiracion 1000x (misma unidad que
+/// circuit::unix_seconds, bug de unidades del review del PR #114).
+fn unix_seconds() -> u64 {
+    (crate::runtime::now_ms() / 1000) as u64
+}
+
+/// Busca un replay verificado. Best-effort: sin binding, sin clave,
+/// entrada malformada O EXPIRADA => None (camino normal por la NN).
 pub async fn lookup(env: &Env, repo: &str, fingerprint: &str) -> Option<LedgerEntry> {
     let kv = env.kv(KV_BINDING).ok()?;
     let raw = kv
@@ -86,7 +111,7 @@ pub async fn lookup(env: &Env, repo: &str, fingerprint: &str) -> Option<LedgerEn
         .ok()
         .flatten()?;
     let entry: LedgerEntry = serde_json::from_str(&raw).ok()?;
-    if !entry.is_replayable() {
+    if !entry.is_replayable_at(unix_seconds()) {
         return None;
     }
     Some(entry)
@@ -118,17 +143,35 @@ mod tests {
             risk,
             pr_url: String::from("https://github.com/acme/api/pull/1"),
             correlation_id: String::from("inc-1"),
-            updated_at_unix: 1,
+            updated_at_unix: 1_000_000,
         }
     }
 
     #[test]
     fn replayable_requires_actionable_operator_and_finite_values() {
-        assert!(entry(1, 0.9, 0.1).is_replayable());
-        assert!(!entry(0, 0.9, 0.1).is_replayable()); // NoOp
-        assert!(!entry(255, 0.9, 0.1).is_replayable()); // Unknown
-        assert!(!entry(1, f32::NAN, 0.1).is_replayable());
-        assert!(!entry(1, 0.9, f32::INFINITY).is_replayable());
+        // now == updated_at_unix: la entrada acaba de verificarse.
+        assert!(entry(1, 0.9, 0.1).is_replayable_at(1_000_000));
+        assert!(!entry(0, 0.9, 0.1).is_replayable_at(1_000_000)); // NoOp
+        assert!(!entry(255, 0.9, 0.1).is_replayable_at(1_000_000)); // Unknown
+        assert!(!entry(1, f32::NAN, 0.1).is_replayable_at(1_000_000));
+        assert!(!entry(1, 0.9, f32::INFINITY).is_replayable_at(1_000_000));
+    }
+
+    #[test]
+    fn replay_expires_after_max_age_and_not_before() {
+        let e = entry(1, 0.9, 0.1);
+        // Un instante antes del TTL: todavia reutilizable.
+        assert!(e.is_replayable_at(1_000_000 + MAX_AGE_SECONDS - 1));
+        // Al alcanzar el TTL: expira (el replay vuelve al camino de la NN).
+        assert!(!e.is_replayable_at(1_000_000 + MAX_AGE_SECONDS));
+    }
+
+    #[test]
+    fn future_timestamp_never_expires_by_unit_artifact() {
+        // updated_at_unix en el futuro (skew de reloj): saturating_sub = 0,
+        // cuenta como fresca; nunca expira por artefacto de unidades.
+        let e = entry(1, 0.9, 0.1);
+        assert!(e.is_replayable_at(1_000_000 - 500));
     }
 
     #[test]
