@@ -113,46 +113,12 @@ jobs:
 
   worker-clippy:
     runs-on: ubuntu-latest
-    # DIAGNOSTICO TEMPORAL (se revierte antes del merge): al fallar, publica
-    # la salida de clippy como comentario del PR (auditable sin logs).
-    permissions:
-      contents: read
-      pull-requests: write
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - name: clippy (warnings son errores)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          set +e
-          cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings 2>&1 | tee /tmp/clippy.log
-          status=${PIPESTATUS[0]}
-          set -e
-          if [ "$status" -ne 0 ]; then
-            tail -n 150 /tmp/clippy.log > /tmp/clippy_excerpt.txt || true
-            {
-              echo "### worker-clippy: salida de cargo clippy (diagnostico temporal)"
-              echo "~~~"
-              cat /tmp/clippy_excerpt.txt
-              echo "~~~"
-            } > /tmp/clippy_comment.md
-            cat /tmp/clippy_comment.md >> "$GITHUB_STEP_SUMMARY" || true
-            if [ -n "$PR_NUMBER" ]; then
-              gh pr comment "$PR_NUMBER" --body-file /tmp/clippy_comment.md || true
-              payload=$(jq -Rs --arg b "$(cat /tmp/clippy_comment.md)" '{ "body": $b }' /dev/null)
-              curl -s -X POST \
-                -H "Authorization: Bearer $GH_TOKEN" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/$REPO/issues/$PR_NUMBER/comments" \
-                -d "$payload" || true
-            fi
-            exit 1
-          fi
+      - run: cargo clippy --manifest-path worker/Cargo.toml --all-targets -- -D warnings
 
   # ---------------- guard de configuracion (wrangler.toml) ----------------
   # Ningun job validaba wrangler.toml: solo wrangler lo parsea, en el momento
