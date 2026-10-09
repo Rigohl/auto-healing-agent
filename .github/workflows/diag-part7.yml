@@ -1,0 +1,25 @@
+name: diag-part7
+on:
+  push:
+    branches: [feat/hygiene-part7]
+    paths: [".diag2"]
+permissions:
+  contents: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Output real de fmt y clippy
+        run: |
+          set +e
+          { echo "=== FMT ==="; cargo fmt --all -- --check; echo "=== CLIPPY ==="; cargo clippy --workspace --all-targets -- -D warnings; } > diag-out.txt 2>&1
+          git config user.name "diag-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add diag-out.txt
+          git commit -m "diag: $(head -c 6000 diag-out.txt | tr '
+' ' ')"
+          git push
