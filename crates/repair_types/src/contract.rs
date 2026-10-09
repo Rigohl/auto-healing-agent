@@ -94,16 +94,6 @@ impl RepairEvent {
         }
         Ok(())
     }
-
-    /// Derives the canonical idempotency key for this event.
-    pub fn idempotency_key(&self) -> String {
-        compute_idempotency_key(
-            &self.repository,
-            &self.incident_id,
-            &self.delivery_id,
-            &self.signature.fingerprint,
-        )
-    }
 }
 
 /// Compute canonical idempotency key using FNV-1a 64-bit hash.
@@ -332,19 +322,10 @@ pub struct MinimumPermissions {
     pub permissions: Vec<GitHubPermission>,
 }
 
-impl MinimumPermissions {
-    pub fn default_required() -> Self {
-        Self {
-            permissions: alloc::vec![
-                GitHubPermission::ContentsWrite,
-                GitHubPermission::PullRequestsWrite,
-                GitHubPermission::ActionsRead,
-                GitHubPermission::ChecksRead,
-                GitHubPermission::MetadataRead,
-            ],
-        }
-    }
-}
+// PART7: MinimumPermissions es un contrato de DATOS (serde); su constructor
+// (eliminado en PART7, API muerta en produccion) no tenia consumidor. La
+// lista canonica de permisos minimos vive en docs/CONTRACT.md y el struct
+// sigue reexportado (CONTRACT_REEXPORTS de verify_repo.py).
 
 /// Contract Errors.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -103,3 +103,26 @@ real de produccion (misma regla de siempre: no se borra, se cablea):
   al 50%).
 - El modo `repair-pr pr` se verifica fail-closed en CI (guarda de rama
   no efimera, sin git/red/token): repair-validation.yml.
+
+
+## 7. Higiene PART7 (2026-10-08): poda de API muerta y docs obsoletos
+
+Regla general del repo: no se borra, se cablea. Excepcion honesta para dos
+wrappers de contract.rs sin NINGUN consumidor de produccion y sin posible
+repurpose no-contradictorio:
+- `RepairEvent::idempotency_key()`: duplicaba la fuente canonica
+  `compute_idempotency_key` (que el worker YA usa directamente en
+  /webhook). Mantener dos rutas hacia la misma clave era riesgo de drift.
+  Eliminado; tests ajustados a la funcion canonica.
+- `MinimumPermissions::default_required()`: constructor muerto; la lista
+  de permisos minimos es contrato de DATOS (docs/CONTRACT.md) y el struct
+  sigue reexportado y verificado (CONTRACT_REEXPORTS_MinimumPermissions).
+- Docs obsoletos eliminados: MEM0_ANALYSIS.md, MEM0_STATUS.md,
+  TOkyo_Night_COMPATIBILITY.md (analisis de una arquitectura pre-DO ya
+  superada). INDEX.md corregido: link roto NO_LLM_POLICY.md -> LLM_POLICY.md
+  (roto desde el PR #122) y fila de MEM0_STATUS eliminada.
+- Falso positivo aclarado: repair_pr/src/diff.rs y
+  repair_operators/src/diff.rs NO son duplicados (bundle `similar` vs
+  FileEdit del gate): abstracciones distintas, ambos con uso real.
+- `repair_nn_wasm` (exports JS): frontera WASM testeada por diseño
+  (js_boundary + payload_check); se mantiene.

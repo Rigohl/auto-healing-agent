@@ -14,14 +14,13 @@
 | [GOVERNANCE.md](GOVERNANCE.md) | Umbrales 0.55 / 0.45, flags y matriz de transiciones |
 | [CONTRACT.md](CONTRACT.md) | Contrato GitHub ↔ Cloudflare v1: eventos, idempotencia, matriz de errores |
 | [BRANCH_POLICY.md](BRANCH_POLICY.md) | Por qué solo `main` persiste y qué se hizo con cada rama |
-| [NO_LLM_POLICY.md](NO_LLM_POLICY.md) | Por qué no hay LLM ni fallback híbrido |
+| [LLM_POLICY.md](LLM_POLICY.md) | LLM fallback acotado y fail-closed (decisión 2026-10-08), presupuesto Always Free |
 | [E2E_CHECKLIST.md](E2E_CHECKLIST.md) | Checklist FASE 9 + qué está verde hoy |
 | [REFERENCES.md](REFERENCES.md) | Enlaces oficiales + glosario del código |
 | [PART1_REPOSITORY.md](PART1_REPOSITORY.md) | Estructura y crates |
 | [PART2_NEURAL_NETWORK.md](PART2_NEURAL_NETWORK.md) | NN como clasificador, 64→32→16 |
 | [PART3_CLOUDFLARE_RUNTIME.md](PART3_CLOUDFLARE_RUNTIME.md) | Worker orquestador, límites Free |
 | [PART4_PERSISTENCE_TRANSVERSAL.md](PART4_PERSISTENCE_TRANSVERSAL.md) | MongoDB / Notion / Mem0 / regla Context7 |
-| [MEM0_STATUS.md](MEM0_STATUS.md) | Estado real del conector + diseño futuro |
 | [CLAUDE_CODE_ARCHITECTURE.md](CLAUDE_CODE_ARCHITECTURE.md) | Arquitectura de Claude Code analizada en su totalidad + equivalencias deterministas en este repo |
 
 ## Principios
@@ -37,7 +36,7 @@
 - model/ → `current.txt` = payload KV real (2863 `f32`, entrenado por `repair_train`); `current.json`/`stable.json` siguen como placeholders de metadata
 - docs/verification_evidence.json → artefacto de CI, no versionado
 - legacy/ → eliminado del repo el 2026-10-05 (archivo V0 no ejecutable, decisión del dueño)
-- Mem0 → pendiente de conector
+- Mem0 → descartado (docs de análisis eliminados en PART7; la memoria del agente vive en KV/DO del propio worker)
 - Deploy verificado 2026-10-08: Worker `auto-healing-agent` activo en Cloudflare; ver [DEAD_CODE_AUDIT.md](DEAD_CODE_AUDIT.md)
 
 ## Comprobaciones ejecutables
