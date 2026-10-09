@@ -209,15 +209,15 @@ pub fn extract_json_object(raw: &str) -> Option<&str> {
 /// (realsigridjin/agentjson): los modelos pequenos envuelven el JSON en
 /// fences de markdown, prosa y comas colgantes. Este pase NUNCA inventa
 /// contenido: solo elimina ruido sintactico observable (fences, comas
-/// antes de } o ]). El gate final (operadores permitidos + clamp01)
-/// queda intacto: reparar sintaxis jamas valida semantica. None =
-/// irreparable => escalacion humana.
+/// antes de } o ]). El gate final (operadores permitidos + clamp01
+/// finito + fail-closed) queda intacto: reparar sintaxis jamas valida
+/// semantica. None = irreparable => escalacion humana.
 pub fn repair_candidate_json(candidate: &str) -> Option<String> {
-    // a) Quitar fences de markdown: json-fence ... fence -> contenido.
+    // a) Quitar fences de markdown: json ... fence -> contenido.
     let mut text = candidate.trim().to_string();
     if text.starts_with("```") {
         let after_first = &text[3..];
-        // Descartar la etiqueta de lenguaje hasta el newline.
+        // Descartar la etiqueta de lenguaje (json, JSON, etc.) hasta el newline.
         let body = match after_first.find('\n') {
             Some(i) => &after_first[i + 1..],
             None => after_first,
@@ -301,7 +301,7 @@ pub fn repair_candidate_json(candidate: &str) -> Option<String> {
                 j += 1;
             }
             if j < chars.len() && (chars[j] == '}' || chars[j] == ']') {
-                // Coma colgante: omitirla junto con sus espacios.
+                // Coma colgante: omitirla (y sus espacios).
                 i = j;
                 continue;
             }
@@ -315,16 +315,6 @@ pub fn repair_candidate_json(candidate: &str) -> Option<String> {
     Some(cleaned)
 }
 
-/// Strict-parse primero (cero coste); solo si falla, un unico pase de
-/// reparacion de sintaxis. Si tampoco parsea: None, fail-closed.
-fn parse_proposal(json: &str) -> Option<Proposal> {
-    if let Ok(strict) = serde_json::from_str::<Proposal>(json) {
-        return Some(strict);
-    }
-    let fixed = repair_candidate_json(json)?;
-    serde_json::from_str::<Proposal>(&fixed).ok()
-}
-
 /// Salida del modelo -> RepairAction validada. Operador no accionable o
 /// valores no finitos => None (fail-closed: nunca un parche inventado).
 pub fn action_from_response_body(body: &str) -> Option<RepairAction> {
@@ -335,7 +325,16 @@ pub fn action_from_response_body(body: &str) -> Option<RepairAction> {
         .and_then(|v| v.as_str())
         .unwrap_or(body);
     let json = extract_json_object(candidate)?;
-    let proposal = parse_proposal(json)?;
+    // Strict-parse primero (cero coste). Solo si falla, el pase agentjson
+    // (reparar sintaxis observable, nunca inventar contenido). Si tampoco
+    // parsea: None, fail-closed, escalacion humana.
+    let proposal: Proposal = match serde_json::from_str(json) {
+        Ok(proposal) => proposal,
+        Err(_) => {
+            let fixed = repair_candidate_json(json)?;
+            serde_json::from_str(&fixed).ok()?
+        }
+    };
     proposal.to_action()
 }
 
@@ -418,7 +417,7 @@ mod tests {
 
     #[test]
     fn action_from_wrapped_response() {
-        let inner = "{\\\"operator\\\": 1, \\\"parameters\\\": {}, \\\"confidence\\\": 0.8, \\\"risk\\\": 0.2}";
+        let inner = "{\"operator\": 1, \"parameters\": {}, \"confidence\": 0.8, \"risk\": 0.2}";
         let plain = format!("{{\"response\": \"{inner}\"}}");
         let action = action_from_response_body(&plain).expect("accion valida");
         assert_eq!(action.node_id, "llm:fallback");
@@ -485,7 +484,7 @@ mod tests {
 
     #[test]
     fn repair_strips_markdown_fences() {
-        let fenced = "```json\n{\"operator\": 1}\n```";
+        let fenced = "```json\n{\"operator\": 1, \"parameters\": {}, \"confidence\": 0.8, \"risk\": 0.2}\n```";
         let repaired = repair_candidate_json(fenced).expect("fence reparable");
         assert!(!repaired.contains("```"));
         assert!(serde_json::from_str::<serde_json::Value>(&repaired).is_ok());
@@ -493,8 +492,8 @@ mod tests {
 
     #[test]
     fn repair_removes_trailing_commas() {
-        let trailing = "{\"operator\": 1,}";
-        let repaired = repair_candidate_json(trailing).expect("coma colgante");
+        let trailing = "{\"operator\": 1, \"parameters\": {}, \"confidence\": 0.8, \"risk\": 0.2,}";
+        let repaired = repair_candidate_json(trailing).expect("coma reparable");
         assert!(serde_json::from_str::<serde_json::Value>(&repaired).is_ok());
     }
 
@@ -509,17 +508,15 @@ mod tests {
     #[test]
     fn repair_returns_none_para_texto_sin_objeto() {
         assert!(repair_candidate_json("no json aqui").is_none());
-        // Sin llave de cierre: irreparable.
-        assert!(repair_candidate_json("{\"operator\": 1").is_none());
+        assert!(repair_candidate_json("{\"operator\": 1").is_none()); // sin cierre
     }
 
     #[test]
     fn action_salvada_por_el_pase_agentjson() {
         // Strict-parse falla (fence + coma colgante); el pase la rescata.
-        let inner = "```json\n{\"operator\": 1, \"confidence\": 0.8, \"risk\": 0.2,}\n```";
+        let inner = "```json\n{\"operator\": 1, \"parameters\": {}, \"confidence\": 0.8, \"risk\": 0.2,}\n```";
         let wrapped = format!("{{\"response\": {}}}", serde_json::json!(inner));
         let action = action_from_response_body(&wrapped).expect("rescatada");
         assert_eq!(action.repair_operator, OperatorId::DependencyRepair);
     }
 }
-
