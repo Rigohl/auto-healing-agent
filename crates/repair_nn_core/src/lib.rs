@@ -117,23 +117,25 @@ fn sigmoid(x: f32) -> f32 {
     1.0 / (1.0 + libm::expf(-x))
 }
 fn soft_argmax(logits: &[f32; OPS]) -> (usize, f32) {
+    // Una sola pasada (seccion 11.2 del plan de reparacion): el argmax de
+    // p_i = e_i / sum coincide con el argmax de e_i (divisor comun), asi
+    // que no hace falta materializar el array ex ni recorrerlo dos veces.
+    // Resultados identicos bit a bit a la version anterior: mismo ganador,
+    // misma probabilidad (e_max / sum), mismo desempate (primer maximo
+    // estricto). Hot path de cada incidente; no_std + alloc intacto.
     let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    let mut ex = [0.0f32; OPS];
     let mut sum = 0.0f32;
-    for (i, slot) in ex.iter_mut().enumerate() {
-        let e = libm::expf(logits[i] - max);
-        *slot = e;
-        sum += e;
-    }
     let mut bi = 0;
-    let mut bp = 0.0f32;
-    for (i, e) in ex.iter().enumerate() {
-        let p = if sum > 0.0 { *e / sum } else { 0.0 };
-        if p > bp {
-            bp = p;
+    let mut be = f32::NEG_INFINITY;
+    for (i, logit) in logits.iter().enumerate() {
+        let e = libm::expf(*logit - max);
+        sum += e;
+        if e > be {
+            be = e;
             bi = i;
         }
     }
+    let bp = if sum > 0.0 { be / sum } else { 0.0 };
     (bi, bp)
 }
 
