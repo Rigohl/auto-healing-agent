@@ -9,8 +9,8 @@
 //! empty-fail-closed ante contenido identico. Si alguien cambia un solo
 //! lado, este test se pone rojo ANTES de que el divergence llegue a produccion.
 
-use repair_operators::diff::{FileEdit, unified_diff};
-use repair_pr::diff::{FileChange, bundle_is_empty, unified_diff_file};
+use repair_operators::diff::{unified_diff, FileEdit};
+use repair_pr::diff::{bundle_is_empty, unified_diff_file, FileChange};
 
 fn runtime_diff(path: &str, before: &str, after: &str) -> String {
     unified_diff(&FileEdit {
@@ -53,7 +53,10 @@ fn assert_equivalent(path: &str, before: &str, after: &str) {
     // Nucleo de la paridad: mismas lineas eliminadas y anadidas, mismo orden.
     let rt_lines = changed_lines(&rt);
     let off_lines = changed_lines(&off);
-    assert_eq!(rt_lines, off_lines, "los generadores divergieron en {path}");
+    assert_eq!(
+        rt_lines, off_lines,
+        "los generadores de diff divergieron para {path}:\nRuntime:\n{rt}\nOffline:\n{off}"
+    );
 }
 
 #[test]
