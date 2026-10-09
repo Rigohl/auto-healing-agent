@@ -27,6 +27,13 @@ secrecy = "0.10"
 # Runtime::new() del bin requiere rt-multi-thread (con solo rt no existe).
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 
+# Paridad de diffs (docs/DEAD_CODE_AUDIT.md, riesgo de divergencia): el
+# generador de evidencia offline (similar) y el de runtime (repair_operators)
+# producen bundles equivalentes para las mismas entradas. Si divergen, CI
+# se pone rojo antes que el reviewer.
+[dev-dependencies]
+repair_operators = { path = "../repair_operators" }
+
 [[bin]]
 name = "repair-pr"
 path = "src/main.rs"
