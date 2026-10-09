@@ -141,13 +141,19 @@ impl Sha256 {
         for (i, chunk) in block.chunks_exact(4).enumerate() {
             w[i] = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
         }
-        for i in 16..64 {
+        // Expansion del mensaje (FIPS 180-4 6.2.2). Bucle while a proposito:
+        // la expansion es secuencial (w[i] depende de w[i-2]..w[i-16]) y no
+        // puede expresarse con iteradores sin romper la dependencia; un for
+        // sobre rangos dispara needless_range_loop en clippy -D warnings.
+        let mut i = 16;
+        while i < 64 {
             let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
             let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
             w[i] = w[i - 16]
                 .wrapping_add(s0)
                 .wrapping_add(w[i - 7])
                 .wrapping_add(s1);
+            i += 1;
         }
         let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = self.state;
         for (k, wi) in SHA256_K.iter().zip(w.iter()) {
